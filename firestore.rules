@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    function isListingOwner(data) {
+      return isAuthed() && (
+        data.userId == request.auth.uid ||
+        data.agentId == request.auth.uid
+      );
+    }
+
+    function hasValidListingStatus() {
+      return request.resource.data.status in [
+        'Aktif',
+        'Active',
+        'Booking',
+        'Sold',
+        'Terjual',
+        'Draft',
+        'Under Loan',
+        'Under SPA',
+        'Expired',
+        'Sewa'
+      ];
+    }
+
+    match /users/{userId} {
+      allow read, write: if isAuthed() && request.auth.uid == userId;
+    }
+
+    match /cases/{caseId} {
+      allow read, create, update, delete: if isAuthed() && (
+        request.resource == null
+          ? resource.data.userId == request.auth.uid
+          : request.resource.data.userId == request.auth.uid
+      );
+    }
+
+    match /listings/{listingId} {
+      allow read: if isAuthed();
+      allow create: if isAuthed()
+        && isListingOwner(request.resource.data)
+        && hasValidListingStatus();
+      allow update: if isAuthed()
+        && isListingOwner(resource.data)
+        && isListingOwner(request.resource.data)
+        && hasValidListingStatus();
+      allow delete: if isAuthed() && isListingOwner(resource.data);
+    }
+  }
+}

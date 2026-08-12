@@ -1,6 +1,6 @@
-import React from "react";
-import { View, Text, Platform } from "react-native";
-import { Tabs } from "expo-router";
+import React, { useEffect } from "react";
+import { View, Text, Platform, BackHandler } from "react-native";
+import { Tabs, usePathname, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -8,6 +8,31 @@ import { useAppSettings } from "@/context/AppSettingsContext";
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const { themeColors, t } = useAppSettings();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    const onBackPress = () => {
+      // If we are on the main dashboard tab, let the default behavior (exit app) happen
+      if (pathname === "/" || pathname === "/(tabs)" || pathname === "/(tabs)/" || pathname === "/(tabs)/index") {
+        return false;
+      }
+      
+      // If we are on any other inner tab in this tab layout, go back to the main Dashboard tab
+      if (pathname.startsWith("/(tabs)")) {
+        router.push("/(tabs)");
+        return true; // handled
+      }
+      
+      return false; // default behavior
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+    return () => {
+      subscription.remove();
+    };
+  }, [pathname, router]);
 
   const TAB_BAR_HEIGHT = 62 + Math.max(insets.bottom, 4);
 

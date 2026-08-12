@@ -1,1053 +1,923 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  Image,
-  Share,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  RefreshControl,
-  Platform,
-  StatusBar,
-  Animated,
+  View,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import firestore from "@react-native-firebase/firestore";
-import auth from "@react-native-firebase/auth";
 import { useRouter } from "expo-router";
-import type { PropertyListing } from "@/types/listing";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import { firebaseAuth, firebaseDB } from "@/services/firebase";
 
-const SEGMENTS = ["mine", "team"] as const;
-type ListingSegment = typeof SEGMENTS[number];
+type FilterState = {
+  search: string;
+  status: string;
+  location: string;
+  minPrice: string;
+  maxPrice: string;
+  propertyType: string;
+  tenure: string;
+  lotStatus: string;
+};
 
-function getOwnerId(item: Partial<PropertyListing>): string {
-  return ((item.userId || item.agentId || "") as string).trim();
-}
+type ListingItem = {
+  id: string;
+  userId?: string;
+  agentId?: string;
+  status?: string;
+  title?: string;
+  address?: string;
+  city?: string;
+  location?: string;
+  price?: number | string;
+  bedrooms?: number;
+  bathrooms?: number;
+  sqft?: number;
+  imageUrl?: string;
+  images?: string[];
+  gambar?: string[];
+  propertyType?: string;
+  tenure?: string;
+  lotStatus?: string;
+};
 
-function parsePriceNumber(value: string | number | undefined): number | null {
-  if (typeof value === "number" && !isNaN(value)) return value;
-  if (typeof value !== "string") return null;
-  const cleaned = value.replace(/[^0-9.]/g, "");
-  if (!cleaned) return null;
-  const parsed = Number(cleaned);
-  return isNaN(parsed) ? null : parsed;
-}
+const STATUS_OPTIONS = ["All", "Active", "Booking", "Sold", "Draft"] as const;
+const LISTING_STATUS_OPTIONS = ["Active", "Booking", "Sold", "Draft"] as const;
+const propertyTypes = ["Any", "Residential / Teres", "Commercial", "Industrial", "Land"] as const;
+const tenureTypes = ["Any", "Freehold", "Leasehold"] as const;
+const lotStatuses = ["Any", "Bumi Lot", "Non-Bumi Lot"] as const;
+const EMPTY_FILTERS: FilterState = {
+  search: "",
+  status: "All",
+  location: "",
+  minPrice: "",
+  maxPrice: "",
+  propertyType: "Any",
+  tenure: "Any",
+  lotStatus: "Any",
+};
 
-function uniqueOptions(values: Array<string | undefined | null>): string[] {
-  const set = new Set<string>();
-  values.forEach((v) => {
-    const cleaned = (v || "").toString().trim();
-    if (cleaned) set.add(cleaned);
-  });
-  return Array.from(set);
-}
+const normalizeText = (value?: string | null): string =>
+  (value ?? "").toString().trim().toLowerCase();
 
-function getListingImageUri(item: any): string | null {
-  if (!item) return null;
-  if (item.imageUrl) return item.imageUrl;
-  if (item.images && item.images.length > 0 && item.images[0]) return item.images[0];
-  if (item.gambar && item.gambar.length > 0 && item.gambar[0]) return item.gambar[0];
-  if (typeof item.gambar === "string") return item.gambar;
-  return null;
-}
+const normalizeStatusLabel = (value?: string | null): string => {
+  const normalized = normalizeText(value);
+
+  if (!normalized) return "Active";
+  if (["active", "aktif", "available", "viewing"].includes(normalized)) return "Active";
+  if (["booking", "booked", "reserved", "reservation"].includes(normalized)) return "Booking";
+  if (["sold", "terjual", "sold out", "sold-out"].includes(normalized)) return "Sold";
+  if (["draft", "pending draft"].includes(normalized)) return "Draft";
+
+  return value?.trim() || "Active";
+};
+
+const parseNumber = (value: number | string | undefined): number => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[^0-9.-]/g, "");
+    if (!cleaned) return Number.NaN;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : Number.NaN;
+  }
+  return Number.NaN;
+};
+
+const getStatusMatch = (status?: string, filterStatus?: string): boolean => {
+  const itemStatus = normalizeText(status);
+  const target = normalizeText(filterStatus);
+
+  if (!target || target === "all") return true;
+
+  if (target === "active") {
+    return ["active", "aktif", "available", "viewing"].includes(itemStatus);
+  }
+
+  if (target === "booking") {
+    return ["booking", "booked", "reserved", "reservation"].includes(itemStatus);
+  }
+
+  if (target === "sold") {
+    return ["sold", "terjual", "sold out", "sold-out"].includes(itemStatus);
+  }
+
+  if (target === "draft") {
+    return ["draft", "pending draft"].includes(itemStatus);
+  }
+
+  return itemStatus === target;
+};
 
 export default function MasterListingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { themeColors, t } = useAppSettings();
+  const { themeColors } = useAppSettings();
   const contentMaxWidth = Math.min(width, 760);
   const fabRight = Math.max(20, (width - contentMaxWidth) / 2 + 20);
-
-  const [listings, setListings] = useState<PropertyListing[]>([]);
-  const [currentUserId, setCurrentUserId] = useState("");
+  const [listings, setListings] = useState<ListingItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState("Semua");
-  const [activeSegment, setActiveSegment] = useState<ListingSegment>("mine");
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
+  const [activeTab, setActiveTab] = useState<"all" | "my">("all");
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [selectedListingForStatus, setSelectedListingForStatus] = useState<ListingItem | null>(null);
+  const currentUser = firebaseAuth.currentUser;
 
-  // Buyer criteria filters
-  const [showCriteria, setShowCriteria] = useState(false);
-  const [criteriaLocation, setCriteriaLocation] = useState("");
-  const [criteriaPropertyType, setCriteriaPropertyType] = useState("Any");
-  const [criteriaTenure, setCriteriaTenure] = useState("Any");
-  const [criteriaLotStatus, setCriteriaLotStatus] = useState("Any");
-  const [criteriaMinPrice, setCriteriaMinPrice] = useState("");
-  const [criteriaMaxPrice, setCriteriaMaxPrice] = useState("");
+  const mapListingDocToItem = (doc: { id: string; data: () => Record<string, any> }) => {
+    const data = doc.data() ?? {};
 
-  const propertyTypeRef = useRef<ScrollView>(null);
-  const tenureRef = useRef<ScrollView>(null);
-  const lotStatusRef = useRef<ScrollView>(null);
-  const propertyTypeLayouts = useRef<Record<string, { x: number; width: number }>>({});
-  const tenureLayouts = useRef<Record<string, { x: number; width: number }>>({});
-  const lotStatusLayouts = useRef<Record<string, { x: number; width: number }>>({});
-  const [propertyTypeRowWidth, setPropertyTypeRowWidth] = useState(0);
-  const [tenureRowWidth, setTenureRowWidth] = useState(0);
-  const [lotStatusRowWidth, setLotStatusRowWidth] = useState(0);
+    const titleValue =
+      data.tajuk ?? data.title ?? data.namaHartanah ?? "Untitled Listing";
+    const priceValue = Number(data.harga ?? data.price ?? 0) || 0;
+    const addressValue =
+      data.alamat ?? data.address ?? data.location ?? "Location unavailable";
+    const cityValue = data.negeri ?? data.city ?? data.bandar ?? "City not specified";
+    const bedroomsValue = Number(data.bilikTidur ?? data.bedrooms ?? 0) || 0;
+    const bathroomsValue = Number(data.bilikAir ?? data.bathrooms ?? 0) || 0;
+    const sqftValue = Number(data.keluasan ?? data.sqft ?? 0) || 0;
+    const imageUrlValue =
+      typeof data.imageUrl === "string" && data.imageUrl.trim()
+        ? data.imageUrl.trim()
+        : typeof data.coverImage === "string" && data.coverImage.trim()
+          ? data.coverImage.trim()
+          : Array.isArray(data.gambar) && data.gambar.length > 0 && typeof data.gambar[0] === "string"
+            ? data.gambar[0].trim()
+            : "";
+    const imagesValue = Array.isArray(data.images)
+      ? data.images.filter((img: unknown) => typeof img === "string" && img.trim())
+      : Array.isArray(data.gambar)
+        ? data.gambar.filter((img: unknown) => typeof img === "string" && img.trim())
+        : Array.isArray(data.imageUrl)
+          ? data.imageUrl.filter((img: unknown) => typeof img === "string" && img.trim())
+          : [];
 
-  const segmentAnim = useRef(new Animated.Value(0)).current;
-  const [segmentBarWidth, setSegmentBarWidth] = useState(0);
-
-  // ScrollView Auto-Scroll Ref & Layout state
-  const scrollViewRef = useRef<ScrollView>(null);
-  const [scrollViewWidth, setScrollViewWidth] = useState(300);
-  const chipLayouts = useRef<{ [key: string]: { x: number; width: number } }>({});
-
-  const propertyTypeOptions = ["Any", ...uniqueOptions(listings.map((l) => l.jenis))];
-  const tenureOptions = ["Any", ...uniqueOptions(listings.map((l) => (l.pegangan as string) || ""))];
-  const lotStatusOptions = ["Any", ...uniqueOptions(listings.map((l) => (l.lot as string) || ""))];
-
-  const switchSegment = (segment: ListingSegment) => {
-    setActiveSegment(segment);
-    Animated.timing(segmentAnim, {
-      toValue: segment === "mine" ? 0 : 1,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
+    return {
+      id: doc.id,
+      title: typeof titleValue === "string" && titleValue.trim() ? titleValue.trim() : "Untitled Listing",
+      price: Number.isFinite(priceValue) ? priceValue : 0,
+      status: normalizeStatusLabel(data.status),
+      location: typeof addressValue === "string" && addressValue.trim() ? addressValue.trim() : "Location unavailable",
+      address: typeof addressValue === "string" ? addressValue : "",
+      city: typeof cityValue === "string" && cityValue.trim() ? cityValue.trim() : "City not specified",
+      bedrooms: Number.isFinite(bedroomsValue) ? bedroomsValue : 0,
+      bathrooms: Number.isFinite(bathroomsValue) ? bathroomsValue : 0,
+      sqft: Number.isFinite(sqftValue) ? sqftValue : 0,
+      imageUrl: imageUrlValue || (imagesValue[0] ?? ""),
+      images: imagesValue,
+      gambar: imagesValue,
+      userId: typeof data.userId === "string" ? data.userId : "",
+      propertyType: typeof (data.jenis ?? data.propertyType) === "string" ? (data.jenis ?? data.propertyType) : "",
+      tenure: typeof (data.pegangan ?? data.tenure) === "string" ? (data.pegangan ?? data.tenure) : "",
+      lotStatus: typeof (data.lot ?? data.lotStatus) === "string" ? (data.lot ?? data.lotStatus) : "",
+    } as ListingItem;
   };
 
-  const resetCriteria = () => {
-    setCriteriaLocation("");
-    setCriteriaPropertyType("Any");
-    setCriteriaTenure("Any");
-    setCriteriaLotStatus("Any");
-    setCriteriaMinPrice("");
-    setCriteriaMaxPrice("");
-  };
-
-  const scrollToFocusedOption = (
-    ref: React.RefObject<ScrollView | null>,
-    layouts: Record<string, { x: number; width: number }>,
-    containerWidth: number,
-    option: string
-  ) => {
-    const layout = layouts[option];
-    if (!layout || !ref.current || containerWidth <= 0) return;
-    const targetX = layout.x - (containerWidth / 2) + (layout.width / 2);
-    ref.current.scrollTo({ x: Math.max(0, targetX), animated: true });
-  };
-
-  const handlePropertyTypeSelect = (option: string) => {
-    setCriteriaPropertyType(option);
-    scrollToFocusedOption(propertyTypeRef, propertyTypeLayouts.current, propertyTypeRowWidth, option);
-  };
-
-  const handleTenureSelect = (option: string) => {
-    setCriteriaTenure(option);
-    scrollToFocusedOption(tenureRef, tenureLayouts.current, tenureRowWidth, option);
-  };
-
-  const handleLotStatusSelect = (option: string) => {
-    setCriteriaLotStatus(option);
-    scrollToFocusedOption(lotStatusRef, lotStatusLayouts.current, lotStatusRowWidth, option);
-  };
-
-  const handleFilterPress = (filterId: string) => {
-    setActiveFilter(filterId);
-
-    const layout = chipLayouts.current[filterId];
-    if (layout && scrollViewRef.current) {
-      const targetX = layout.x - (scrollViewWidth / 2) + (layout.width / 2);
-      scrollViewRef.current.scrollTo({
-        x: Math.max(0, targetX),
-        animated: true,
-      });
-    }
-  };
-
-  // Realtime Firestore Listener
   useEffect(() => {
-    const currentUser = auth().currentUser;
-    const userId = currentUser?.uid;
+    const userId = firebaseAuth.currentUser?.uid;
 
-    if (!userId) {
-      setCurrentUserId("");
-      setIsLoading(false);
-      return;
-    }
-    setCurrentUserId(userId);
+    const listingsQuery =
+      activeTab === "my" && userId
+        ? firebaseDB.collection("listings").where("userId", "==", userId)
+        : firebaseDB.collection("listings");
 
-    const unsubscribe = firestore()
-      .collection("listings")
+    const unsubscribe = listingsQuery
+      .orderBy("createdAt", "desc")
       .onSnapshot(
         (snapshot) => {
-          if (snapshot) {
-            const data = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as PropertyListing[];
+          const fetchedListings: ListingItem[] = snapshot.docs.map((doc) => mapListingDocToItem(doc));
 
-            data.sort((a, b) =>
-              (b.createdAt || "").localeCompare(a.createdAt || "")
-            );
-
-            setListings(data);
-          }
+          setListings(fetchedListings);
           setIsLoading(false);
           setIsRefreshing(false);
         },
-        (error) => {
-          console.error("Realtime listings error:", error);
+        () => {
           setIsLoading(false);
           setIsRefreshing(false);
-        }
+        },
       );
 
     return () => unsubscribe();
-  }, []);
+  }, [activeTab, currentUser?.uid]);
+
+  const propertyTypeOptions = propertyTypes;
+  const tenureOptions = tenureTypes;
+  const lotStatusOptions = lotStatuses;
+
+  const filteredListings = useMemo(() => {
+    const searchQuery = filters.search.trim().toLowerCase();
+    const locationQuery = filters.location.trim().toLowerCase();
+    const minPriceValue = filters.minPrice.trim() ? Number(filters.minPrice) : null;
+    const maxPriceValue = filters.maxPrice.trim() ? Number(filters.maxPrice) : null;
+
+    const getSearchableText = (item: ListingItem) =>
+      [
+        item.title,
+        item.address,
+        item.location,
+        item.city,
+        item.propertyType,
+        item.tenure,
+        item.lotStatus,
+        item.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+    const getLocationText = (item: ListingItem) =>
+      [item.location, item.address, item.city]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+    return listings.filter((item) => {
+      if (activeTab === "my" && item.userId !== currentUser?.uid && item.agentId !== currentUser?.uid) {
+        return false;
+      }
+
+      if (!getStatusMatch(item.status, filters.status)) {
+        return false;
+      }
+
+      if (searchQuery) {
+        const haystack = getSearchableText(item);
+        if (!haystack.includes(searchQuery)) {
+          return false;
+        }
+      }
+
+      if (locationQuery) {
+        const haystack = getLocationText(item);
+        if (!haystack.includes(locationQuery)) {
+          return false;
+        }
+      }
+
+      if (filters.propertyType !== "Any") {
+        const selected = normalizeText(filters.propertyType);
+        const value = normalizeText(item.propertyType || item.title);
+        if (!value.includes(selected)) {
+          return false;
+        }
+      }
+
+      if (filters.tenure !== "Any") {
+        const selected = normalizeText(filters.tenure);
+        const value = normalizeText(item.tenure);
+        if (!value.includes(selected)) {
+          return false;
+        }
+      }
+
+      if (filters.lotStatus !== "Any") {
+        const selected = normalizeText(filters.lotStatus);
+        const value = normalizeText(item.lotStatus);
+        if (!value.includes(selected)) {
+          return false;
+        }
+      }
+
+      const itemPrice = parseNumber(item.price);
+      if (!Number.isNaN(itemPrice)) {
+        if (minPriceValue !== null && itemPrice < minPriceValue) return false;
+        if (maxPriceValue !== null && itemPrice > maxPriceValue) return false;
+      } else if (minPriceValue !== null || maxPriceValue !== null) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [activeTab, currentUser?.uid, filters, listings]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const currentUser = auth().currentUser;
-      setCurrentUserId(currentUser?.uid || "");
-      const snapshot = await firestore().collection("listings").get();
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as PropertyListing[];
-      data.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-      setListings(data);
-    } catch (e) {
-      console.error(e);
+      const snapshot = await firebaseDB.collection("listings").get();
+      const nextListings: ListingItem[] = snapshot.docs.map((doc) => mapListingDocToItem(doc));
+
+      setListings(nextListings);
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  const myListingsCount = listings.filter((item) => getOwnerId(item) === currentUserId).length;
-  const coAgentListingsCount = listings.filter((item) => getOwnerId(item) !== currentUserId).length;
-
-  const hasBuyerCriteriaActive =
-    criteriaLocation.trim().length > 0 ||
-    criteriaPropertyType !== "Any" ||
-    criteriaTenure !== "Any" ||
-    criteriaLotStatus !== "Any" ||
-    criteriaMinPrice.trim().length > 0 ||
-    criteriaMaxPrice.trim().length > 0;
-
-  // Segment + Filter + Search Logic
-  const filteredListings = listings.filter((item: PropertyListing) => {
-    const ownerId = getOwnerId(item);
-
-    if (activeSegment === "mine" && ownerId !== currentUserId) return false;
-    if (activeSegment === "team" && ownerId === currentUserId) return false;
-
-    if (activeFilter !== "Semua") {
-      const status = (item.status || "").toString().toLowerCase().trim();
-      if (activeFilter === "Sold" && status !== "terjual" && status !== "sold") return false;
-      if (activeFilter === "Booking" && status !== "draft" && status !== "booking") return false;
-      if (activeFilter === "Aktif" && status !== "aktif" && status !== "active") return false;
-      if (activeFilter === "Draft" && status !== "draft") return false;
-    }
-
-    if (criteriaLocation.trim()) {
-      const locationQuery = criteriaLocation.toLowerCase().trim();
-      const alamat = (item.alamat || "").toLowerCase();
-      const negeri = (item.negeri || "").toLowerCase();
-      if (!alamat.includes(locationQuery) && !negeri.includes(locationQuery)) {
-        return false;
-      }
-    }
-
-    if (criteriaPropertyType !== "Any" && item.jenis !== criteriaPropertyType) {
-      return false;
-    }
-
-    if (criteriaTenure !== "Any" && (item.pegangan || "") !== criteriaTenure) {
-      return false;
-    }
-
-    if (criteriaLotStatus !== "Any" && (item.lot || "") !== criteriaLotStatus) {
-      return false;
-    }
-
-    const minPrice = parsePriceNumber(criteriaMinPrice);
-    const maxPrice = parsePriceNumber(criteriaMaxPrice);
-    if (minPrice !== null || maxPrice !== null) {
-      const itemPrice = parsePriceNumber(item.harga);
-      if (itemPrice === null) return false;
-      if (minPrice !== null && itemPrice < minPrice) return false;
-      if (maxPrice !== null && itemPrice > maxPrice) return false;
-    }
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchTajuk = (item.tajuk || "").toLowerCase().includes(q);
-      const matchAlamat = (item.alamat || "").toLowerCase().includes(q);
-      const matchNegeri = (item.negeri || "").toLowerCase().includes(q);
-      return matchTajuk || matchAlamat || matchNegeri;
-    }
-    return true;
-  });
-
-  // 1-Click Share (Kongsi) Handler
-  const handleShare = async (item: PropertyListing) => {
-    try {
-      const formattedPrice =
-        typeof item.harga === "number"
-          ? item.harga.toLocaleString()
-          : item.harga;
-
-      const sizeStr = item.keluasan
-        ? (String(item.keluasan).toLowerCase().includes("sq") ? item.keluasan : `${item.keluasan} sqft`)
-        : "N/A";
-
-      const message =
-        `WTS: ${item.tajuk}\n` +
-        `Harga: RM ${formattedPrice}\n` +
-        `Lokasi: ${item.alamat ? `${item.alamat}, ` : ""}${item.negeri}\n` +
-        `Spesifikasi: ${item.bilikTidur} Bilik, ${item.bilikAir} Bilik Air | ${sizeStr}\n` +
-        `Status: ${item.pegangan || "Freehold"} / ${item.lot || "Bumi Lot"}\n\n` +
-        `Berminat? Hubungi saya segera untuk viewing!`;
-
-      await Share.share({
-        message,
-        title: `Listing: ${item.tajuk}`,
-      });
-    } catch (error) {
-      console.error("Error sharing listing:", error);
-    }
+  const getImageUri = (item: ListingItem): string | null => {
+    if (item.imageUrl) return item.imageUrl;
+    if (item.images && item.images.length > 0 && item.images[0]) return item.images[0];
+    if (item.gambar && item.gambar.length > 0 && item.gambar[0]) return item.gambar[0];
+    return null;
   };
 
-  const renderStatusBadge = (status: string) => {
-    let bg = themeColors.statusAktifBg;
-    let text = themeColors.statusAktifText;
-    let label = status;
+  const segmentTabs = [
+    { label: "All Listings", value: "all" as const },
+    { label: "My Listings", value: "my" as const },
+  ];
 
-    if (status === "Draft") {
-      bg = themeColors.statusDraftBg;
-      text = themeColors.statusDraftText;
-      label = "Booking";
-    } else if (status === "Terjual" || status === "Sold") {
-      bg = themeColors.statusSoldBg;
-      text = themeColors.statusSoldText;
-      label = "Sold";
-    } else if (status === "Aktif") {
-      bg = themeColors.statusAktifBg;
-      text = themeColors.statusAktifText;
-      label = "Aktif";
-    }
-
-    return (
-      <View style={[styles.statusBadge, { backgroundColor: bg }]}>
-        <Text style={[styles.statusText, { color: text }]}>{label}</Text>
-      </View>
+  const handleOpenStatusModal = (item: ListingItem) => {
+    const isOwner = Boolean(
+      currentUser &&
+        (item.userId === currentUser.uid || item.agentId === currentUser.uid || (!item.userId && !item.agentId)),
     );
+
+    if (!isOwner) {
+      return;
+    }
+
+    setSelectedListingForStatus(item);
+    setIsStatusModalOpen(true);
   };
 
-  const renderListingCard = ({ item }: { item: PropertyListing }) => {
-    const imageUri = getListingImageUri(item);
-    const formattedPrice =
-      typeof item.harga === "number"
-        ? item.harga.toLocaleString()
-        : item.harga;
+  const handleUpdateListingStatus = async (newStatus: string) => {
+    if (!selectedListingForStatus) return;
+
+    const nextStatus = normalizeStatusLabel(newStatus);
+    if (!selectedListingForStatus.id) return;
+
+    try {
+      await firebaseDB.collection("listings").doc(selectedListingForStatus.id).update({
+        status: nextStatus,
+        updatedAt: new Date().toISOString(),
+      });
+
+      setListings((prev) =>
+        prev.map((item) => (item.id === selectedListingForStatus.id ? { ...item, status: nextStatus } : item)),
+      );
+      setIsStatusModalOpen(false);
+      setSelectedListingForStatus(null);
+    } catch (error) {
+      console.error("Error updating listing status:", error);
+      Alert.alert("Status update failed", "Unable to update this listing status right now.");
+    }
+  };
+
+  const renderListingCard = ({ item }: { item: ListingItem }) => {
+    const imageUri = getImageUri(item);
+    const statusLabel = normalizeStatusLabel(item.status);
+    const isOwner = Boolean(
+      currentUser &&
+        (item.userId === currentUser.uid || item.agentId === currentUser.uid || (!item.userId && !item.agentId)),
+    );
 
     return (
       <TouchableOpacity
         activeOpacity={0.92}
-        onPress={() => {
-          if (!item?.id) return;
-          router.push(`/listing/${item.id}` as any);
-        }}
+        onPress={() => router.push({ pathname: "/listing/[id]", params: { id: item.id } })}
         style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
       >
-        {renderStatusBadge(item.status || "Aktif")}
+        <View style={styles.topRow}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => isOwner && handleOpenStatusModal(item)}
+            disabled={!isOwner}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={[styles.statusBadge, { backgroundColor: themeColors.statusAktifBg }]}
+          >
+            <Text style={[styles.statusText, { color: themeColors.statusAktifText }]}>{statusLabel}</Text>
+          </TouchableOpacity>
 
-        <View style={styles.cardMainRow}>
+          {isOwner && (
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => handleOpenStatusModal(item)}
+              style={[styles.updateStatusButton, { backgroundColor: themeColors.maroonPrimary }]}
+            >
+              <MaterialCommunityIcons name="pencil-outline" size={14} color="#FFF" />
+              <Text style={styles.updateStatusText}>Update Status</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={styles.cardRow}>
           {imageUri ? (
             <Image source={{ uri: imageUri }} style={styles.thumbnail} />
           ) : (
-            <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight }]}>
-              <MaterialCommunityIcons
-                name="home-city-outline"
-                size={34}
-                color={themeColors.maroonPrimary}
-              />
+            <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight }]}> 
+              <MaterialCommunityIcons name="home-city-outline" size={28} color={themeColors.maroonPrimary} />
             </View>
           )}
 
           <View style={styles.cardContent}>
-            <View>
-              <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]} numberOfLines={1}>
-                {item.tajuk}
-              </Text>
-              <Text style={[styles.cardPrice, { color: themeColors.maroonPrimary }]}>
-                RM {formattedPrice}
-              </Text>
-            </View>
-
-            <View style={styles.specsRow}>
-              <View style={styles.specItem}>
-                <MaterialCommunityIcons name="bed" size={16} color={themeColors.textSecondary} />
-                <Text style={[styles.specText, { color: themeColors.textSecondary }]}>{item.bilikTidur || 0}</Text>
-              </View>
-
-              <View style={styles.specItem}>
-                <MaterialCommunityIcons name="shower" size={16} color={themeColors.textSecondary} />
-                <Text style={[styles.specText, { color: themeColors.textSecondary }]}>{item.bilikAir || 0}</Text>
-              </View>
-
-              {item.keluasan ? (
-                <View style={styles.specItem}>
-                  <MaterialCommunityIcons name="vector-square" size={15} color={themeColors.textSecondary} />
-                  <Text style={[styles.specText, { color: themeColors.textSecondary }]}>{item.keluasan}</Text>
-                </View>
-              ) : null}
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => handleShare(item)}
-                style={[styles.shareButton, { backgroundColor: themeColors.maroonLight }]}
-              >
-                <MaterialCommunityIcons name="share-variant" size={16} color={themeColors.maroonPrimary} />
-              </TouchableOpacity>
-            </View>
+            <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]} numberOfLines={1}>
+              {item.title || "Untitled Listing"}
+            </Text>
+            <Text style={[styles.cardPrice, { color: themeColors.maroonPrimary }]}>RM {String(item.price ?? "0")}</Text>
+            <Text style={[styles.cardMeta, { color: themeColors.textSecondary }]} numberOfLines={1}>
+              {item.address || item.location || "Location unavailable"}
+            </Text>
+            <Text style={[styles.cardMeta, { color: themeColors.textMuted }]} numberOfLines={1}>
+              {item.city || "City not specified"}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
     );
   };
 
-  const filterChips = [
-    { id: "Semua", label: t("filterSemua") },
-    { id: "Aktif", label: t("filterAktif") },
-    { id: "Booking", label: t("filterBooking") },
-    { id: "Sold", label: t("filterSold") },
-    { id: "Draft", label: t("filterDraft") },
-  ];
-
   return (
-    <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground, alignItems: "center" }}>
-      <View style={{ width: "100%", maxWidth: contentMaxWidth }}>
-        {/* TopAppBar */}
+    <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
+      <View style={{ flex: 1, width: "100%", maxWidth: contentMaxWidth, alignSelf: "center" }}>
         <View
           style={[
-            styles.stickyHeader,
+            styles.header,
             {
               backgroundColor: themeColors.cardBackground,
               borderBottomColor: themeColors.borderColor,
-              paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6,
+              paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 8,
             },
           ]}
         >
-        <View style={styles.headerTopRow}>
-          <Text style={[styles.headerTitle, { color: themeColors.maroonPrimary, flex: 1 }]}>
-            {t("masterListing")}
-          </Text>
+          <Text style={[styles.title, { color: themeColors.maroonPrimary }]}>Master Listing</Text>
 
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}>
-            <MaterialCommunityIcons name="magnify" size={24} color={themeColors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Input Below TopAppBar */}
-        <View style={styles.searchBarContainer}>
-          <View style={[styles.searchBar, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}>
-            <MaterialCommunityIcons name="magnify" size={20} color={themeColors.textMuted} />
-            <TextInput
-              style={[styles.searchInput, { color: themeColors.textPrimary }]}
-              placeholder={t("searchPlaceholder")}
-              placeholderTextColor={themeColors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <MaterialCommunityIcons name="close-circle" size={18} color={themeColors.textMuted} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <View style={styles.criteriaActionRow}>
-            <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setShowCriteria((prev) => !prev)}
-              style={[
-                styles.criteriaToggleBtn,
-                {
-                  borderColor: themeColors.borderColor,
-                  backgroundColor: showCriteria ? themeColors.maroonLight : themeColors.surfaceContainer,
-                },
-              ]}
-            >
-              <MaterialCommunityIcons name="tune-variant" size={16} color={themeColors.maroonPrimary} />
-              <Text style={[styles.criteriaToggleText, { color: themeColors.maroonPrimary }]}>Buyer Criteria</Text>
-            </TouchableOpacity>
-
-            {hasBuyerCriteriaActive ? (
-              <TouchableOpacity onPress={resetCriteria} style={styles.criteriaClearBtn}>
-                <Text style={[styles.criteriaClearText, { color: themeColors.textSecondary }]}>Reset</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          {showCriteria ? (
-            <View style={[styles.criteriaPanel, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}> 
+          <View style={styles.searchRow}>
+            <View style={[styles.searchBar, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}> 
+              <MaterialCommunityIcons name="magnify" size={20} color={themeColors.textMuted} />
               <TextInput
-                style={[styles.criteriaInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                placeholder="Location"
+                value={filters.search}
+                onChangeText={(value) => setFilters((prev) => ({ ...prev, search: value }))}
+                placeholder="Search listings"
                 placeholderTextColor={themeColors.textMuted}
-                value={criteriaLocation}
-                onChangeText={setCriteriaLocation}
+                style={[styles.searchInput, { color: themeColors.textPrimary }]}
               />
-
-              <View style={styles.criteriaPriceRow}>
-                <TextInput
-                  style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                  placeholder="Min RM"
-                  placeholderTextColor={themeColors.textMuted}
-                  keyboardType="numeric"
-                  value={criteriaMinPrice}
-                  onChangeText={setCriteriaMinPrice}
-                />
-                <TextInput
-                  style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                  placeholder="Max RM"
-                  placeholderTextColor={themeColors.textMuted}
-                  keyboardType="numeric"
-                  value={criteriaMaxPrice}
-                  onChangeText={setCriteriaMaxPrice}
-                />
-              </View>
-
-              <View style={styles.criteriaCategoryBlock}>
-                <Text style={[styles.criteriaCategoryLabel, { color: themeColors.textPrimary }]}>Property Type</Text>
-                <ScrollView
-                  ref={propertyTypeRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setPropertyTypeRowWidth(e.nativeEvent.layout.width)}
-                >
-                  {propertyTypeOptions.map((option) => {
-                    const active = criteriaPropertyType === option;
-                    return (
-                      <View
-                        key={`ptype-${option}`}
-                        onLayout={(e) => {
-                          propertyTypeLayouts.current[option] = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                          };
-                        }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handlePropertyTypeSelect(option)}
-                          style={[
-                            styles.criteriaPill,
-                            {
-                              borderColor: active ? "#FF5F87" : themeColors.borderColor,
-                              backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.criteriaCategoryBlock}>
-                <Text style={[styles.criteriaCategoryLabel, { color: themeColors.textPrimary }]}>Tenure Type</Text>
-                <ScrollView
-                  ref={tenureRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setTenureRowWidth(e.nativeEvent.layout.width)}
-                >
-                  {tenureOptions.map((option) => {
-                    const active = criteriaTenure === option;
-                    return (
-                      <View
-                        key={`tenure-${option}`}
-                        onLayout={(e) => {
-                          tenureLayouts.current[option] = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                          };
-                        }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handleTenureSelect(option)}
-                          style={[
-                            styles.criteriaPill,
-                            {
-                              borderColor: active ? "#FF5F87" : themeColors.borderColor,
-                              backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.criteriaCategoryBlock}>
-                <Text style={[styles.criteriaCategoryLabel, { color: themeColors.textPrimary }]}>Lot Status</Text>
-                <ScrollView
-                  ref={lotStatusRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setLotStatusRowWidth(e.nativeEvent.layout.width)}
-                >
-                  {lotStatusOptions.map((option) => {
-                    const active = criteriaLotStatus === option;
-                    return (
-                      <View
-                        key={`lot-${option}`}
-                        onLayout={(e) => {
-                          lotStatusLayouts.current[option] = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                          };
-                        }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handleLotStatusSelect(option)}
-                          style={[
-                            styles.criteriaPill,
-                            {
-                              borderColor: active ? "#FF5F87" : themeColors.borderColor,
-                              backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
             </View>
-          ) : null}
-        </View>
 
-        <View
-          style={[styles.segmentWrap, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
-          onLayout={(e) => setSegmentBarWidth(e.nativeEvent.layout.width)}
-        >
-          {segmentBarWidth > 0 ? (
-            <Animated.View
-              style={[
-                styles.segmentIndicator,
-                {
-                  width: segmentBarWidth / 2,
-                  backgroundColor: themeColors.maroonPrimary,
-                  transform: [
-                    {
-                      translateX: segmentAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, segmentBarWidth / 2],
-                      }),
-                    },
-                  ],
-                },
-              ]}
-            />
-          ) : null}
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => setIsFilterModalOpen(true)}
+              style={[styles.filterButton, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
+            >
+              <MaterialCommunityIcons name="tune-variant" size={18} color={themeColors.textSecondary} />
+            </TouchableOpacity>
+          </View>
 
-          <TouchableOpacity style={styles.segmentBtn} onPress={() => switchSegment("mine")}> 
-            <Text style={[styles.segmentText, { color: activeSegment === "mine" ? "#FFFFFF" : themeColors.textSecondary }]}>My Listings ({myListingsCount})</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.segmentBtn} onPress={() => switchSegment("team")}> 
-            <Text style={[styles.segmentText, { color: activeSegment === "team" ? "#FFFFFF" : themeColors.textSecondary }]}>Co-Agent Listings ({coAgentListingsCount})</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Filter Chips ScrollView */}
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScrollView}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
-          onLayout={(e) => setScrollViewWidth(e.nativeEvent.layout.width)}
-        >
-          {filterChips.map((chip) => {
-            const active = activeFilter === chip.id;
-            return (
-              <View
-                key={chip.id}
-                style={{ marginRight: 8 }}
-                onLayout={(e) => {
-                  chipLayouts.current[chip.id] = {
-                    x: e.nativeEvent.layout.x,
-                    width: e.nativeEvent.layout.width,
-                  };
-                }}
-              >
+          <View style={[styles.segmentWrap, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}> 
+            {segmentTabs.map((tab, index) => {
+              const isActive = activeTab === tab.value;
+              return (
                 <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => handleFilterPress(chip.id)}
+                  key={tab.value}
+                  activeOpacity={0.85}
+                  onPress={() => setActiveTab(tab.value)}
                   style={[
-                    styles.filterChip,
+                    styles.segmentButton,
+                    {
+                      backgroundColor: isActive ? "#FFB4B4" : themeColors.surfaceContainer,
+                      borderRightWidth: index === 0 ? 1 : 0,
+                      borderRightColor: themeColors.borderColor,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      {
+                        color: isActive ? "#121212" : "#FFFFFF",
+                        fontWeight: isActive ? "700" : "600",
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+            {STATUS_OPTIONS.map((status) => {
+              const active = filters.status === status;
+              return (
+                <TouchableOpacity
+                  key={status}
+                  activeOpacity={0.9}
+                  onPress={() => setFilters((prev) => ({ ...prev, status }))}
+                  style={[
+                    styles.statusPill,
                     {
                       backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
                       borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
                     },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      { color: active ? "#FFFFFF" : themeColors.textSecondary },
-                    ]}
-                  >
-                    {chip.label}
+                  <Text style={[styles.statusPillText, { color: active ? themeColors.canvasBackground : themeColors.textSecondary }]}>
+                    {status}
                   </Text>
                 </TouchableOpacity>
-              </View>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {/* Main Property FlatList */}
-      {isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
-          <Text style={[styles.loadingText, { color: themeColors.textMuted }]}>{t("masterListing")}...</Text>
+              );
+            })}
+          </ScrollView>
         </View>
-      ) : (
-        <FlatList
-          data={filteredListings}
-          keyExtractor={(item) => item.id}
-          renderItem={renderListingCard}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: 12,
-            paddingBottom: Math.max(insets.bottom, 24) + 120,
-          }}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              colors={[themeColors.maroonPrimary]}
-            />
-          }
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <MaterialCommunityIcons
-                name={activeSegment === "mine" ? "home-plus-outline" : "account-group-outline"}
-                size={56}
-                color={themeColors.maroonPrimary}
-              />
-              <Text style={[styles.emptyTitle, { color: themeColors.textPrimary }]}>
-                {activeSegment === "mine" ? "No listings in My Listings" : "No Co-Agent Listings found"}
-              </Text>
-              <Text style={[styles.emptySubtitle, { color: themeColors.textMuted }]}>
-                {activeSegment === "mine"
-                  ? (searchQuery || hasBuyerCriteriaActive
-                    ? "No results match your filters in My Listings."
-                    : "You haven't added any listings yet.")
-                  : (searchQuery || hasBuyerCriteriaActive
-                    ? "No co-agent listings found matching your criteria."
-                    : "No co-agent listings available right now.")}
-              </Text>
-            </View>
-          }
-        />
-      )}
 
+        {isLoading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
+          </View>
+        ) : (
+          <FlatList
+            data={filteredListings}
+            renderItem={renderListingCard}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: insets.bottom + 100, flexGrow: 1 }}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} colors={[themeColors.maroonPrimary]} />}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="home-search-outline" size={48} color={themeColors.maroonPrimary} />
+                <Text style={[styles.emptyTitle, { color: themeColors.textPrimary }]}>No listings found</Text>
+                <Text style={[styles.emptySubtitle, { color: themeColors.textMuted }]}>Try changing a filter or resetting the criteria.</Text>
+              </View>
+            }
+          />
+        )}
+
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => router.push("/(tabs)/tambah" as any)}
+          style={{
+            position: "absolute",
+            right: fabRight,
+            bottom: insets.bottom + 16,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            backgroundColor: themeColors.maroonPrimary,
+            alignItems: "center",
+            justifyContent: "center",
+            elevation: 5,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+            zIndex: 999,
+          }}
+        >
+          <MaterialCommunityIcons name="plus" size={30} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        onPress={() => router.push("/(tabs)/tambah" as any)}
-        activeOpacity={0.9}
-        style={{
-          position: "absolute",
-          right: fabRight,
-          bottom: insets.bottom + 16,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: themeColors.maroonPrimary,
-          alignItems: "center",
-          justifyContent: "center",
-          elevation: 5,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 8,
-          zIndex: 999,
-        }}
-      >
-        <MaterialCommunityIcons name="plus" size={30} color="#FFF" />
-      </TouchableOpacity>
+      <Modal visible={isStatusModalOpen} transparent animationType="slide" onRequestClose={() => setIsStatusModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: "#FFFFFF" }]}>Update Listing Status</Text>
+              <TouchableOpacity onPress={() => setIsStatusModalOpen(false)} style={[styles.closeButton, { backgroundColor: "#2C2C2C" }]}>
+                <MaterialCommunityIcons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+              {LISTING_STATUS_OPTIONS.map((status) => {
+                const isActive = selectedListingForStatus?.status === status || normalizeStatusLabel(selectedListingForStatus?.status) === status;
+                return (
+                  <TouchableOpacity
+                    key={status}
+                    activeOpacity={0.85}
+                    onPress={() => handleUpdateListingStatus(status)}
+                    style={[
+                      styles.optionPill,
+                      {
+                        backgroundColor: isActive ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                        borderColor: isActive ? themeColors.maroonPrimary : themeColors.borderColor,
+                        minWidth: "45%",
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.optionText, { color: isActive ? themeColors.canvasBackground : themeColors.textSecondary }]}>
+                      {status}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={isFilterModalOpen} transparent animationType="slide" onRequestClose={() => setIsFilterModalOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: "#FFFFFF" }]}>Buyer Criteria Filters</Text>
+              <TouchableOpacity onPress={() => setIsFilterModalOpen(false)} style={[styles.closeButton, { backgroundColor: "#2C2C2C" }]}>
+                <MaterialCommunityIcons name="close" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.inputBlock}>
+                <Text style={[styles.inputLabel, { color: "#FFFFFF" }]}>Location</Text>
+                <TextInput
+                  value={filters.location}
+                  onChangeText={(value) => setFilters((prev) => ({ ...prev, location: value }))}
+                  placeholder="E.g., Taiping, Selangor"
+                  placeholderTextColor={themeColors.textMuted}
+                  maxLength={50}
+                  multiline={false}
+                  style={[styles.input, { borderColor: themeColors.borderColor, backgroundColor: themeColors.surfaceContainer, color: themeColors.textPrimary }]}
+                />
+              </View>
+
+              <View style={styles.inputBlock}>
+                <Text style={[styles.inputLabel, { color: "#FFFFFF" }]}>Price Range (RM)</Text>
+                <View style={styles.priceRow}>
+                  <TextInput
+                    value={filters.minPrice}
+                    onChangeText={(value) => setFilters((prev) => ({ ...prev, minPrice: value }))}
+                    placeholder="Min RM"
+                    placeholderTextColor={themeColors.textMuted}
+                    keyboardType="numeric"
+                    maxLength={10}
+                    multiline={false}
+                    style={[styles.input, { flex: 1, borderColor: themeColors.borderColor, backgroundColor: themeColors.surfaceContainer, color: themeColors.textPrimary }]}
+                  />
+                  <TextInput
+                    value={filters.maxPrice}
+                    onChangeText={(value) => setFilters((prev) => ({ ...prev, maxPrice: value }))}
+                    placeholder="Max RM"
+                    placeholderTextColor={themeColors.textMuted}
+                    keyboardType="numeric"
+                    maxLength={10}
+                    multiline={false}
+                    style={[styles.input, { flex: 1, borderColor: themeColors.borderColor, backgroundColor: themeColors.surfaceContainer, color: themeColors.textPrimary }]}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputBlock}>
+                <Text style={[styles.inputLabel, { color: "#FFFFFF" }]}>Property Type</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionRow}>
+                  {propertyTypeOptions.map((option) => {
+                    const active = filters.propertyType === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        activeOpacity={0.8}
+                        onPress={() => setFilters((prev) => ({ ...prev, propertyType: option }))}
+                        style={[
+                          styles.optionPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.optionText, { color: active ? themeColors.canvasBackground : themeColors.textSecondary }]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.inputBlock}>
+                <Text style={[styles.inputLabel, { color: "#FFFFFF" }]}>Tenure Type</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionRow}>
+                  {tenureOptions.map((option) => {
+                    const active = filters.tenure === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        activeOpacity={0.8}
+                        onPress={() => setFilters((prev) => ({ ...prev, tenure: option }))}
+                        style={[
+                          styles.optionPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.optionText, { color: active ? themeColors.canvasBackground : themeColors.textSecondary }]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              <View style={styles.inputBlock}>
+                <Text style={[styles.inputLabel, { color: "#FFFFFF" }]}>Lot Status</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.optionRow}>
+                  {lotStatusOptions.map((option) => {
+                    const active = filters.lotStatus === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        activeOpacity={0.8}
+                        onPress={() => setFilters((prev) => ({ ...prev, lotStatus: option }))}
+                        style={[
+                          styles.optionPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.optionText, { color: active ? themeColors.canvasBackground : themeColors.textSecondary }]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setIsFilterModalOpen(false);
+                }}
+                style={[styles.secondaryButton, { borderColor: themeColors.borderColor }]}
+              >
+                <Text style={[styles.secondaryButtonText, { color: themeColors.textSecondary }]}>Reset All</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={() => setIsFilterModalOpen(false)}
+                style={[styles.primaryButton, { backgroundColor: themeColors.maroonPrimary }]}
+              >
+                <Text style={[styles.primaryButtonText, { color: themeColors.canvasBackground }]}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stickyHeader: {
+  header: {
     borderBottomWidth: 1,
-    elevation: 3,
-  },
-  headerTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingBottom: 12,
   },
-  headerTitle: {
+  title: {
     fontSize: 20,
     fontWeight: "700",
+    marginBottom: 12,
   },
-  iconButton: {
-    padding: 6,
-    borderRadius: 20,
-  },
-  searchBarContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 10,
-  },
-  criteriaActionRow: {
+  searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 6,
-    marginBottom: 6,
+    gap: 10,
   },
-  criteriaToggleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  criteriaToggleText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  criteriaClearBtn: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  criteriaClearText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  criteriaPanel: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    gap: 8,
-  },
-  criteriaInput: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  criteriaPriceRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  criteriaHalfInput: {
+  searchBar: {
     flex: 1,
-  },
-  criteriaCategoryBlock: {
-    width: "100%",
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  criteriaCategoryLabel: {
-    fontSize: 13,
-    fontWeight: "800",
-    marginBottom: 8,
-  },
-  criteriaRowContent: {
-    gap: 8,
-    paddingRight: 8,
-  },
-  criteriaPill: {
-    minHeight: 40,
+    flexDirection: "row",
+    alignItems: "center",
     borderWidth: 1,
     borderRadius: 12,
-    paddingHorizontal: 14,
-    justifyContent: "center",
-    alignItems: "center",
+    paddingHorizontal: 12,
+    height: 52,
   },
-  criteriaPillText: {
-    fontSize: 13,
-    fontWeight: "800",
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  filterButton: {
+    width: 52,
+    height: 52,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   segmentWrap: {
-    marginHorizontal: 16,
+    marginTop: 12,
     marginBottom: 10,
-    borderRadius: 14,
     borderWidth: 1,
+    borderRadius: 14,
     flexDirection: "row",
-    position: "relative",
     overflow: "hidden",
   },
-  segmentIndicator: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    borderRadius: 14,
-  },
-  segmentBtn: {
+  segmentButton: {
     flex: 1,
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 2,
   },
   segmentText: {
     fontSize: 12,
     fontWeight: "700",
   },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 10,
-    paddingHorizontal: 12,
+  pillRow: {
+    paddingBottom: 4,
+    gap: 8,
+  },
+  statusPill: {
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
+    borderRadius: 999,
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-  },
-  filterScrollView: {
-    flexDirection: "row",
-  },
-  filterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 7,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  filterChipActive: {},
-  filterChipText: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  filterChipTextActive: {
+  statusPillText: {
+    fontSize: 12,
     fontWeight: "700",
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   card: {
     borderRadius: 12,
+    borderWidth: 1,
     padding: 12,
     marginBottom: 12,
-    borderWidth: 1,
     position: "relative",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
   },
   statusBadge: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    zIndex: 10,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 10,
+    alignSelf: "flex-start",
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 8,
   },
   statusText: {
     fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
   },
-  cardMainRow: {
+  updateStatusButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  updateStatusText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  cardRow: {
     flexDirection: "row",
     gap: 12,
   },
   thumbnail: {
-    width: 100,
-    height: 100,
+    width: 96,
+    height: 96,
     borderRadius: 8,
   },
   thumbnailPlaceholder: {
-    width: 100,
-    height: 100,
+    width: 96,
+    height: 96,
     borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
   cardContent: {
     flex: 1,
     justifyContent: "space-between",
-    paddingVertical: 2,
+    paddingRight: 52,
   },
   cardTitle: {
     fontSize: 15,
     fontWeight: "700",
-    marginRight: 60,
   },
   cardPrice: {
     fontSize: 15,
     fontWeight: "800",
     marginTop: 4,
   },
-  specsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-    marginTop: 8,
+  cardMeta: {
+    fontSize: 12,
+    marginTop: 4,
   },
-  specItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  specText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  shareButton: {
-    marginLeft: "auto",
-    padding: 6,
-    borderRadius: 8,
-  },
-  centerContainer: {
+  emptyState: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 48,
-    paddingHorizontal: 24,
   },
   emptyTitle: {
     fontSize: 16,
@@ -1057,6 +927,102 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: 13,
     textAlign: "center",
-    marginTop: 4,
+    marginTop: 6,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  modalSheet: {
+    backgroundColor: "#1E1E1E",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
+    width: "100%",
+    maxHeight: "85%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputBlock: {
+    marginBottom: 18,
+  },
+  inputLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  priceRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  optionRow: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  optionPill: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  optionText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  secondaryButton: {
+    flex: 1,
+    height: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  primaryButton: {
+    flex: 2,
+    height: 52,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  primaryButtonText: {
+    fontSize: 15,
+    fontWeight: "800",
   },
 });

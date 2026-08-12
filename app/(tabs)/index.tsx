@@ -74,7 +74,8 @@ export default function DashboardScreen() {
         (snapshot) => {
           if (snapshot) {
             const fetchedListings: PropertyListing[] = snapshot.docs
-              .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing);
+              .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing)
+              .filter((l: any) => l.agentId === userId || l.userId === userId);
 
             setListings(fetchedListings);
           }
@@ -126,18 +127,17 @@ export default function DashboardScreen() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    try {
+    const currentUser = auth().currentUser;
+    if (currentUser?.uid) {
       const listSnap = await firestore().collection("listings").get();
-      const fetchedListings: PropertyListing[] = listSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as PropertyListing[];
+      const fetchedListings: PropertyListing[] = listSnap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing)
+        .filter((l: any) => l.agentId === currentUser.uid || l.userId === currentUser.uid);
       setListings(fetchedListings);
 
-      const currentUser = auth().currentUser;
       const caseSnap = await firestore()
         .collection("cases")
-        .where("userId", "==", currentUser?.uid || "")
+        .where("userId", "==", currentUser.uid)
         .get();
       const fetchedCases: PropertyCase[] = caseSnap.docs.map((doc) => ({
         id: doc.id,
@@ -149,11 +149,8 @@ export default function DashboardScreen() {
           .sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""))
           .slice(0, 3)
       );
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsRefreshing(false);
     }
+    setIsRefreshing(false);
   };
 
   const handleDeleteCase = async (caseId: string) => {
@@ -167,43 +164,53 @@ export default function DashboardScreen() {
     }
   };
 
-  // Unified status & record calculation strictly from active Cases
-  const metricAktif = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "viewing" || s === "booking paid" || s === "spa signed" || s === "loan approved";
+  // Unified status & record calculation (combining listings + cases)
+  const allUserRecords = [
+    ...listings.map((l) => ({
+      id: l.id,
+      status: (l.status || "").toString().toLowerCase().trim(),
+      createdAt: l.createdAt || "",
+    })),
+    ...allCases.map((c) => ({
+      id: c.id,
+      status: (c.status || "").toString().toLowerCase().trim(),
+      createdAt: c.createdAt || c.tarikh || "",
+    })),
+  ];
+
+  const metricAktif = allUserRecords.filter((r) => {
+    return r.status === "aktif" || r.status === "active" || r.status === "viewing";
   }).length;
 
-  const metricBooking = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "booking paid";
+  const metricBooking = allUserRecords.filter((r) => {
+    return (
+      r.status === "booking" ||
+      r.status === "draft" ||
+      r.status === "booking paid" ||
+      r.status === "pending"
+    );
   }).length;
 
-  const metricUnderLoan = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    const f = (c.finance || "").toLowerCase().trim();
-    return f === "bank loan" || s === "loan approved";
+  const metricUnderLoan = allUserRecords.filter((r) => {
+    return r.status === "under loan" || r.status === "loan approved" || r.status === "loan";
   }).length;
 
-  const metricUnderSpa = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "spa signed";
+  const metricUnderSpa = allUserRecords.filter((r) => {
+    return r.status === "under spa" || r.status === "spa signed" || r.status === "spa";
   }).length;
 
-  const metricSold = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "completed";
+  const metricSold = allUserRecords.filter((r) => {
+    return r.status === "sold" || r.status === "terjual" || r.status === "completed";
   }).length;
 
-  const metricExpired = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "cancelled";
+  const metricExpired = allUserRecords.filter((r) => {
+    return r.status === "expired" || r.status === "cancelled" || r.status === "review";
   }).length;
 
-  // Monthly Performance Chart Calculation for selectedYear strictly using Cases
-  const yearRecords = allCases.filter((c) => {
-    const dateStr = c.createdAt || c.tarikh || "";
-    if (!dateStr) return false;
-    const createdDate = new Date(dateStr);
+  // Monthly Performance Chart Calculation for selectedYear
+  const yearRecords = allUserRecords.filter((r) => {
+    if (!r.createdAt) return false;
+    const createdDate = new Date(r.createdAt);
     return !isNaN(createdDate.getTime()) && createdDate.getFullYear().toString() === selectedYear;
   });
 
@@ -270,7 +277,8 @@ export default function DashboardScreen() {
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: Math.max(insets.bottom, 24) + 80,
+          paddingBottom: insets.bottom + 100,
+          flexGrow: 1,
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -294,11 +302,7 @@ export default function DashboardScreen() {
         {/* Real Live Metrics Grid */}
         <View style={styles.metricsGrid}>
           {/* Aktif */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Active" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
+          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="check-circle" size={22} color="#DC2626" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -308,14 +312,10 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusAktif")}
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* Booking */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Booking Paid" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
+          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="calendar-check" size={22} color="#2563EB" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -325,14 +325,10 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusBooking")}
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* Under Loan */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Loan Approved" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
+          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="bank" size={22} color="#9333EA" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -342,14 +338,10 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusUnderLoan")}
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* Under SPA */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "SPA Signed" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
+          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="file-document-outline" size={22} color="#F97316" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -359,14 +351,10 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusUnderSpa")}
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* Sold */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Completed" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
+          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="tag-outline" size={22} color="#16A34A" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -376,14 +364,10 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusSold")}
             </Text>
-          </TouchableOpacity>
+          </View>
 
           {/* Expired */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Cancelled" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
+          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="clock-outline" size={22} color="#64748B" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -393,7 +377,7 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusExpired")}
             </Text>
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* Monthly Performance Section */}
@@ -514,7 +498,7 @@ export default function DashboardScreen() {
             <CaseCard
               key={item.id}
               case={item}
-              onPress={() => router.push(`/case/${item.id}` as any)}
+              onPress={() => router.push(`/(tabs)/tambah?caseId=${item.id}` as any)}
               onDelete={handleDeleteCase}
             />
           ))

@@ -468,48 +468,37 @@ export async function createPropertyListing(
     // Upload Property Images (Gambar Hartanah)
     const uploadedGambarUrls: string[] = [];
     if (files.gambar && files.gambar.length > 0) {
-      for (let i = 0; i < files.gambar.length; i++) {
-        const uri = files.gambar[i];
-        if (uri) {
-          const ext = uri.split(".").pop()?.split("?")[0] || "jpg";
-          const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
-          const url = await uploadFileToStorage(uri, path);
-          if (url) uploadedGambarUrls.push(url);
-        }
-      }
+      const imageUploads = files.gambar.map(async (uri, index) => {
+        if (!uri) return null;
+        const ext = uri.split(".").pop()?.split("?")[0] || "jpg";
+        const path = `listings/${agentId}/${listingId}/gambar_${index}_${Date.now()}.${ext}`;
+        const url = await uploadFileToStorage(uri, path);
+        return url || null;
+      });
+
+      const uploadedResults = await Promise.all(imageUploads);
+      uploadedResults.forEach((url) => {
+        if (url) uploadedGambarUrls.push(url);
+      });
     }
 
-    // Upload Geran Document
-    let geranUrl = "";
-    if (files.geran) {
-      const ext = files.geran.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/geran_${Date.now()}.${ext}`;
-      geranUrl = await uploadFileToStorage(files.geran, path);
-    }
+    // Upload supporting documents concurrently
+    const documentUploads = await Promise.all([
+      files.geran
+        ? uploadFileToStorage(files.geran, `listings/${agentId}/${listingId}/geran_${Date.now()}.${(files.geran.split(".").pop()?.split("?")[0] || "pdf")}`)
+        : Promise.resolve(""),
+      files.icOwner
+        ? uploadFileToStorage(files.icOwner, `listings/${agentId}/${listingId}/icOwner_${Date.now()}.${(files.icOwner.split(".").pop()?.split("?")[0] || "pdf")}`)
+        : Promise.resolve(""),
+      files.spa
+        ? uploadFileToStorage(files.spa, `listings/${agentId}/${listingId}/spa_${Date.now()}.${(files.spa.split(".").pop()?.split("?")[0] || "pdf")}`)
+        : Promise.resolve(""),
+      files.bilUtility
+        ? uploadFileToStorage(files.bilUtility, `listings/${agentId}/${listingId}/bilUtility_${Date.now()}.${(files.bilUtility.split(".").pop()?.split("?")[0] || "pdf")}`)
+        : Promise.resolve(""),
+    ]);
 
-    // Upload IC Owner Document
-    let icOwnerUrl = "";
-    if (files.icOwner) {
-      const ext = files.icOwner.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/icOwner_${Date.now()}.${ext}`;
-      icOwnerUrl = await uploadFileToStorage(files.icOwner, path);
-    }
-
-    // Upload SPA Document (if provided)
-    let spaUrl = "";
-    if (files.spa) {
-      const ext = files.spa.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/spa_${Date.now()}.${ext}`;
-      spaUrl = await uploadFileToStorage(files.spa, path);
-    }
-
-    // Upload Bil Utility Document (if provided)
-    let bilUtilityUrl = "";
-    if (files.bilUtility) {
-      const ext = files.bilUtility.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/bilUtility_${Date.now()}.${ext}`;
-      bilUtilityUrl = await uploadFileToStorage(files.bilUtility, path);
-    }
+    const [geranUrl, icOwnerUrl, spaUrl, bilUtilityUrl] = documentUploads;
 
     const currentUser = auth().currentUser;
     const userId = currentUser?.uid || "";
@@ -566,24 +555,26 @@ export async function updatePropertyListing(
     const existingListing = existingDoc.exists
       ? (existingDoc.data() as Partial<PropertyListing>)
       : null;
+    const storageOwnerId = existingListing?.userId || existingListing?.agentId || currentUid;
     const existingImageUrls = collectListingImageUrls(existingListing);
 
     // 1. Upload new/existing images
     const uploadedGambarUrls: string[] = [];
     if (files.gambar !== undefined && files.gambar.length > 0) {
-      for (let i = 0; i < files.gambar.length; i++) {
-        const uri = files.gambar[i];
-        if (uri) {
-          if (uri.startsWith("http://") || uri.startsWith("https://")) {
-            uploadedGambarUrls.push(uri);
-          } else {
-            const ext = uri.split(".").pop()?.split("?")[0] || "jpg";
-            const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
-            const url = await uploadFileToStorage(uri, path);
-            if (url) uploadedGambarUrls.push(url);
-          }
+      const imageUploads = files.gambar.map(async (uri, index) => {
+        if (!uri) return null;
+        if (uri.startsWith("http://") || uri.startsWith("https://")) {
+          return uri;
         }
-      }
+        const ext = uri.split(".").pop()?.split("?")[0] || "jpg";
+        const path = `listings/${storageOwnerId}/${listingId}/gambar_${index}_${Date.now()}.${ext}`;
+        return await uploadFileToStorage(uri, path);
+      });
+
+      const imageResults = await Promise.all(imageUploads);
+      imageResults.forEach((url) => {
+        if (url) uploadedGambarUrls.push(url);
+      });
     }
 
     const finalGambarUrls =
@@ -591,50 +582,31 @@ export async function updatePropertyListing(
         ? existingImageUrls
         : (uploadedGambarUrls.length > 0 ? uploadedGambarUrls : (files.gambar.length === 0 ? [] : existingImageUrls));
 
-    // 2. Upload documents
-    let geranUrl = listingData.geran || null;
-    if (files.geran) {
-      if (files.geran.startsWith("http://") || files.geran.startsWith("https://")) {
-        geranUrl = files.geran;
-      } else {
-        const ext = files.geran.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/geran_${Date.now()}.${ext}`;
-        geranUrl = await uploadFileToStorage(files.geran, path);
-      }
-    }
+    // 2. Upload documents concurrently
+    const documentResults = await Promise.all([
+      files.geran
+        ? (files.geran.startsWith("http://") || files.geran.startsWith("https://")
+          ? Promise.resolve(files.geran)
+          : uploadFileToStorage(files.geran, `listings/${storageOwnerId}/${listingId}/geran_${Date.now()}.${(files.geran.split(".").pop()?.split("?")[0] || "pdf")}`))
+        : Promise.resolve(listingData.geran || null),
+      files.icOwner
+        ? (files.icOwner.startsWith("http://") || files.icOwner.startsWith("https://")
+          ? Promise.resolve(files.icOwner)
+          : uploadFileToStorage(files.icOwner, `listings/${storageOwnerId}/${listingId}/icOwner_${Date.now()}.${(files.icOwner.split(".").pop()?.split("?")[0] || "pdf")}`))
+        : Promise.resolve(listingData.icOwner || null),
+      files.spa
+        ? (files.spa.startsWith("http://") || files.spa.startsWith("https://")
+          ? Promise.resolve(files.spa)
+          : uploadFileToStorage(files.spa, `listings/${storageOwnerId}/${listingId}/spa_${Date.now()}.${(files.spa.split(".").pop()?.split("?")[0] || "pdf")}`))
+        : Promise.resolve(listingData.spa || null),
+      files.bilUtility
+        ? (files.bilUtility.startsWith("http://") || files.bilUtility.startsWith("https://")
+          ? Promise.resolve(files.bilUtility)
+          : uploadFileToStorage(files.bilUtility, `listings/${storageOwnerId}/${listingId}/bilUtility_${Date.now()}.${(files.bilUtility.split(".").pop()?.split("?")[0] || "pdf")}`))
+        : Promise.resolve(listingData.bilUtility || null),
+    ]);
 
-    let icOwnerUrl = listingData.icOwner || null;
-    if (files.icOwner) {
-      if (files.icOwner.startsWith("http://") || files.icOwner.startsWith("https://")) {
-        icOwnerUrl = files.icOwner;
-      } else {
-        const ext = files.icOwner.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/icOwner_${Date.now()}.${ext}`;
-        icOwnerUrl = await uploadFileToStorage(files.icOwner, path);
-      }
-    }
-
-    let spaUrl = listingData.spa || null;
-    if (files.spa) {
-      if (files.spa.startsWith("http://") || files.spa.startsWith("https://")) {
-        spaUrl = files.spa;
-      } else {
-        const ext = files.spa.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/spa_${Date.now()}.${ext}`;
-        spaUrl = await uploadFileToStorage(files.spa, path);
-      }
-    }
-
-    let bilUtilityUrl = listingData.bilUtility || null;
-    if (files.bilUtility) {
-      if (files.bilUtility.startsWith("http://") || files.bilUtility.startsWith("https://")) {
-        bilUtilityUrl = files.bilUtility;
-      } else {
-        const ext = files.bilUtility.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/bilUtility_${Date.now()}.${ext}`;
-        bilUtilityUrl = await uploadFileToStorage(files.bilUtility, path);
-      }
-    }
+    const [geranUrl, icOwnerUrl, spaUrl, bilUtilityUrl] = documentResults;
 
     // 3. Update firestore document
     await firestore().collection("listings").doc(listingId).update({

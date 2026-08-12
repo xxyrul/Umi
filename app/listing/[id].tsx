@@ -14,8 +14,9 @@ import {
   Platform,
   StatusBar,
   useWindowDimensions,
+  BackHandler,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import firestore from "@react-native-firebase/firestore";
@@ -24,6 +25,34 @@ import type { PropertyListing } from "@/types/listing";
 import { THEME } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { addEventToNativeCalendar } from "@/services/calendar";
+
+const normalizeStatusText = (value?: string | null): string => (value ?? "").trim().toLowerCase();
+
+function getLocalizedListingStatus(status: unknown, t: (key: any) => string): string {
+  const raw = typeof status === "string" ? status.trim() : "";
+  const normalized = normalizeStatusText(raw);
+
+  if (!normalized) return t("statusAktif");
+  if (["active", "aktif", "available", "viewing"].includes(normalized)) return t("statusAktif");
+  if (["booking", "booked", "reserved", "reservation"].includes(normalized)) return t("statusBooking");
+  if (["sold", "terjual", "sold out", "sold-out"].includes(normalized)) return t("statusSold");
+  if (["draft", "pending draft"].includes(normalized)) return t("filterDraft");
+  if (["under loan"].includes(normalized)) return t("statusUnderLoan");
+  if (["under spa"].includes(normalized)) return t("statusUnderSpa");
+  if (["expired"].includes(normalized)) return t("statusExpired");
+
+  return raw || t("statusAktif");
+}
+
+function getCanonicalListingStatus(status: unknown): "Active" | "Booking" | "Sold" | "Draft" {
+  const raw = typeof status === "string" ? status.trim() : "";
+  const normalized = normalizeStatusText(raw);
+
+  if (["booking", "booked", "reserved", "reservation"].includes(normalized)) return "Booking";
+  if (["sold", "terjual", "sold out", "sold-out"].includes(normalized)) return "Sold";
+  if (["draft", "pending draft"].includes(normalized)) return "Draft";
+  return "Active";
+}
 
 function getListingImagesList(listing: any): string[] {
   if (!listing) return [];
@@ -105,6 +134,25 @@ export default function PropertyDetailScreen() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { themeColors, t, language } = useAppSettings();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace("/(tabs)/listings");
+        }
+        return true; // handled
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+      return () => {
+        subscription.remove();
+      };
+    }, [router])
+  );
 
   const [listing, setListing] = useState<PropertyListing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -442,6 +490,21 @@ export default function PropertyDetailScreen() {
   const hasImages = allImages.length > 0;
   const formattedPrice =
     typeof listing.harga === "number" ? listing.harga.toLocaleString() : listing.harga;
+  const rawListingStatus =
+    (listing as any).status ??
+    (listing as any).listingStatus ??
+    (listing as any).statusListing ??
+    (listing as any).propertyStatus;
+  const canonicalStatus = getCanonicalListingStatus(rawListingStatus);
+  const localizedStatus = getLocalizedListingStatus(rawListingStatus, t);
+  const statusColors =
+    canonicalStatus === "Booking"
+      ? { bg: themeColors.statusBookingBg, text: themeColors.statusBookingText }
+      : canonicalStatus === "Sold"
+        ? { bg: themeColors.statusSoldBg, text: themeColors.statusSoldText }
+        : canonicalStatus === "Draft"
+          ? { bg: themeColors.statusDraftBg, text: themeColors.statusDraftText }
+          : { bg: themeColors.statusAktifBg, text: themeColors.statusAktifText };
 
   return (
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
@@ -576,8 +639,9 @@ export default function PropertyDetailScreen() {
           {/* HEADER SECTION */}
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
             <View style={styles.statusRow}>
-              <View style={[styles.statusBadge, { backgroundColor: themeColors.maroonPrimary }]}>
-                <Text style={styles.statusText}>{listing.status || "Aktif"}</Text>
+              <Text style={[styles.statusCaption, { color: themeColors.textSecondary }]}>Status</Text>
+              <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}> 
+                <Text style={[styles.statusText, { color: statusColors.text }]}>{localizedStatus}</Text>
               </View>
               {listing.jenis ? (
                 <View style={[styles.jenisBadge, { backgroundColor: themeColors.surfaceContainer }]}>
@@ -1135,6 +1199,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 8,
+    flexWrap: "wrap",
+  },
+  statusCaption: {
+    fontSize: 12,
+    fontWeight: "700",
   },
   statusBadge: {
     backgroundColor: THEME.maroonPrimary,

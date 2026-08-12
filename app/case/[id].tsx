@@ -10,8 +10,9 @@ import {
   StyleSheet,
   StatusBar,
   Platform,
+  BackHandler,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import firestore from "@react-native-firebase/firestore";
@@ -25,6 +26,25 @@ export default function CaseDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { themeColors, t, language } = useAppSettings();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace("/(tabs)/cases");
+        }
+        return true; // handled
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+      return () => {
+        subscription.remove();
+      };
+    }, [router])
+  );
 
   const [propertyCase, setPropertyCase] = useState<PropertyCase | null>(null);
   const [isLoading, setIsLoading] = useState(true);

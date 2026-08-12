@@ -21,6 +21,7 @@ import { router } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
 import { SPACING } from "@/constants/theme";
 import { Button } from "@/components";
+import { PinKeypad } from "@/components/PinKeypad";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { getCurrentUserProfile, signOut, getUserInitials } from "@/services/auth";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -32,6 +33,8 @@ import {
   getBiometricsEnabled,
   setBiometricsEnabled,
   getAppLockPin,
+  setAppLockPin,
+  isBiometricSupported,
 } from "@/services/security";
 import type { UserProfile, PropertyCase } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
@@ -60,6 +63,9 @@ export default function ProfileScreen() {
 
   // PIN Setup Modal state
   const [showPinSetupModal, setShowPinSetupModal] = useState(false);
+  const [pinSetupStep, setPinSetupStep] = useState<"create" | "confirm">("create");
+  const [firstPin, setFirstPin] = useState("");
+  const [pinSetupError, setPinSetupError] = useState("");
 
   // Interactive Account Settings State
   const [displayNameInput, setDisplayNameInput] = useState("");
@@ -97,24 +103,81 @@ export default function ProfileScreen() {
     if (value) {
       const existingPin = await getAppLockPin();
       if (!existingPin) {
+        setPinSetupStep("create");
+        setFirstPin("");
+        setPinSetupError("");
         setShowPinSetupModal(true);
       } else {
         setAppLockEnabledState(true);
         await setAppLockEnabled(true);
-        setBiometricsEnabledState(true);
-        await setBiometricsEnabled(true);
+        const biometricsSupported = await isBiometricSupported();
+        setBiometricsEnabledState(biometricsSupported);
+        await setBiometricsEnabled(biometricsSupported);
         Alert.alert(t("appLockActive"), t("appLockActiveMsg"));
       }
     } else {
       setAppLockEnabledState(false);
       await setAppLockEnabled(false);
+      setBiometricsEnabledState(false);
+      await setBiometricsEnabled(false);
       Alert.alert(t("appLockOff"), t("appLockOffMsg"));
     }
   };
 
   const handleToggleBiometrics = async (value: boolean) => {
+    if (!appLockEnabled) {
+      Alert.alert(t("errorTitle"), t("appLockLabel"));
+      return;
+    }
+
+    const supported = await isBiometricSupported();
+    if (value && !supported) {
+      Alert.alert(t("errorTitle"), "Biometric authentication is not available on this device.");
+      return;
+    }
+
     setBiometricsEnabledState(value);
     await setBiometricsEnabled(value);
+  };
+
+  const closePinSetupModal = () => {
+    setShowPinSetupModal(false);
+    setPinSetupStep("create");
+    setFirstPin("");
+    setPinSetupError("");
+  };
+
+  const handlePinSetupComplete = async (pin: string) => {
+    if (pinSetupStep === "create") {
+      setFirstPin(pin);
+      setPinSetupStep("confirm");
+      setPinSetupError("");
+      return;
+    }
+
+    if (pin !== firstPin) {
+      setPinSetupError("PIN mismatch. Please try again.");
+      setPinSetupStep("create");
+      setFirstPin("");
+      return;
+    }
+
+    try {
+      await setAppLockPin(pin);
+      await setAppLockEnabled(true);
+      setAppLockEnabledState(true);
+
+      const biometricsSupported = await isBiometricSupported();
+      setBiometricsEnabledState(biometricsSupported);
+      await setBiometricsEnabled(biometricsSupported);
+
+      closePinSetupModal();
+      Alert.alert(t("appLockActive"), t("appLockActiveMsg"));
+    } catch {
+      setPinSetupError("Unable to save PIN. Please try again.");
+      setPinSetupStep("create");
+      setFirstPin("");
+    }
   };
 
   const handleSignOut = () => {
@@ -739,6 +802,56 @@ export default function ProfileScreen() {
                 </View>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showPinSetupModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closePinSetupModal}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.6)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+              padding: SPACING.lg,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: SPACING.md,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
+                {pinSetupStep === "create" ? "Create 4-digit PIN" : "Confirm 4-digit PIN"}
+              </Text>
+              <TouchableOpacity onPress={closePinSetupModal}>
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <PinKeypad
+              title={pinSetupStep === "create" ? "Set Security PIN" : "Confirm Security PIN"}
+              subtitle={pinSetupStep === "create" ? "Create your 4-digit PIN" : "Re-enter your PIN to confirm"}
+              onPinComplete={handlePinSetupComplete}
+              showBiometricOption={false}
+              errorMessage={pinSetupError}
+            />
           </View>
         </View>
       </Modal>

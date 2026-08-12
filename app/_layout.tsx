@@ -8,7 +8,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import firestore from "@react-native-firebase/firestore";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { onAuthStateChanged, firebaseAuth, User } from "@/services/firebase";
-import { getAppLockEnabled, getBiometricsEnabled, verifyAppLockPin, authenticateBiometric } from "@/services/security";
+import { getAppLockEnabled, getBiometricsEnabled, verifyAppLockPin, authenticateBiometric, getAppLockPin, setAppLockEnabled } from "@/services/security";
 import { PinKeypad } from "@/components/PinKeypad";
 import { AppSettingsProvider, useAppSettings } from "@/context/AppSettingsContext";
 import { COLORS } from "@/constants/theme";
@@ -22,7 +22,7 @@ Sentry.init({
 
   // Adds more context data to events (IP address, cookies, user, etc.)
   // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
-  sendDefaultPii: true,
+  sendDefaultPii: false,
 
   // Configure Session Replay
   replaysSessionSampleRate: 0.1,
@@ -202,14 +202,10 @@ function AppLockOverlay({
 // Inner layout component — uses themeColors for status bar and background
 function RootLayoutInner({
   user,
-  setUser,
   authLoaded,
-  setAuthLoaded,
 }: {
   user: User | null;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   authLoaded: boolean;
-  setAuthLoaded: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
   const { themeColors, isDark } = useAppSettings();
   const router = useRouter();
@@ -243,6 +239,15 @@ function RootLayoutInner({
     setAllowBiometrics(bioEnabled);
 
     if (lockEnabled) {
+      const storedPin = await getAppLockPin();
+      if (!storedPin) {
+        // Fail-safe recovery: disable lock if no PIN exists to avoid hard lockout loops.
+        await setAppLockEnabled(false);
+        setIsLocked(false);
+        setPinError("");
+        return;
+      }
+
       setIsLocked(true);
       setPinError("");
     } else {
@@ -278,19 +283,12 @@ function RootLayoutInner({
   }, [isLocked, allowBiometrics, isUnlockedSuccess]);
 
   useEffect(() => {
-    let initialCheckDone = false;
+    if (user) {
+      checkAndAuthenticate();
+    }
+  }, [user]);
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setAuthLoaded(true);
-      SplashScreen.hideAsync().catch(() => {});
-
-      if (firebaseUser && !initialCheckDone) {
-        initialCheckDone = true;
-        checkAndAuthenticate();
-      }
-    });
-
+  useEffect(() => {
     const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
       if (nextAppState === "inactive" || nextAppState === "background") {
         backgroundTimeRef.current = Date.now();
@@ -309,7 +307,6 @@ function RootLayoutInner({
     });
 
     return () => {
-      unsubscribe();
       subscription.remove();
     };
   }, []);
@@ -422,9 +419,7 @@ function RootLayout() {
     <AppSettingsProvider>
       <RootLayoutInner
         user={user}
-        setUser={setUser}
         authLoaded={authLoaded}
-        setAuthLoaded={setAuthLoaded}
       />
     </AppSettingsProvider>
   );

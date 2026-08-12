@@ -14,13 +14,14 @@ import {
   ActivityIndicator,
   Image,
   findNodeHandle,
+  BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
 import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
 
@@ -64,6 +65,26 @@ export default function TambahScreen() {
   const isEditMode = !!editId;
 
   const { themeColors, t, language } = useAppSettings();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const onBackPress = () => {
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace("/(tabs)/listings");
+        }
+        return true; // handled
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+      return () => {
+        subscription.remove();
+      };
+    }, [router])
+  );
+
   const scrollRef = useRef<ScrollView>(null);
 
   const handleInputFocus = (event: any) => {
@@ -113,6 +134,8 @@ export default function TambahScreen() {
   const [spaName, setSpaName] = useState<string | null>(null);
   const [icOwner, setIcOwner] = useState<string | null>(null);
   const [icOwnerName, setIcOwnerName] = useState<string | null>(null);
+  const [bilUtility, setBilUtility] = useState<string | null>(null);
+  const [bilUtilityName, setBilUtilityName] = useState<string | null>(null);
 
   // Steppers
   const incrementBilikTidur = () => {
@@ -242,6 +265,7 @@ export default function TambahScreen() {
           if (data.geran) setGeran(data.geran);
           if (data.spa) setSpa(data.spa);
           if (data.icOwner) setIcOwner(data.icOwner);
+          if (data.bilUtility) setBilUtility(data.bilUtility);
           if (data.navLink) setNavLink(data.navLink);
         }
       } catch (err) {
@@ -345,7 +369,7 @@ export default function TambahScreen() {
   };
 
   // Pick Document File
-  const handlePickDocument = async (docType: "geran" | "spa" | "icOwner") => {
+  const handlePickDocument = async (docType: "geran" | "spa" | "icOwner" | "bilUtility") => {
     try {
       const res = await DocumentPicker.getDocumentAsync({
         type: ["application/pdf", "image/*"],
@@ -363,6 +387,9 @@ export default function TambahScreen() {
         } else if (docType === "icOwner") {
           setIcOwner(file.uri);
           setIcOwnerName(file.name);
+        } else if (docType === "bilUtility") {
+          setBilUtility(file.uri);
+          setBilUtilityName(file.name);
         }
       }
     } catch (error) {
@@ -392,6 +419,8 @@ export default function TambahScreen() {
     setSpaName(null);
     setIcOwner(null);
     setIcOwnerName(null);
+    setBilUtility(null);
+    setBilUtilityName(null);
     setNavLink("");
   };
 
@@ -431,6 +460,7 @@ export default function TambahScreen() {
         geran,
         spa,
         icOwner,
+        bilUtility,
       };
 
       if (isEditMode && editId) {
@@ -784,6 +814,13 @@ export default function TambahScreen() {
             <MaterialCommunityIcons name="card-account-details-outline" size={22} color={icOwner ? themeColors.maroonPrimary : themeColors.textMuted} />
             <Text style={[styles.docBtnText, { color: themeColors.textPrimary }]} numberOfLines={1}>
               {icOwnerName ? `${t("ownerIcCopyFull")}: ${icOwnerName}` : t("ownerIcCopyFull")}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => handlePickDocument("bilUtility")} style={[styles.docBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
+            <MaterialCommunityIcons name="receipt-text-outline" size={22} color={bilUtility ? themeColors.maroonPrimary : themeColors.textMuted} />
+            <Text style={[styles.docBtnText, { color: themeColors.textPrimary }]} numberOfLines={1}>
+              {bilUtilityName ? `Utility Bill: ${bilUtilityName}` : "Utility Bill (TNB / Water)"}
             </Text>
           </TouchableOpacity>
         </View>

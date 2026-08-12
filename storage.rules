@@ -1,0 +1,17 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    match /listings/{ownerId}/{listingId}/{allPaths=**} {
+      allow read: if isAuthed();
+      allow write: if isAuthed() && request.auth.uid == ownerId;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
