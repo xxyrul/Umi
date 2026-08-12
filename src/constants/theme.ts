@@ -1,127 +1,126 @@
-// Dark Mode Color Palette
-export const COLORS = {
-  // Surface Layers
-  surface: "#0b1326",
-  surfaceDim: "#0b1326",
-  surfaceBright: "#31394d",
-  surfaceContainerLowest: "#060e20",
-  surfaceContainerLow: "#131b2e",
-  surfaceContainer: "#171f33",
-  surfaceContainerHigh: "#222a3d",
-  surfaceContainerHighest: "#2d3449",
-  onSurface: "#dae2fd",
-  onSurfaceVariant: "#c7c4d7",
-  inverseSurface: "#dae2fd",
-  inverseOnSurface: "#283044",
-  outline: "#908fa0",
-  outlineVariant: "#464554",
-  surfaceTint: "#c0c1ff",
+// DRT Master Listing CRM Design System Tokens (Light & Dark Modes)
 
-  // Primary Colors (Indigo)
-  primary: "#c0c1ff",
-  onPrimary: "#1000a9",
-  primaryContainer: "#8083ff",
-  onPrimaryContainer: "#0d0096",
-  inversePrimary: "#494bd6",
-
-  // Secondary Colors (Cool Gray)
-  secondary: "#b9c8de",
-  onSecondary: "#233143",
-  secondaryContainer: "#39485a",
-  onSecondaryContainer: "#a7b6cc",
-
-  // Tertiary Colors (Purple)
-  tertiary: "#d0bcff",
-  onTertiary: "#3c0091",
-  tertiaryContainer: "#a078ff",
-  onTertiaryContainer: "#340080",
-
-  // Semantic Colors
-  error: "#ffb4ab",
-  errorContainer: "#93000a",
-  success: "#10b981",
-  warning: "#f59e0b",
-  info: "#3b82f6",
-
-  // Background
-  background: "#0b1326",
-  onBackground: "#dae2fd",
+export const LIGHT_THEME = {
+  canvasBackground: "#F9F9F9",
+  cardBackground: "#FFFFFF",
+  surfaceContainer: "#EEEEEE",
+  surfaceContainerLow: "#F3F3F3",
+  maroonPrimary: "#7A1128",
+  maroonDark: "#570016",
+  maroonLight: "#FDF2F4",
+  maroonBorder: "#F4D2D8",
+  textPrimary: "#1A1C1C",
+  textSecondary: "#574143",
+  textMuted: "#6B5556",
+  borderColor: "#E2E2E2",
+  outlineVariant: "#DDBFC0",
+  chipActiveBg: "#D5E0F8",
+  chipActiveText: "#111C2D",
 
   // Status Colors
-  statusViewing: "#8a9ba8",
-  statusBookingPaid: "#f59e0b",
-  statusSPASigned: "#3b82f6",
-  statusLoanApproved: "#a78bfa",
-  statusCompleted: "#10b981",
-  statusCancelled: "#ffb4ab",
-  statusPending: "#f59e0b",
-  statusReview: "#8a9ba8",
+  statusAktifBg: "#004640",
+  statusAktifText: "#49BAAD",
+  statusBookingBg: "#D5E0F8",
+  statusBookingText: "#111C2D",
+  statusSoldBg: "#EEEEEE",
+  statusSoldText: "#574143",
+  statusDraftBg: "#FEF3C7",
+  statusDraftText: "#92400E",
+  accentSuccess: "#10B981",
+  accentSuccessLight: "#D1FAE5",
+  accentWhatsApp: "#25D366",
+  disabledBg: "#F3F4F6",
+  disabledText: "#7A8290",
 };
 
-// Typography
-export const TYPOGRAPHY = {
-  headlineXl: {
-    fontSize: 48,
-    fontWeight: "700" as const,
-    lineHeight: 56,
-    letterSpacing: -0.02,
-    fontFamily: "Hanken Grotesk",
-  },
-  headlineXlMobile: {
-    fontSize: 32,
-    fontWeight: "700" as const,
-    lineHeight: 40,
-    letterSpacing: -0.02,
-    fontFamily: "Hanken Grotesk",
-  },
-  headlineLg: {
-    fontSize: 32,
-    fontWeight: "600" as const,
-    lineHeight: 40,
-    letterSpacing: -0.01,
-    fontFamily: "Hanken Grotesk",
-  },
-  headlineMd: {
-    fontSize: 24,
-    fontWeight: "600" as const,
-    lineHeight: 32,
-    fontFamily: "Hanken Grotesk",
-  },
-  bodyLg: {
-    fontSize: 18,
-    fontWeight: "400" as const,
-    lineHeight: 28,
-    fontFamily: "Inter",
-  },
-  bodyMd: {
-    fontSize: 16,
-    fontWeight: "400" as const,
-    lineHeight: 24,
-    fontFamily: "Inter",
-  },
-  bodySm: {
-    fontSize: 14,
-    fontWeight: "400" as const,
-    lineHeight: 20,
-    fontFamily: "Inter",
-  },
-  labelMd: {
-    fontSize: 14,
-    fontWeight: "500" as const,
-    lineHeight: 16,
-    letterSpacing: 0.02,
-    fontFamily: "Geist",
-  },
-  labelSm: {
-    fontSize: 12,
-    fontWeight: "500" as const,
-    lineHeight: 14,
-    letterSpacing: 0.04,
-    fontFamily: "Geist",
-  },
+export const THEME = LIGHT_THEME;
+
+export const DARK_THEME = {
+  canvasBackground: "#121212",
+  cardBackground: "#1A1C1E",
+  surfaceContainer: "#222427",
+  surfaceContainerLow: "#181A1C",
+  maroonPrimary: "#FFB2B8",
+  maroonDark: "#7A1128",
+  maroonLight: "#2E1218",
+  maroonBorder: "#4A1E25",
+  textPrimary: "#FFFFFF",
+  textSecondary: "#DEDEDE",
+  textMuted: "#B0B8C4",
+  borderColor: "#505558",
+  outlineVariant: "#606468",
+  chipActiveBg: "#3D4F66",
+  chipActiveText: "#FFFFFF",
+
+  // Status Colors
+  statusAktifBg: "#064E3B",
+  statusAktifText: "#A7F3D0",
+  statusBookingBg: "#1E3A8A",
+  statusBookingText: "#BFDBFE",
+  statusSoldBg: "#374151",
+  statusSoldText: "#E8EAED",
+  statusDraftBg: "#78350F",
+  statusDraftText: "#FDE68A",
+  accentSuccess: "#10B981",
+  accentSuccessLight: "#064E3B",
+  accentWhatsApp: "#25D366",
+  disabledBg: "#25282B",
+  disabledText: "#8A909A",
 };
 
-// Spacing Scale (4px base unit)
+// Legacy Exports for Backward Compatibility
+export const COLORS = {
+  surface: "#1A1C1E",
+  surfaceDim: "#111315",
+  surfaceBright: "#31394d",
+  surfaceContainerLowest: "#1A1C1E",
+  surfaceContainerLow: "#181A1C",
+  surfaceContainer: "#222427",
+  surfaceContainerHigh: "#2d3449",
+  surfaceContainerHighest: "#3F4346",
+  onSurface: "#F1F1F1",
+  onSurfaceVariant: "#DEDEDE",
+  inverseSurface: "#F1F1F1",
+  inverseOnSurface: "#1A1C1E",
+  outline: "#B0B8C4",
+  outlineVariant: "#3F4346",
+  surfaceTint: "#FFB2B8",
+
+  primary: "#7A1128",
+  onPrimary: "#FFFFFF",
+  primaryContainer: "#7A1128",
+  onPrimaryContainer: "#FFFFFF",
+  inversePrimary: "#FFB2B8",
+
+  secondary: "#545F73",
+  onSecondary: "#FFFFFF",
+  secondaryContainer: "#D5E0F8",
+  onSecondaryContainer: "#111C2D",
+
+  tertiary: "#004640",
+  onTertiary: "#FFFFFF",
+  tertiaryContainer: "#004640",
+  onTertiaryContainer: "#49BAAD",
+
+  error: "#BA1A1A",
+  errorContainer: "#FFDAD6",
+  success: "#10B981",
+  warning: "#F59E0B",
+  info: "#3B82F6",
+
+  background: "#F9F9F9",
+  onBackground: "#1A1C1C",
+
+  statusViewing: "#8A9BA8",
+  statusBookingPaid: "#F59E0B",
+  statusSPASigned: "#3B82F6",
+  statusLoanApproved: "#A78BFA",
+  statusCompleted: "#10B981",
+  statusCancelled: "#FFB4AB",
+  statusPending: "#F59E0B",
+  statusReview: "#8A9BA8",
+};
+
 export const SPACING = {
   base: 4,
   xs: 4,
@@ -135,7 +134,6 @@ export const SPACING = {
   marginDesktop: 48,
 };
 
-// Border Radius
 export const BORDER_RADIUS = {
   sm: 4,
   default: 8,
@@ -145,7 +143,49 @@ export const BORDER_RADIUS = {
   full: 9999,
 };
 
-// Shadow Configuration
+export const STATUS_CONFIG = {
+  Viewing: {
+    backgroundColor: "rgba(138, 155, 168, 0.1)",
+    textColor: COLORS.statusViewing,
+    icon: "eye",
+  },
+  "Booking Paid": {
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    textColor: COLORS.statusBookingPaid,
+    icon: "wallet-outline",
+  },
+  "SPA Signed": {
+    backgroundColor: "rgba(59, 130, 246, 0.1)",
+    textColor: COLORS.statusSPASigned,
+    icon: "file-sign",
+  },
+  "Loan Approved": {
+    backgroundColor: "rgba(167, 139, 250, 0.1)",
+    textColor: COLORS.statusLoanApproved,
+    icon: "check-circle-outline",
+  },
+  Completed: {
+    backgroundColor: "rgba(16, 185, 129, 0.1)",
+    textColor: COLORS.statusCompleted,
+    icon: "checkbox-marked-circle",
+  },
+  Cancelled: {
+    backgroundColor: "rgba(255, 180, 171, 0.1)",
+    textColor: COLORS.statusCancelled,
+    icon: "close-circle-outline",
+  },
+  Pending: {
+    backgroundColor: "rgba(245, 158, 11, 0.1)",
+    textColor: COLORS.statusPending,
+    icon: "clock-outline",
+  },
+  Review: {
+    backgroundColor: "rgba(138, 155, 168, 0.1)",
+    textColor: COLORS.statusReview,
+    icon: "eye",
+  },
+};
+
 export const SHADOWS = {
   small: {
     shadowColor: "#000000",
@@ -167,49 +207,5 @@ export const SHADOWS = {
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 8,
-  },
-};
-
-// Status Badge Configuration
-export const STATUS_CONFIG = {
-  Viewing: {
-    backgroundColor: "rgba(138, 155, 168, 0.1)",
-    textColor: COLORS.statusViewing,
-    icon: "eye",
-  },
-  "Booking Paid": {
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    textColor: COLORS.statusBookingPaid,
-    icon: "wallet-2",
-  },
-  "SPA Signed": {
-    backgroundColor: "rgba(59, 130, 246, 0.1)",
-    textColor: COLORS.statusSPASigned,
-    icon: "file-text",
-  },
-  "Loan Approved": {
-    backgroundColor: "rgba(167, 139, 250, 0.1)",
-    textColor: COLORS.statusLoanApproved,
-    icon: "check-circle",
-  },
-  Completed: {
-    backgroundColor: "rgba(16, 185, 129, 0.1)",
-    textColor: COLORS.statusCompleted,
-    icon: "check-circle-2",
-  },
-  Cancelled: {
-    backgroundColor: "rgba(255, 180, 171, 0.1)",
-    textColor: COLORS.statusCancelled,
-    icon: "x-circle",
-  },
-  Pending: {
-    backgroundColor: "rgba(245, 158, 11, 0.1)",
-    textColor: COLORS.statusPending,
-    icon: "clock",
-  },
-  Review: {
-    backgroundColor: "rgba(138, 155, 168, 0.1)",
-    textColor: COLORS.statusReview,
-    icon: "eye",
   },
 };

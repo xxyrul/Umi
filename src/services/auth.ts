@@ -1,11 +1,6 @@
-import {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  sendPasswordResetEmail,
-} from "@react-native-firebase/auth";
+import auth from "@react-native-firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { firebaseAuth, firebaseApp } from "./firebase";
+import { firebaseAuth } from "./firebase";
 import type { UserProfile } from "@/types/case";
 
 // Extract web client ID from google-services.json
@@ -40,17 +35,14 @@ export async function initializeGoogleSignIn(): Promise<void> {
  */
 export async function signInWithGoogle(): Promise<UserProfile> {
   try {
-    await GoogleSignin.signOut(); // Clear any previous sign-in state
+    await GoogleSignin.signOut().catch(() => {}); // Clear any previous sign-in state
     const userInfo = await GoogleSignin.signIn();
     
-    if (!userInfo.data?.idToken) {
+    if (!userInfo.idToken) {
       throw new Error("No ID token received from Google Sign-In");
     }
 
-    const credential = firebaseAuth.GoogleAuthProvider.credential(
-      userInfo.data.idToken
-    );
-
+    const credential = auth.GoogleAuthProvider.credential(userInfo.idToken);
     const userCredential = await firebaseAuth.signInWithCredential(credential);
 
     return {
@@ -73,8 +65,7 @@ export async function signInWithEmail(
   password: string
 ): Promise<UserProfile> {
   try {
-    const userCredential = await signInWithEmailAndPassword(
-      firebaseAuth,
+    const userCredential = await firebaseAuth.signInWithEmailAndPassword(
       email,
       password
     );
@@ -100,8 +91,7 @@ export async function signUpWithEmail(
   displayName: string
 ): Promise<UserProfile> {
   try {
-    const userCredential = await createUserWithEmailAndPassword(
-      firebaseAuth,
+    const userCredential = await firebaseAuth.createUserWithEmailAndPassword(
       email,
       password
     );
@@ -136,7 +126,7 @@ export async function signOut(): Promise<void> {
     }
 
     // Sign out from Firebase
-    await firebaseSignOut(firebaseAuth);
+    await firebaseAuth.signOut();
   } catch (error) {
     console.error("Error signing out:", error);
     throw error;
@@ -148,7 +138,7 @@ export async function signOut(): Promise<void> {
  */
 export async function sendPasswordReset(email: string): Promise<void> {
   try {
-    await sendPasswordResetEmail(firebaseAuth, email);
+    await firebaseAuth.sendPasswordResetEmail(email);
   } catch (error) {
     console.error("Error sending password reset email:", error);
     throw error;

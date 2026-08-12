@@ -1,43 +1,60 @@
 {
   "expo": {
     "name": "Umi",
-    "slug": "umi-caseflow",
-    "version": "1.0.0",
+    "slug": "arul",
+    "version": "1.1.2",
+    "runtimeVersion": "1.0.0",
     "scheme": "umi",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0b1326"
-    },
+    "owner": "xvyruls-team",
     "assetBundlePatterns": [
       "**/*"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/466269ce-d5eb-4ebb-9b01-5fa3b37089d3",
+      "channel": "production",
+      "checkAutomatically": "NEVER"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "466269ce-d5eb-4ebb-9b01-5fa3b37089d3"
+      }
+    },
     "ios": {
-      "supportsTabletMode": true,
       "buildNumber": "1",
       "infoPlist": {
-        "NSCameraUsageDescription": "This app uses the camera to capture property images"
+        "NSCameraUsageDescription": "This app uses the camera to capture property images",
+        "NSCalendarsUsageDescription": "This app uses the calendar to schedule property appointments and cases."
       }
     },
     "android": {
       "package": "com.umi.caseflow",
-      "versionCode": 1,
+      "versionCode": 8,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_CALENDAR",
+        "android.permission.WRITE_CALENDAR"
       ]
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0b1326"
+        }
+      ],
       [
         "@react-native-firebase/app",
         {
@@ -47,10 +64,19 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "supportsGooglePlay": true
+          "supportsGooglePlay": true,
+          "iosUrlScheme": "com.googleusercontent.apps.dummy"
         }
       ],
-      "nativewind"
+      "expo-splash-screen",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Allow Umi to access your calendar to schedule property appointments."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

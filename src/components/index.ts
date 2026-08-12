@@ -5,3 +5,5 @@ export { CaseCard } from "./CaseCard";
 export { SegmentedControl } from "./SegmentedControl";
 export { FormInput } from "./FormInput";
 export { Button } from "./Button";
+export { PermissionExplanationModal } from "./PermissionExplanationModal";
+export { FeedbackForm } from "./FeedbackForm";

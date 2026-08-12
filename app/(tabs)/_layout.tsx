@@ -1,27 +1,35 @@
 import React from "react";
-import { View, Text } from "react-native";
+import { View, Text, Platform } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { COLORS, SPACING } from "@/constants/theme";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppSettings } from "@/context/AppSettingsContext";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { themeColors, t } = useAppSettings();
+
+  const TAB_BAR_HEIGHT = 62 + Math.max(insets.bottom, 4);
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.onSurfaceVariant,
+        tabBarActiveTintColor: themeColors.maroonPrimary,
+        tabBarInactiveTintColor: themeColors.textMuted,
         tabBarStyle: {
-          backgroundColor: COLORS.surface,
+          backgroundColor: themeColors.cardBackground,
           borderTopWidth: 1,
-          borderTopColor: COLORS.outlineVariant,
-          height: 80 + insets.bottom,
-          paddingBottom: insets.bottom,
-          paddingTop: SPACING.sm,
+          borderTopColor: themeColors.borderColor,
+          height: TAB_BAR_HEIGHT,
+          paddingBottom: Math.max(insets.bottom, 4),
+          paddingTop: 6,
+          elevation: 12,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
         },
       }}
     >
@@ -29,37 +37,26 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: t("dashboard"),
           tabBarIcon: ({ color, focused }) => (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.sm,
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.sm,
-                backgroundColor: focused ? COLORS.primary : "transparent",
-                borderRadius: 20,
-                minWidth: focused ? 100 : 56,
-              }}
-            >
+            <View style={{ alignItems: "center", justifyContent: "center", width: 68, gap: 2 }}>
               <MaterialCommunityIcons
                 name={focused ? "home" : "home-outline"}
                 size={24}
-                color={focused ? COLORS.onPrimary : color}
+                color={focused ? themeColors.maroonPrimary : color}
               />
-              {focused && (
-                <Text
-                  style={{
-                    color: COLORS.onPrimary,
-                    fontWeight: "600",
-                    fontSize: 12,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Home
-                </Text>
-              )}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={{
+                  color: focused ? themeColors.maroonPrimary : color,
+                  fontSize: 10,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {t("dashboard")}
+              </Text>
             </View>
           ),
         }}
@@ -69,79 +66,73 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="cases"
         options={{
-          title: "Cases",
+          title: t("casesTab"),
           tabBarIcon: ({ color, focused }) => (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.sm,
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.sm,
-                backgroundColor: focused ? COLORS.primary : "transparent",
-                borderRadius: 20,
-                minWidth: focused ? 110 : 56,
-              }}
-            >
+            <View style={{ alignItems: "center", justifyContent: "center", width: 60, gap: 2 }}>
               <MaterialCommunityIcons
-                name={focused ? "folder-multiple" : "folder-multiple-outline"}
+                name={focused ? "briefcase" : "briefcase-outline"}
                 size={24}
-                color={focused ? COLORS.onPrimary : color}
+                color={focused ? themeColors.maroonPrimary : color}
               />
-              {focused && (
-                <Text
-                  style={{
-                    color: COLORS.onPrimary,
-                    fontWeight: "600",
-                    fontSize: 12,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Cases
-                </Text>
-              )}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={{
+                  color: focused ? themeColors.maroonPrimary : color,
+                  fontSize: 10,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {t("casesTab")}
+              </Text>
             </View>
           ),
         }}
       />
 
-      {/* Tasks Tab (placeholder) */}
+      {/* Master Listing Tab */}
       <Tabs.Screen
-        name="tasks"
+        name="listings"
         options={{
-          title: "Tasks",
+          title: t("listingsTab"),
           tabBarIcon: ({ color, focused }) => (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.sm,
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.sm,
-                backgroundColor: focused ? COLORS.primary : "transparent",
-                borderRadius: 20,
-                minWidth: focused ? 100 : 56,
-              }}
-            >
+            <View style={{ alignItems: "center", justifyContent: "center", width: 60, gap: 2 }}>
               <MaterialCommunityIcons
-                name={focused ? "checkbox-marked-outline" : "checkbox-blank-outline"}
+                name={focused ? "home-city" : "home-city-outline"}
                 size={24}
-                color={focused ? COLORS.onPrimary : color}
+                color={focused ? themeColors.maroonPrimary : color}
               />
-              {focused && (
-                <Text
-                  style={{
-                    color: COLORS.onPrimary,
-                    fontWeight: "600",
-                    fontSize: 12,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Tasks
-                </Text>
-              )}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={{
+                  color: focused ? themeColors.maroonPrimary : color,
+                  fontSize: 10,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {t("listingsTab")}
+              </Text>
             </View>
           ),
+        }}
+      />
+
+      {/* Hidden route: add-listing form used by floating action button */}
+      <Tabs.Screen
+        name="tambah"
+        options={{
+          href: null,
+        }}
+      />
+
+      {/* Calculator Screen — Hidden from bottom tab bar, accessed via Dashboard header */}
+      <Tabs.Screen
+        name="calculator"
+        options={{
+          href: null,
         }}
       />
 
@@ -149,39 +140,36 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: t("profile"),
           tabBarIcon: ({ color, focused }) => (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: SPACING.sm,
-                paddingHorizontal: SPACING.md,
-                paddingVertical: SPACING.sm,
-                backgroundColor: focused ? COLORS.primary : "transparent",
-                borderRadius: 20,
-                minWidth: focused ? 110 : 56,
-              }}
-            >
+            <View style={{ alignItems: "center", justifyContent: "center", width: 60, gap: 2 }}>
               <MaterialCommunityIcons
                 name={focused ? "account" : "account-outline"}
                 size={24}
-                color={focused ? COLORS.onPrimary : color}
+                color={focused ? themeColors.maroonPrimary : color}
               />
-              {focused && (
-                <Text
-                  style={{
-                    color: COLORS.onPrimary,
-                    fontWeight: "600",
-                    fontSize: 12,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Profile
-                </Text>
-              )}
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                style={{
+                  color: focused ? themeColors.maroonPrimary : color,
+                  fontSize: 10,
+                  fontWeight: "600",
+                  textAlign: "center",
+                }}
+              >
+                {t("profile")}
+              </Text>
             </View>
           ),
+        }}
+      />
+
+      {/* Tasks Tab — Hidden (still accessible via navigation) */}
+      <Tabs.Screen
+        name="tasks"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

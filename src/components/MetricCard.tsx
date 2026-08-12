@@ -25,51 +25,51 @@ export function MetricCard({
         borderRadius: 16,
         borderWidth: 1,
         borderColor: COLORS.outlineVariant,
-        padding: SPACING.lg,
+        padding: SPACING.md,
         flex: 1,
+        minHeight: 110,
+        justifyContent: "space-between",
       }}
     >
-      {/* Icon container - top right */}
+      {/* Top Row: Icon */}
       <View
         style={{
-          position: "absolute",
-          top: SPACING.lg,
-          right: SPACING.lg,
-          width: 48,
-          height: 48,
+          width: 36,
+          height: 36,
           backgroundColor: iconBackgroundColor,
-          borderRadius: 12,
+          borderRadius: 8,
           justifyContent: "center",
           alignItems: "center",
         }}
       >
-        <MaterialCommunityIcons name={icon as any} size={24} color={iconColor} />
+        <MaterialCommunityIcons name={icon as any} size={20} color={iconColor} />
       </View>
 
-      {/* Content - left aligned */}
-      <View style={{ paddingRight: 60 }}>
+      {/* Bottom Area: Value and Label */}
+      <View style={{ marginTop: SPACING.sm }}>
         <Text
           style={{
-            fontSize: 12,
-            fontWeight: "500",
-            color: COLORS.onSurfaceVariant,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-            marginBottom: SPACING.md,
-          }}
-        >
-          {label}
-        </Text>
-
-        <Text
-          style={{
-            fontSize: 32,
+            fontSize: 28,
             fontWeight: "700",
             color: COLORS.onSurface,
-            marginTop: SPACING.lg,
+            lineHeight: 34,
           }}
         >
           {value}
+        </Text>
+        <Text
+          style={{
+            fontSize: 11,
+            fontWeight: "600",
+            color: COLORS.onSurfaceVariant,
+            letterSpacing: 0.5,
+            textTransform: "uppercase",
+            marginTop: SPACING.xs,
+          }}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
+          {label}
         </Text>
       </View>
     </View>

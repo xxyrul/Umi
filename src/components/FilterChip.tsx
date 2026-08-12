@@ -1,6 +1,7 @@
 import React from "react";
 import { TouchableOpacity, Text } from "react-native";
-import { COLORS, SPACING } from "@/constants/theme";
+import { SPACING } from "@/constants/theme";
+import { useAppSettings } from "@/context/AppSettingsContext";
 
 interface FilterChipProps {
   label: string;
@@ -9,24 +10,26 @@ interface FilterChipProps {
 }
 
 export function FilterChip({ label, isActive, onPress }: FilterChipProps) {
+  const { themeColors } = useAppSettings();
+
   return (
     <TouchableOpacity
       onPress={onPress}
       style={{
-        paddingHorizontal: SPACING.md,
-        paddingVertical: SPACING.sm,
+        paddingHorizontal: 14,
+        paddingVertical: 8,
         borderRadius: 20,
-        marginRight: SPACING.sm,
-        backgroundColor: isActive ? COLORS.primary : "transparent",
+        marginRight: SPACING.xs,
+        backgroundColor: isActive ? themeColors.maroonPrimary : themeColors.surfaceContainer,
         borderWidth: 1,
-        borderColor: isActive ? COLORS.primary : COLORS.outlineVariant,
+        borderColor: isActive ? themeColors.maroonPrimary : themeColors.borderColor,
       }}
     >
       <Text
         style={{
-          color: isActive ? COLORS.onPrimary : COLORS.onSurfaceVariant,
-          fontSize: 14,
-          fontWeight: "500",
+          color: isActive ? "#FFFFFF" : themeColors.textSecondary,
+          fontSize: 12,
+          fontWeight: "600",
           textTransform: "uppercase",
           letterSpacing: 0.5,
         }}
