@@ -60,8 +60,9 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
   const saveOnboardingCompleted = async (agentName: string) => {
     try {
-      if (agentName.trim()) {
-        await AsyncStorage.setItem("agentDisplayName", agentName.trim());
+      const safeName = agentName.trim();
+      if (safeName) {
+        await AsyncStorage.setItem("agentDisplayName", safeName);
       }
       await AsyncStorage.setItem("hasCompletedOnboarding", "true");
       setHasCompletedOnboarding(true);

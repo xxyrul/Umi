@@ -474,7 +474,7 @@ export default function ProfileScreen() {
           {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
           {renderOptionRow("shield-lock-outline", t("securityPin"), t("securitySubtitle"), () => setActiveSection("Security"))}
           {renderOptionRow("information-outline", t("appVersion"), "v1.1.1 (Native Release)", () => {
-            checkForAppUpdates(false);
+            checkForAppUpdates({ silent: false, autoApply: false });
           })}
           {renderOptionRow("help-circle-outline", t("helpFeedback"), t("helpSubtitle"), () => setActiveSection("Help"))}
         </View>

@@ -111,6 +111,10 @@ export default function PropertyDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageLoading, setImageLoading] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [contactProfile, setContactProfile] = useState<{ name: string; phone: string }>({
+    name: "",
+    phone: "",
+  });
 
   const heroGalleryRef = useRef<ScrollView>(null);
   const fullScreenGalleryRef = useRef<ScrollView>(null);
@@ -152,32 +156,109 @@ export default function PropertyDetailScreen() {
     return () => unsubscribe();
   }, [id]);
 
-  // Phone Call Handler
-  const handleCallOwner = () => {
-    if (!listing?.telOwner) {
+  useEffect(() => {
+    if (!listing) {
+      setContactProfile({ name: "", phone: "" });
+      return;
+    }
+
+    const fallbackName = listing.namaOwner || listing.authorName || "Owner";
+    const fallbackPhone = listing.telOwner || "";
+
+    const loadContactProfile = async () => {
+      try {
+        if (!listing.userId) {
+          setContactProfile({ name: fallbackName, phone: fallbackPhone });
+          return;
+        }
+
+        const userDoc = await firestore().collection("users").doc(listing.userId).get();
+        const userData = userDoc.exists ? (userDoc.data() as Record<string, any> | undefined) : undefined;
+
+        const nextName =
+          userData?.displayName ||
+          userData?.fullName ||
+          userData?.name ||
+          userData?.agentName ||
+          fallbackName;
+
+        const nextPhone =
+          userData?.phoneNumber ||
+          userData?.phone ||
+          userData?.mobile ||
+          userData?.agentPhone ||
+          fallbackPhone;
+
+        setContactProfile({
+          name: nextName || fallbackName,
+          phone: nextPhone || fallbackPhone,
+        });
+      } catch (error) {
+        console.warn("Failed to fetch listing contact profile:", error);
+        setContactProfile({ name: fallbackName, phone: fallbackPhone });
+      }
+    };
+
+    loadContactProfile();
+  }, [listing?.userId, listing?.namaOwner, listing?.authorName, listing?.telOwner]);
+
+  const normalizePhoneForWhatsApp = (rawPhone?: string) => {
+    if (!rawPhone) return "";
+    let phone = rawPhone.replace(/[^0-9]/g, "");
+    if (!phone) return "";
+    if (phone.startsWith("0")) {
+      phone = "60" + phone.slice(1);
+    }
+    return phone;
+  };
+
+  const currentUser = auth().currentUser;
+  const isOwner = Boolean(currentUser && listing?.userId && listing.userId === currentUser.uid);
+  const isCreator = Boolean(
+    currentUser &&
+      (
+        (listing?.userId && listing.userId === currentUser.uid) ||
+        (listing?.agentId && listing.agentId === currentUser.uid)
+      )
+  );
+  const contactLabel = isOwner ? t("ownerDetails") : "Listing Agent / REN Information";
+  const contactName = isOwner ? listing?.namaOwner || t("ownerNoName") : contactProfile.name || listing?.authorName || listing?.namaOwner || "Listing Agent";
+  const contactPhone = isOwner ? listing?.telOwner || t("ownerNoPhone") : contactProfile.phone || listing?.telOwner || "No phone available";
+  const callLabel = isOwner ? t("callOwner") : "Call Agent";
+  const whatsappLabel = isOwner ? t("whatsappOwner") : "WhatsApp Agent";
+
+  const handleCallContact = () => {
+    const phone = (isOwner ? listing?.telOwner : contactProfile.phone || listing?.telOwner) || "";
+    if (!phone) {
       Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
       return;
     }
-    const cleanPhone = listing.telOwner.replace(/[^0-9+]/g, "");
+
+    const cleanPhone = phone.replace(/[^0-9+]/g, "");
     Linking.openURL(`tel:${cleanPhone}`).catch(() => {
       Alert.alert(t("errorTitle"), t("callFailed"));
     });
   };
 
   // WhatsApp Handler
-  const handleWhatsAppOwner = () => {
-    if (!listing?.telOwner) {
+  const handleWhatsAppContact = () => {
+    const phone = (isOwner ? listing?.telOwner : contactProfile.phone || listing?.telOwner) || "";
+    if (!phone) {
       Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
       return;
     }
-    let phone = listing.telOwner.replace(/[^0-9]/g, "");
-    if (phone.startsWith("0")) {
-      phone = "60" + phone.slice(1);
+
+    const waPhone = normalizePhoneForWhatsApp(phone);
+    if (!waPhone) {
+      Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
+      return;
     }
+
+    const WhatsAppContactName = isOwner ? listing?.namaOwner || "Owner" : contactProfile.name || listing?.authorName || "Listing Agent";
     const message = encodeURIComponent(
-      `Salam / Hai ${listing.namaOwner || "Owner"}, saya berkenaan listing hartanah: "${listing.tajuk}".`
+      `Salam / Hai ${WhatsAppContactName}, saya berkenaan listing hartanah: "${listing?.tajuk || "property"}".`
     );
-    const url = `https://wa.me/${phone}?text=${message}`;
+    const url = `https://wa.me/${waPhone}?text=${message}`;
     Linking.openURL(url).catch(() => {
       Alert.alert(t("waError"), t("waFailed"));
     });
@@ -361,15 +442,6 @@ export default function PropertyDetailScreen() {
   const hasImages = allImages.length > 0;
   const formattedPrice =
     typeof listing.harga === "number" ? listing.harga.toLocaleString() : listing.harga;
-
-  const currentUser = auth().currentUser;
-  const isCreator = Boolean(
-    currentUser &&
-      (
-        (listing.userId && listing.userId === currentUser.uid) ||
-        (listing.agentId && listing.agentId === currentUser.uid)
-      )
-  );
 
   return (
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
@@ -580,95 +652,91 @@ export default function PropertyDetailScreen() {
             </View>
           </View>
 
-          {/* LOCATION & NAVIGATION CARD */}
-          <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
-            <View style={styles.vaultTitleRow}>
-              <MaterialCommunityIcons name="navigation-variant-outline" size={22} color={themeColors.maroonPrimary} />
-              <Text style={[styles.cardSectionTitle, { color: themeColors.maroonPrimary, marginBottom: 0 }]}>
-                {t("navigationTitle")}
+          {isOwner && (
+            <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
+              <View style={styles.vaultTitleRow}>
+                <MaterialCommunityIcons name="navigation-variant-outline" size={22} color={themeColors.maroonPrimary} />
+                <Text style={[styles.cardSectionTitle, { color: themeColors.maroonPrimary, marginBottom: 0 }]}>
+                  {t("navigationTitle")}
+                </Text>
+              </View>
+
+              <Text style={{ fontSize: 15, color: themeColors.textSecondary, marginTop: 6, marginBottom: 12 }}>
+                {listing.location
+                  ? `GPS: ${listing.location.latitude.toFixed(5)}, ${listing.location.longitude.toFixed(5)}`
+                  : listing.alamat || t("navigationSub")}
               </Text>
+
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handleOpenWaze}
+                  style={{
+                    flex: 1,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: "#33CCFF",
+                    borderRadius: 10,
+                    height: 52,
+                  }}
+                >
+                  <MaterialCommunityIcons name="waze" size={22} color="#FFFFFF" />
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>Waze</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handleOpenGoogleMaps}
+                  style={{
+                    flex: 1,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                    backgroundColor: "#EA4335",
+                    borderRadius: 10,
+                    height: 52,
+                  }}
+                >
+                  <MaterialCommunityIcons name="google-maps" size={22} color="#FFFFFF" />
+                  <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>Google Maps</Text>
+                </TouchableOpacity>
+              </View>
             </View>
+          )}
 
-            <Text style={{ fontSize: 15, color: themeColors.textSecondary, marginTop: 6, marginBottom: 12 }}>
-              {listing.location
-                ? `GPS: ${listing.location.latitude.toFixed(5)}, ${listing.location.longitude.toFixed(5)}`
-                : listing.alamat || t("navigationSub")}
-            </Text>
-
-            <View style={{ flexDirection: "row", gap: 10 }}>
-              {/* Waze Button */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleOpenWaze}
-                style={{
-                  flex: 1,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  backgroundColor: "#33CCFF",
-                  borderRadius: 10,
-                  height: 52,
-                }}
-              >
-                <MaterialCommunityIcons name="waze" size={22} color="#FFFFFF" />
-                <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>Waze</Text>
-              </TouchableOpacity>
-
-              {/* Google Maps Button */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={handleOpenGoogleMaps}
-                style={{
-                  flex: 1,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 8,
-                  backgroundColor: "#EA4335",
-                  borderRadius: 10,
-                  height: 52,
-                }}
-              >
-                <MaterialCommunityIcons name="google-maps" size={22} color="#FFFFFF" />
-                <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>Google Maps</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* OWNER DETAILS CARD */}
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
-            <Text style={[styles.cardSectionTitle, { color: themeColors.maroonPrimary }]}>{t("ownerDetails")}</Text>
+            <Text style={[styles.cardSectionTitle, { color: themeColors.maroonPrimary }]}>{contactLabel}</Text>
 
             <View style={styles.ownerInfoRow}>
               <View style={[styles.ownerAvatar, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
                 <MaterialCommunityIcons name="account" size={26} color={themeColors.maroonPrimary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.ownerName, { color: themeColors.textPrimary, fontSize: 16 }]}>{listing.namaOwner || t("ownerNoName")}</Text>
-                <Text style={[styles.ownerPhone, { color: themeColors.textSecondary, fontSize: 15 }]}>{listing.telOwner || t("ownerNoPhone")}</Text>
+                <Text style={[styles.ownerName, { color: themeColors.textPrimary, fontSize: 16 }]}>{contactName}</Text>
+                <Text style={[styles.ownerPhone, { color: themeColors.textSecondary, fontSize: 15 }]}>{contactPhone}</Text>
               </View>
             </View>
 
             <View style={styles.contactActionRow}>
-              {/* Phone Call */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={handleCallOwner}
+                onPress={handleCallContact}
                 style={[styles.callButton, { backgroundColor: themeColors.maroonPrimary, height: 52, justifyContent: "center", alignItems: "center" }]}
               >
                 <MaterialCommunityIcons name="phone" size={20} color={themeColors.canvasBackground} />
-                <Text style={[styles.callButtonText, { color: themeColors.canvasBackground, fontSize: 16 }]}>{t("callOwner")}</Text>
+                <Text style={[styles.callButtonText, { color: themeColors.canvasBackground, fontSize: 16 }]}>{callLabel}</Text>
               </TouchableOpacity>
 
-              {/* WhatsApp */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={handleWhatsAppOwner}
+                onPress={handleWhatsAppContact}
                 style={[styles.whatsappButton, { height: 52, justifyContent: "center", alignItems: "center" }]}
               >
                 <MaterialCommunityIcons name="whatsapp" size={20} color="#FFF" />
-                <Text style={[styles.whatsappButtonText, { color: "#FFF", fontSize: 16 }]}>{t("whatsappOwner")}</Text>
+                <Text style={[styles.whatsappButtonText, { color: "#FFF", fontSize: 16 }]}>{whatsappLabel}</Text>
               </TouchableOpacity>
             </View>
 

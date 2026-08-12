@@ -5,12 +5,14 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Slot, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import firestore from "@react-native-firebase/firestore";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { onAuthStateChanged, firebaseAuth, User } from "@/services/firebase";
 import { getAppLockEnabled, getBiometricsEnabled, verifyAppLockPin, authenticateBiometric } from "@/services/security";
 import { PinKeypad } from "@/components/PinKeypad";
 import { AppSettingsProvider, useAppSettings } from "@/context/AppSettingsContext";
 import { COLORS } from "@/constants/theme";
+import { checkForAppUpdates, checkForManualAppUpdate } from "@/services/updater";
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -40,16 +42,35 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
   useEffect(() => {
     const checkOnboarding = async () => {
       try {
-        const val = await AsyncStorage.getItem("hasCompletedOnboarding");
+        let val = await AsyncStorage.getItem("hasCompletedOnboarding");
+
+        if (user && val !== "true") {
+          try {
+            const snap = await firestore().collection("users").doc(user.uid).get();
+            const firestoreFlag = Boolean(snap.data()?.onboardingCompleted);
+            if (firestoreFlag) {
+              await AsyncStorage.setItem("hasCompletedOnboarding", "true");
+              val = "true";
+            }
+          } catch (error: any) {
+            const msg = String(error?.code || error?.message || "");
+            if (!msg.includes("permission-denied") && !msg.includes("PERMISSION_DENIED")) {
+              throw error;
+            }
+            console.warn("Firestore onboarding lookup denied; using local state only.", error);
+          }
+        }
+
         setHasCompletedOnboarding(val === "true");
       } catch (e) {
-        console.error(e);
+        console.error("Error reading onboarding state:", e);
       } finally {
         setIsOnboardingChecked(true);
       }
     };
+
     checkOnboarding();
-  }, [segments]);
+  }, [authLoaded, user]);
 
   useEffect(() => {
     if (!authLoaded || !isOnboardingChecked) return;
@@ -62,16 +83,26 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
     const inProtectedRoute = inTabs || inCaseRoute || inListingRoute;
     const inLogin = rootSegment === "login";
 
-    if (!hasCompletedOnboarding) {
-      if (!inOnboarding) {
+    if (user) {
+      if (hasCompletedOnboarding) {
+        if (inOnboarding || inLogin) {
+          router.replace("/(tabs)" as any);
+        }
+      } else if (!inOnboarding) {
         router.replace("/onboarding" as any);
       }
-    } else {
-      if (!user && inProtectedRoute) {
-        router.replace("/login");
-      } else if (user && inLogin) {
-        router.replace("/(tabs)");
+      return;
+    }
+
+    if (hasCompletedOnboarding) {
+      if (inProtectedRoute || inOnboarding) {
+        router.replace("/login" as any);
       }
+      return;
+    }
+
+    if (!inOnboarding && !inLogin) {
+      router.replace("/onboarding" as any);
     }
   }, [user, authLoaded, segments, isOnboardingChecked, hasCompletedOnboarding]);
 
@@ -282,6 +313,23 @@ function RootLayoutInner({
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!authLoaded) return;
+
+    const runUpdateCheck = async () => {
+      try {
+        const hasManualUpdate = await checkForManualAppUpdate(true);
+        if (!hasManualUpdate) {
+          await checkForAppUpdates({ silent: true, autoApply: true });
+        }
+      } catch (error) {
+        console.warn("Startup update check failed:", error);
+      }
+    };
+
+    runUpdateCheck();
+  }, [authLoaded]);
 
   useEffect(() => {
     const backSubscription = BackHandler.addEventListener("hardwareBackPress", () => {

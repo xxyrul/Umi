@@ -716,10 +716,10 @@ export default function TambahScreen() {
           style={[styles.input, { marginTop: 8, color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
         />
 
-        {/* Owner Details */}
-        <Text style={[styles.sectionTitle, { color: themeColors.maroonPrimary }]}>{t("ownerDetails")}</Text>
+        {/* Agent / REN Details */}
+        <Text style={[styles.sectionTitle, { color: themeColors.maroonPrimary }]}>Agent / REN Information</Text>
         <TextInput
-          placeholder={t("ownerNamePlaceholder") || "Nama Owner"}
+          placeholder={"Agent / REN Name"}
           placeholderTextColor={themeColors.textMuted}
           value={namaOwner}
           onChangeText={setNamaOwner}
@@ -728,7 +728,7 @@ export default function TambahScreen() {
         />
 
         <TextInput
-          placeholder={t("ownerPhonePlaceholder") || "No. Telefon Owner"}
+          placeholder={"Agent / REN Phone"}
           placeholderTextColor={themeColors.textMuted}
           value={telOwner}
           onChangeText={setTelOwner}

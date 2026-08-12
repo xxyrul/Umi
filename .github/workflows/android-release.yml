@@ -1,0 +1,125 @@
+name: Android Release Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    env:
+      PROJECT_ID: umiren-d6a66
+      STORAGE_BUCKET: umiren-d6a66.firebasestorage.app
+      STORAGE_PATH: releases/app-release-${{ github.run_number }}.apk
+      FIREBASE_VERSION_DOC: appUpdates/android
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Make Gradle executable
+        run: chmod +x android/gradlew
+
+      - name: Read app version info
+        id: version
+        run: |
+          echo "APP_VERSION=$(node -p \"require('./package.json').version\")" >> "$GITHUB_ENV"
+          echo "ANDROID_VERSION_CODE=$(node -p \"require('./app.json').expo.android.versionCode\")" >> "$GITHUB_ENV"
+
+      - name: Build Android release APK
+        run: cd android && ./gradlew assembleRelease
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upload APK to Firebase Storage
+        run: |
+          gcloud storage cp android/app/build/outputs/apk/release/app-release.apk \
+            gs://$STORAGE_BUCKET/$STORAGE_PATH
+
+      - name: Generate signed download URL
+        id: signed_url
+        run: |
+          URL=$(gcloud storage sign-url --duration=7d gs://$STORAGE_BUCKET/$STORAGE_PATH | tail -n 1)
+          echo "APK_URL=$URL" >> "$GITHUB_ENV"
+
+      - name: Update Firestore latest version document
+        run: |
+          npm install firebase-admin --no-save
+          node <<'NODE'
+          const admin = require('firebase-admin');
+          const fs = require('fs');
+
+          const projectId = process.env.PROJECT_ID;
+          const docPath = process.env.FIREBASE_VERSION_DOC;
+          const versionName = process.env.APP_VERSION;
+          const versionCode = Number(process.env.ANDROID_VERSION_CODE);
+          const apkUrl = process.env.APK_URL;
+          const releaseNotes = 'Automated release from GitHub Actions';
+
+          if (!projectId || !apkUrl) {
+            throw new Error('Missing project or APK URL');
+          }
+
+          admin.initializeApp({
+            credential: admin.credential.applicationDefault(),
+            projectId,
+          });
+
+          const db = admin.firestore();
+          const releaseDoc = {
+            versionCode,
+            versionName,
+            apkUrl,
+            releaseNotes,
+            updatedAt: new Date().toISOString(),
+          };
+
+          db.doc(docPath).set(releaseDoc, { merge: true })
+            .then(() => {
+              console.log('Firestore release document updated:', docPath);
+              console.log(JSON.stringify(releaseDoc, null, 2));
+            })
+            .catch((error) => {
+              console.error('Failed to update Firestore:', error);
+              process.exit(1);
+            });
+          NODE
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+          ANDROID_VERSION_CODE: ${{ env.ANDROID_VERSION_CODE }}
+          APK_URL: ${{ env.APK_URL }}
+          PROJECT_ID: ${{ env.PROJECT_ID }}
+          FIREBASE_VERSION_DOC: ${{ env.FIREBASE_VERSION_DOC }}
+
+      - name: Upload artifact summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: umi-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk

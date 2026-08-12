@@ -14,7 +14,7 @@
     "updates": {
       "url": "https://u.expo.dev/466269ce-d5eb-4ebb-9b01-5fa3b37089d3",
       "channel": "production",
-      "checkAutomatically": "NEVER"
+      "checkAutomatically": "ON_LOAD"
     },
     "extra": {
       "eas": {
