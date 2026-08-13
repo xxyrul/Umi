@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "wwdL2Hzs64T82EauIBqlU"
+uri = "file://android/app/build/outputs/apk/release/app-release.apk"
+type = "unspecified"
+title = "Umi 1.1.15 corrected APK"
+description = "Android release 1.1.15 (versionCode 21) with the duplicate update-status popup fix. Install this APK manually while Firebase Hosting publishing permissions are repaired."
+
+[[outputs]]
+id = "6klU8BJrYpyF086MHeQ0n"
+uri = "file://attached_assets/Umi-local-source-v1.1.3-arm64.apk"
+type = "unspecified"
+title = "Umi Android APK 1.1.3"
+description = "Standalone APK built from the newer uploaded Umi source. Package com.umi.caseflow, version code 9, arm64-v8a only."
