@@ -12,12 +12,11 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
-  BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter, useLocalSearchParams, useFocusEffect } from "expo-router";
-import firestore from "@react-native-firebase/firestore";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { firestore } from "@/services/firebase";
 
 import type { FinanceType, CaseStatus } from "@/types/case";
 import { createCase, updateCase, getCaseById } from "@/services/storage";
@@ -85,26 +84,6 @@ export default function CaseFormScreen() {
   const isEditMode = !!editCaseId;
 
   const { themeColors, t, language } = useAppSettings();
-
-  useFocusEffect(
-    React.useCallback(() => {
-      const onBackPress = () => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace("/(tabs)/cases");
-        }
-        return true; // handled
-      };
-
-      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
-
-      return () => {
-        subscription.remove();
-      };
-    }, [router])
-  );
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
