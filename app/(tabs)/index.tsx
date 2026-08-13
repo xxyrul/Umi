@@ -15,8 +15,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Polyline, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
-import firestore from "@react-native-firebase/firestore";
-import auth from "@react-native-firebase/auth";
+import { firestore, auth } from "@/services/firebase";
 
 import { CaseCard } from "@/components";
 import { deleteCase } from "@/services/storage";
@@ -74,8 +73,7 @@ export default function DashboardScreen() {
         (snapshot) => {
           if (snapshot) {
             const fetchedListings: PropertyListing[] = snapshot.docs
-              .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing)
-              .filter((l: any) => l.agentId === userId || l.userId === userId);
+              .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing);
 
             setListings(fetchedListings);
           }
@@ -127,17 +125,18 @@ export default function DashboardScreen() {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    const currentUser = auth().currentUser;
-    if (currentUser?.uid) {
+    try {
       const listSnap = await firestore().collection("listings").get();
-      const fetchedListings: PropertyListing[] = listSnap.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing)
-        .filter((l: any) => l.agentId === currentUser.uid || l.userId === currentUser.uid);
+      const fetchedListings: PropertyListing[] = listSnap.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as PropertyListing[];
       setListings(fetchedListings);
 
+      const currentUser = auth().currentUser;
       const caseSnap = await firestore()
         .collection("cases")
-        .where("userId", "==", currentUser.uid)
+        .where("userId", "==", currentUser?.uid || "")
         .get();
       const fetchedCases: PropertyCase[] = caseSnap.docs.map((doc) => ({
         id: doc.id,
@@ -149,8 +148,11 @@ export default function DashboardScreen() {
           .sort((a, b) => (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || ""))
           .slice(0, 3)
       );
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsRefreshing(false);
     }
-    setIsRefreshing(false);
   };
 
   const handleDeleteCase = async (caseId: string) => {
@@ -164,53 +166,43 @@ export default function DashboardScreen() {
     }
   };
 
-  // Unified status & record calculation (combining listings + cases)
-  const allUserRecords = [
-    ...listings.map((l) => ({
-      id: l.id,
-      status: (l.status || "").toString().toLowerCase().trim(),
-      createdAt: l.createdAt || "",
-    })),
-    ...allCases.map((c) => ({
-      id: c.id,
-      status: (c.status || "").toString().toLowerCase().trim(),
-      createdAt: c.createdAt || c.tarikh || "",
-    })),
-  ];
-
-  const metricAktif = allUserRecords.filter((r) => {
-    return r.status === "aktif" || r.status === "active" || r.status === "viewing";
+  // Unified status & record calculation strictly from active Cases
+  const metricAktif = allCases.filter((c) => {
+    const s = (c.status || "").toLowerCase().trim();
+    return s === "viewing" || s === "booking paid" || s === "spa signed" || s === "loan approved";
   }).length;
 
-  const metricBooking = allUserRecords.filter((r) => {
-    return (
-      r.status === "booking" ||
-      r.status === "draft" ||
-      r.status === "booking paid" ||
-      r.status === "pending"
-    );
+  const metricBooking = allCases.filter((c) => {
+    const s = (c.status || "").toLowerCase().trim();
+    return s === "booking paid";
   }).length;
 
-  const metricUnderLoan = allUserRecords.filter((r) => {
-    return r.status === "under loan" || r.status === "loan approved" || r.status === "loan";
+  const metricUnderLoan = allCases.filter((c) => {
+    const s = (c.status || "").toLowerCase().trim();
+    const f = (c.finance || "").toLowerCase().trim();
+    return f === "bank loan" || s === "loan approved";
   }).length;
 
-  const metricUnderSpa = allUserRecords.filter((r) => {
-    return r.status === "under spa" || r.status === "spa signed" || r.status === "spa";
+  const metricUnderSpa = allCases.filter((c) => {
+    const s = (c.status || "").toLowerCase().trim();
+    return s === "spa signed";
   }).length;
 
-  const metricSold = allUserRecords.filter((r) => {
-    return r.status === "sold" || r.status === "terjual" || r.status === "completed";
+  const metricSold = allCases.filter((c) => {
+    const s = (c.status || "").toLowerCase().trim();
+    return s === "completed";
   }).length;
 
-  const metricExpired = allUserRecords.filter((r) => {
-    return r.status === "expired" || r.status === "cancelled" || r.status === "review";
+  const metricExpired = allCases.filter((c) => {
+    const s = (c.status || "").toLowerCase().trim();
+    return s === "cancelled";
   }).length;
 
-  // Monthly Performance Chart Calculation for selectedYear
-  const yearRecords = allUserRecords.filter((r) => {
-    if (!r.createdAt) return false;
-    const createdDate = new Date(r.createdAt);
+  // Monthly Performance Chart Calculation for selectedYear strictly using Cases
+  const yearRecords = allCases.filter((c) => {
+    const dateStr = c.createdAt || c.tarikh || "";
+    if (!dateStr) return false;
+    const createdDate = new Date(dateStr);
     return !isNaN(createdDate.getTime()) && createdDate.getFullYear().toString() === selectedYear;
   });
 
@@ -274,12 +266,13 @@ export default function DashboardScreen() {
       </View>
 
       <ScrollView
+        style={{ flex: 1, width: "100%" }}
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: insets.bottom + 100,
-          flexGrow: 1,
+          paddingBottom: Math.max(insets.bottom, 24) + 104,
         }}
+        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -302,7 +295,11 @@ export default function DashboardScreen() {
         {/* Real Live Metrics Grid */}
         <View style={styles.metricsGrid}>
           {/* Aktif */}
-          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Active" } })}
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
+          >
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="check-circle" size={22} color="#DC2626" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -312,10 +309,14 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusAktif")}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Booking */}
-          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Booking Paid" } })}
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
+          >
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="calendar-check" size={22} color="#2563EB" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -325,10 +326,14 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusBooking")}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Under Loan */}
-          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Loan Approved" } })}
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
+          >
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="bank" size={22} color="#9333EA" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -338,10 +343,14 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusUnderLoan")}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Under SPA */}
-          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "SPA Signed" } })}
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
+          >
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="file-document-outline" size={22} color="#F97316" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -351,10 +360,14 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusUnderSpa")}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Sold */}
-          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Completed" } })}
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
+          >
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="tag-outline" size={22} color="#16A34A" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -364,10 +377,14 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusSold")}
             </Text>
-          </View>
+          </TouchableOpacity>
 
           {/* Expired */}
-          <View style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Cancelled" } })}
+            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
+          >
             <View style={styles.metricTopRow}>
               <MaterialCommunityIcons name="clock-outline" size={22} color="#64748B" />
               <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
@@ -377,7 +394,7 @@ export default function DashboardScreen() {
             <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
               {t("statusExpired")}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Monthly Performance Section */}
@@ -498,7 +515,7 @@ export default function DashboardScreen() {
             <CaseCard
               key={item.id}
               case={item}
-              onPress={() => router.push(`/(tabs)/tambah?caseId=${item.id}` as any)}
+              onPress={() => router.push(`/case/${item.id}` as any)}
               onDelete={handleDeleteCase}
             />
           ))
