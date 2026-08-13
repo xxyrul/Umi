@@ -229,7 +229,7 @@ export default function MasterListingScreen() {
     setCurrentUserId(userId);
 
     const unsubscribe = firestore()
-      .collection("listings")
+      .collection("publicListings")
       .onSnapshot(
         (snapshot) => {
           if (snapshot) {
@@ -262,7 +262,7 @@ export default function MasterListingScreen() {
     try {
       const currentUser = auth().currentUser;
       setCurrentUserId(currentUser?.uid || "");
-      const snapshot = await firestore().collection("listings").get();
+      const snapshot = await firestore().collection("publicListings").get();
       const data = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
