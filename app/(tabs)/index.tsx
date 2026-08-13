@@ -68,7 +68,7 @@ export default function DashboardScreen() {
 
     // Realtime Listener for Listings
     const unsubListings = firestore()
-      .collection("listings")
+      .collection("publicListings")
       .onSnapshot(
         (snapshot) => {
           if (snapshot) {
@@ -126,7 +126,7 @@ export default function DashboardScreen() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const listSnap = await firestore().collection("listings").get();
+      const listSnap = await firestore().collection("publicListings").get();
       const fetchedListings: PropertyListing[] = listSnap.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
