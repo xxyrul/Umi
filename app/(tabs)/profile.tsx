@@ -435,7 +435,7 @@ export default function ProfileScreen() {
                   color: themeColors.maroonPrimary,
                 }}
               >
-                {getUserInitials(profile?.displayName || "Azrul")}
+                {getUserInitials(profile?.displayName || "Agent")}
               </Text>
             </View>
           )}
@@ -448,7 +448,7 @@ export default function ProfileScreen() {
               marginBottom: 4,
             }}
           >
-            {profile?.displayName || "Azrul"}
+            {profile?.displayName || "Agent"}
           </Text>
 
           <Text style={{ fontSize: 14, color: themeColors.textMuted }}>
