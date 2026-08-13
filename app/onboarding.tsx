@@ -30,7 +30,14 @@ const { width } = Dimensions.get("window");
 export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { themeColors, language, toggleLanguage, isDark, saveOnboardingCompleted } = useAppSettings();
+  const {
+    themeColors,
+    language,
+    toggleLanguage,
+    toggleTheme,
+    isDark,
+    saveOnboardingCompleted,
+  } = useAppSettings();
   const isBM = language === "BM";
 
   const [step, setStep] = useState(0);
@@ -213,8 +220,34 @@ export default function OnboardingScreen() {
         backgroundColor={themeColors.canvasBackground}
       />
 
-      {/* Top Header Row: Progress dots + Language toggle */}
+      {/* Top Header Row: Dark mode toggle + Progress dots + Language toggle */}
       <View style={styles.headerRow}>
+        <View style={styles.headerSide}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={toggleTheme}
+            accessibilityRole="switch"
+            accessibilityLabel={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            accessibilityState={{ checked: isDark }}
+            style={[
+              styles.langToggle,
+              {
+                backgroundColor: themeColors.surfaceContainer,
+                borderColor: themeColors.borderColor,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name={isDark ? "weather-sunny" : "weather-night"}
+              size={16}
+              color={themeColors.maroonPrimary}
+            />
+            <Text style={[styles.langToggleText, { color: themeColors.maroonPrimary }]}>
+              {isDark ? (isBM ? "Cerah" : "Light") : (isBM ? "Gelap" : "Dark")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.progressBar}>
           {[0, 1, 2].map((s) => (
             <View
@@ -230,17 +263,24 @@ export default function OnboardingScreen() {
           ))}
         </View>
 
-        {/* Language Toggle */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={toggleLanguage}
-          style={[styles.langToggle, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
-        >
-          <MaterialCommunityIcons name="translate" size={16} color={themeColors.maroonPrimary} />
-          <Text style={[styles.langToggleText, { color: themeColors.maroonPrimary }]}>
-            {language === "BM" ? "EN" : "BM"}
-          </Text>
-        </TouchableOpacity>
+        <View style={[styles.headerSide, styles.headerSideRight]}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={toggleLanguage}
+            style={[
+              styles.langToggle,
+              {
+                backgroundColor: themeColors.surfaceContainer,
+                borderColor: themeColors.borderColor,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons name="translate" size={16} color={themeColors.maroonPrimary} />
+            <Text style={[styles.langToggleText, { color: themeColors.maroonPrimary }]}>
+              {language === "BM" ? "EN" : "BM"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -563,15 +603,22 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 24,
     marginTop: 8,
     marginBottom: 8,
+  },
+  headerSide: {
+    flex: 1,
+  },
+  headerSideRight: {
+    alignItems: "flex-end",
   },
   progressBar: {
     flexDirection: "row",
     gap: 6,
     alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
   },
   progressDot: {
     height: 8,
