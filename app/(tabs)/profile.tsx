@@ -19,13 +19,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
+import { checkForNativeAppUpdate } from "@/services/apkUpdater";
+import {
+  getUpdateNotificationsEnabled,
+  getLastUpdateNotificationFailure,
+  hasUpdateNotificationPermission,
+  setUpdateNotificationsEnabled,
+} from "@/services/updateNotifications";
 import { SPACING } from "@/constants/theme";
 import { Button } from "@/components";
-import { PinKeypad } from "@/components/PinKeypad";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { getCurrentUserProfile, signOut, getUserInitials } from "@/services/auth";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import firestore from "@react-native-firebase/firestore";
+import { firestore } from "@/services/firebase";
+import Constants from "expo-constants";
 
 import {
   getAppLockEnabled,
@@ -33,8 +40,6 @@ import {
   getBiometricsEnabled,
   setBiometricsEnabled,
   getAppLockPin,
-  setAppLockPin,
-  isBiometricSupported,
 } from "@/services/security";
 import type { UserProfile, PropertyCase } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
@@ -56,6 +61,8 @@ export default function ProfileScreen() {
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [caseAlertsEnabled, setCaseAlertsEnabled] = useState(true);
   const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
+  const [updateAlertsEnabled, setUpdateAlertsEnabled] = useState(false);
+  const [isSavingUpdateAlerts, setIsSavingUpdateAlerts] = useState(false);
 
   // App Lock States
   const [appLockEnabled, setAppLockEnabledState] = useState(false);
@@ -63,9 +70,6 @@ export default function ProfileScreen() {
 
   // PIN Setup Modal state
   const [showPinSetupModal, setShowPinSetupModal] = useState(false);
-  const [pinSetupStep, setPinSetupStep] = useState<"create" | "confirm">("create");
-  const [firstPin, setFirstPin] = useState("");
-  const [pinSetupError, setPinSetupError] = useState("");
 
   // Interactive Account Settings State
   const [displayNameInput, setDisplayNameInput] = useState("");
@@ -79,7 +83,79 @@ export default function ProfileScreen() {
     }
     getAppLockEnabled().then(setAppLockEnabledState);
     getBiometricsEnabled().then(setBiometricsEnabledState);
+    getUpdateNotificationsEnabled().then(setUpdateAlertsEnabled);
   }, []);
+
+  const handleToggleUpdateAlerts = async (value: boolean) => {
+    const user = getCurrentUserProfile();
+    if (!user) {
+      Alert.alert(
+        t("errorTitle"),
+        language === "BM"
+          ? "Sila log masuk untuk menguruskan makluman kemas kini."
+          : "Please sign in to manage update alerts."
+      );
+      return;
+    }
+
+    setIsSavingUpdateAlerts(true);
+    try {
+      const result = await setUpdateNotificationsEnabled({ uid: user.uid, language }, value);
+      setUpdateAlertsEnabled(result);
+
+      if (value && !result) {
+        const permissionGranted = await hasUpdateNotificationPermission();
+        if (!permissionGranted) {
+          Alert.alert(
+            language === "BM" ? "Kebenaran Diperlukan" : "Permission Needed",
+            language === "BM"
+              ? "Benarkan notifikasi dalam tetapan telefon untuk menerima makluman versi baharu."
+              : "Allow notifications in your phone settings to receive new version alerts.",
+            [
+              {
+                text: language === "BM" ? "Buka Tetapan" : "Open Settings",
+                onPress: () => {
+                  void Linking.openSettings();
+                },
+              },
+              {
+                text: language === "BM" ? "Batal" : "Cancel",
+                style: "cancel",
+              },
+            ]
+          );
+        } else {
+          const failure = getLastUpdateNotificationFailure();
+          const failureMessage =
+            failure === "token-unavailable"
+              ? language === "BM"
+                ? "Android tidak dapat mencipta token FCM. Sila pastikan Google Play Services tersedia dan cuba lagi."
+                : "Android could not create an FCM token. Make sure Google Play Services is available, then try again."
+              : failure === "firestore-permission-denied"
+                ? language === "BM"
+                  ? "Firebase menolak pendaftaran peranti. Peraturan Firestore untuk pengguna/peranti perlu diterbitkan."
+                  : "Firebase rejected the device registration. The Firestore users/devices rule must be published."
+                : failure === "firestore-unauthenticated"
+                  ? language === "BM"
+                    ? "Sesi log masuk Firebase telah tamat. Sila log masuk semula dan cuba lagi."
+                    : "The Firebase sign-in session expired. Please sign in again and try again."
+                  : failure === "firestore-unavailable"
+                    ? language === "BM"
+                      ? "Firebase tidak tersedia. Sila semak sambungan internet dan cuba lagi."
+                      : "Firebase is unavailable. Check your internet connection and try again."
+                    : language === "BM"
+                      ? "Pendaftaran peranti gagal. Sila cuba lagi."
+                      : "Device registration failed. Please try again.";
+          Alert.alert(
+            language === "BM" ? "Makluman Tidak Diaktifkan" : "Alerts Not Enabled",
+            failureMessage
+          );
+        }
+      }
+    } finally {
+      setIsSavingUpdateAlerts(false);
+    }
+  };
 
   const handleSaveAccount = async () => {
     if (!displayNameInput.trim()) {
@@ -103,81 +179,24 @@ export default function ProfileScreen() {
     if (value) {
       const existingPin = await getAppLockPin();
       if (!existingPin) {
-        setPinSetupStep("create");
-        setFirstPin("");
-        setPinSetupError("");
         setShowPinSetupModal(true);
       } else {
         setAppLockEnabledState(true);
         await setAppLockEnabled(true);
-        const biometricsSupported = await isBiometricSupported();
-        setBiometricsEnabledState(biometricsSupported);
-        await setBiometricsEnabled(biometricsSupported);
+        setBiometricsEnabledState(true);
+        await setBiometricsEnabled(true);
         Alert.alert(t("appLockActive"), t("appLockActiveMsg"));
       }
     } else {
       setAppLockEnabledState(false);
       await setAppLockEnabled(false);
-      setBiometricsEnabledState(false);
-      await setBiometricsEnabled(false);
       Alert.alert(t("appLockOff"), t("appLockOffMsg"));
     }
   };
 
   const handleToggleBiometrics = async (value: boolean) => {
-    if (!appLockEnabled) {
-      Alert.alert(t("errorTitle"), t("appLockLabel"));
-      return;
-    }
-
-    const supported = await isBiometricSupported();
-    if (value && !supported) {
-      Alert.alert(t("errorTitle"), "Biometric authentication is not available on this device.");
-      return;
-    }
-
     setBiometricsEnabledState(value);
     await setBiometricsEnabled(value);
-  };
-
-  const closePinSetupModal = () => {
-    setShowPinSetupModal(false);
-    setPinSetupStep("create");
-    setFirstPin("");
-    setPinSetupError("");
-  };
-
-  const handlePinSetupComplete = async (pin: string) => {
-    if (pinSetupStep === "create") {
-      setFirstPin(pin);
-      setPinSetupStep("confirm");
-      setPinSetupError("");
-      return;
-    }
-
-    if (pin !== firstPin) {
-      setPinSetupError("PIN mismatch. Please try again.");
-      setPinSetupStep("create");
-      setFirstPin("");
-      return;
-    }
-
-    try {
-      await setAppLockPin(pin);
-      await setAppLockEnabled(true);
-      setAppLockEnabledState(true);
-
-      const biometricsSupported = await isBiometricSupported();
-      setBiometricsEnabledState(biometricsSupported);
-      await setBiometricsEnabled(biometricsSupported);
-
-      closePinSetupModal();
-      Alert.alert(t("appLockActive"), t("appLockActiveMsg"));
-    } catch {
-      setPinSetupError("Unable to save PIN. Please try again.");
-      setPinSetupStep("create");
-      setFirstPin("");
-    }
   };
 
   const handleSignOut = () => {
@@ -196,6 +215,20 @@ export default function ProfileScreen() {
         style: "destructive",
       },
     ]);
+  };
+
+  const handleCheckForUpdates = async () => {
+    // The native check is authoritative for APK releases. When it finds no
+    // APK update, let the OTA check below provide the single status dialog
+    // instead of stacking two "up to date" alerts.
+    const nativeUpdate = await checkForNativeAppUpdate({
+      language,
+      manual: true,
+      suppressManualStatusAlert: true,
+    });
+    if (!nativeUpdate) {
+      await checkForAppUpdates(false);
+    }
   };
 
   const renderOptionRow = (
@@ -357,11 +390,14 @@ export default function ProfileScreen() {
       }}
     >
       <ScrollView
+        style={{ flex: 1, width: "100%" }}
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
           paddingVertical: SPACING.xl,
+          paddingBottom: Math.max(insets.bottom, 24) + 104,
           alignItems: "center",
         }}
+        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Avatar / Initials */}
@@ -536,9 +572,12 @@ export default function ProfileScreen() {
           {renderOptionRow("file-export-outline", t("exportReport"), t("exportSubtitle"), handleExportReport)}
           {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
           {renderOptionRow("shield-lock-outline", t("securityPin"), t("securitySubtitle"), () => setActiveSection("Security"))}
-          {renderOptionRow("information-outline", t("appVersion"), "v1.1.1 (Native Release)", () => {
-            checkForAppUpdates({ silent: false, autoApply: false });
-          })}
+          {renderOptionRow(
+            "information-outline",
+            t("appVersion"),
+            `v${Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "—"} · ${t("checkForUpdates")}`,
+            handleCheckForUpdates
+          )}
           {renderOptionRow("help-circle-outline", t("helpFeedback"), t("helpSubtitle"), () => setActiveSection("Help"))}
         </View>
 
@@ -722,6 +761,26 @@ export default function ProfileScreen() {
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <View style={{ flex: 1, paddingRight: SPACING.md }}>
                       <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
+                        {language === "BM" ? "Makluman Versi Baharu" : "New Version Alerts"}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
+                        {language === "BM"
+                          ? "Beritahu saya apabila kemas kini aplikasi dikeluarkan"
+                          : "Notify me when an app update is released"}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={updateAlertsEnabled}
+                      onValueChange={handleToggleUpdateAlerts}
+                      disabled={isSavingUpdateAlerts}
+                      trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }}
+                      thumbColor={updateAlertsEnabled ? "#FFFFFF" : "#F3F4F6"}
+                    />
+                  </View>
+
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
+                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
                         {language === "BM" ? "Ringkasan E-mel Mingguan" : "Weekly Email Digest"}
                       </Text>
                       <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
@@ -802,56 +861,6 @@ export default function ProfileScreen() {
                 </View>
               )}
             </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showPinSetupModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={closePinSetupModal}
-      >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0, 0, 0, 0.6)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: themeColors.cardBackground,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              borderWidth: 1,
-              borderColor: themeColors.borderColor,
-              padding: SPACING.lg,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: SPACING.md,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
-                {pinSetupStep === "create" ? "Create 4-digit PIN" : "Confirm 4-digit PIN"}
-              </Text>
-              <TouchableOpacity onPress={closePinSetupModal}>
-                <MaterialCommunityIcons name="close" size={24} color={themeColors.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            <PinKeypad
-              title={pinSetupStep === "create" ? "Set Security PIN" : "Confirm Security PIN"}
-              subtitle={pinSetupStep === "create" ? "Create your 4-digit PIN" : "Re-enter your PIN to confirm"}
-              onPinComplete={handlePinSetupComplete}
-              showBiometricOption={false}
-              errorMessage={pinSetupError}
-            />
           </View>
         </View>
       </Modal>
