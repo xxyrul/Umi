@@ -29,18 +29,36 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read, write: if isAuthed() && request.auth.uid == userId;
+
+      // Push registrations for update notifications. Each signed-in user may
+      // only read or modify the devices recorded under their own account, so a
+      // token can never be listed or harvested by another agent.
+      match /devices/{deviceId} {
+        allow read, write: if isAuthed() && request.auth.uid == userId;
+      }
     }
 
     match /cases/{caseId} {
-      allow read, create, update, delete: if isAuthed() && (
-        request.resource == null
-          ? resource.data.userId == request.auth.uid
-          : request.resource.data.userId == request.auth.uid
-      );
+      // Reads and deletes: existing document must belong to the caller.
+      allow read, delete: if isAuthed()
+        && resource.data.userId == request.auth.uid;
+
+      // Creates: the new document must claim the caller's UID as owner.
+      allow create: if isAuthed()
+        && request.resource.data.userId == request.auth.uid;
+
+      // Updates: the existing document must already belong to the caller,
+      // and the incoming data must not transfer ownership to another UID.
+      allow update: if isAuthed()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid;
     }
 
     match /listings/{listingId} {
-      allow read: if isAuthed();
+      // Only the listing owner (agentId or userId) may read a listing.
+      // This prevents other authenticated agents from accessing sensitive
+      // owner documents (IC, geran, SPA, utility bills) embedded in the record.
+      allow read: if isListingOwner(resource.data);
       allow create: if isAuthed()
         && isListingOwner(request.resource.data)
         && hasValidListingStatus();
@@ -49,6 +67,13 @@ service cloud.firestore {
         && isListingOwner(request.resource.data)
         && hasValidListingStatus();
       allow delete: if isAuthed() && isListingOwner(resource.data);
+    }
+
+    // Release announcement bookkeeping is written only by the trusted
+    // server-side release notifier, which uses a service account and bypasses
+    // these rules. Clients get no access.
+    match /appReleaseNotifications/{releaseId} {
+      allow read, write: if false;
     }
   }
 }
