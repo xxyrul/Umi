@@ -4,11 +4,11 @@
  * Android installation after a release has been published.
  *
  * This runs server-side only (CI / maintainer machine). It authenticates with a
- * Firebase service account supplied through the FIREBASE_SERVICE_ACCOUNT
+ * Firebase service account supplied through the FIREBASE_SERVICE_ACCOUNT_JSON
  * environment variable, so no credential is ever shipped in the app bundle.
  *
  * Usage:
- *   FIREBASE_SERVICE_ACCOUNT='<service account json>' node scripts/notify-release.mjs
+ *   FIREBASE_SERVICE_ACCOUNT_JSON='<service account json>' node scripts/notify-release.mjs
  *   ... --force        Re-send even if this versionCode was already announced.
  *   ... --dry-run      Resolve devices and print the plan without sending.
  *
@@ -40,7 +40,11 @@ function fail(message) {
 }
 
 function loadServiceAccount() {
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT || process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  // FIREBASE_SERVICE_ACCOUNT was historically also used for a
+  // google-services.json client config. Prefer the explicitly named service
+  // account JSON so a public Firebase client config can never be parsed as
+  // server credentials by mistake.
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
     fail("FIREBASE_SERVICE_ACCOUNT is not set. Provide the service account JSON via the environment.");
   }
@@ -153,6 +157,15 @@ async function firestoreRequest(projectId, suffix, accessToken, init = {}) {
   return response;
 }
 
+function failOnPermissionDenied(operation, response) {
+  if (response.status !== 403) return;
+  fail(
+    `${operation} was rejected by Firebase (403 Missing or insufficient permissions). ` +
+      "Grant the notifier service account the Cloud Datastore User role " +
+      "(roles/datastore.user) on project umiren-d6a66, then rerun the release notifier."
+  );
+}
+
 /** Collects every enabled device registration across all users. */
 async function listEnabledDevices(projectId, accessToken) {
   const response = await firestoreRequest(projectId, ":runQuery", accessToken, {
@@ -172,6 +185,7 @@ async function listEnabledDevices(projectId, accessToken) {
   });
 
   if (!response.ok) {
+    failOnPermissionDenied("Device lookup", response);
     fail(`Device lookup failed with ${response.status}: ${await response.text()}`);
   }
 
@@ -207,6 +221,7 @@ async function listEnabledDevices(projectId, accessToken) {
     }),
   });
   if (!fallbackResponse.ok) {
+    failOnPermissionDenied("User device lookup", fallbackResponse);
     fail(`User device lookup failed with ${fallbackResponse.status}: ${await fallbackResponse.text()}`);
   }
 
@@ -230,6 +245,7 @@ async function claimRelease(projectId, accessToken, versionCode) {
     return false;
   }
   if (!existing.ok && existing.status !== 404) {
+    failOnPermissionDenied("Release marker lookup", existing);
     fail(`Release marker lookup failed with ${existing.status}: ${await existing.text()}`);
   }
 
