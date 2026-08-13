@@ -37,6 +37,12 @@ export async function requestNotificationPermissions(): Promise<boolean> {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: "#6366F1",
       });
+      await Notifications.setNotificationChannelAsync("app-updates", {
+        name: "App Updates",
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: "#6366F1",
+      });
     }
 
     return true;
