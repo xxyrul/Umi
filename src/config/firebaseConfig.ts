@@ -1,8 +1,10 @@
 /**
  * Firebase / Google configuration values.
  *
- * All values are read from EXPO_PUBLIC_* environment variables so that the
- * google-services.json file never needs to be committed to source control.
+ * Firebase values are read from EXPO_PUBLIC_* environment variables so that
+ * google-services.json never needs to be committed to source control. The
+ * Google Web OAuth client ID is a public project identifier and is kept
+ * canonical below because it must match the Android Firebase project.
  *
  * Local development: copy .env.example to .env.local and fill in the values.
  * CI/EAS Build: inject the same keys as EAS secrets or environment variables.
@@ -46,7 +48,12 @@ export const FIREBASE_APP_ID = requireEnv(
   "EXPO_PUBLIC_FIREBASE_APP_ID",
   process.env.EXPO_PUBLIC_FIREBASE_APP_ID
 );
-export const GOOGLE_WEB_CLIENT_ID = requireEnv(
-  "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID",
-  process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
-);
+
+/**
+ * This is a public OAuth client identifier, not a credential. It must match
+ * the Web client in the same Firebase project as the Android app. Keeping the
+ * project client ID canonical prevents an outdated Replit secret from causing
+ * Google's native sign-in flow to return DEVELOPER_ERROR.
+ */
+export const GOOGLE_WEB_CLIENT_ID =
+  "975924997372-06nogtf16f250ope4ridpnodi9oh8fvc.apps.googleusercontent.com";
