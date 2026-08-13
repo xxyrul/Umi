@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -35,12 +36,28 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [agentName, setAgentName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const onboardingScrollRef = useRef<ScrollView | null>(null);
 
   // Permission explanation modal state
   const [showPermissionModal, setShowPermissionModal] = useState(false);
 
   useEffect(() => {
     initializeGoogleSignIn();
+  }, []);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener("keyboardDidShow", () => {
+      setIsKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
   }, []);
 
   const handleNext = () => {
@@ -228,13 +245,15 @@ export default function OnboardingScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+        behavior={Platform.OS === "android" ? "height" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? Math.max(insets.top, 16) : 0}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
+          ref={onboardingScrollRef}
+          contentContainerStyle={{ flexGrow: 1, paddingBottom: 24 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           automaticallyAdjustKeyboardInsets={true}
         >
           {/* Step 0: Welcome */}
@@ -306,7 +325,12 @@ export default function OnboardingScreen() {
 
           {/* Step 1: Agent Profile */}
           {step === 1 && (
-            <View style={styles.stepContainer}>
+            <View
+              style={[
+                styles.stepContainer,
+                isKeyboardVisible && styles.keyboardActiveStepContainer,
+              ]}
+            >
               <View style={[styles.iconFrame, { backgroundColor: themeColors.maroonLight }]}>
                 <MaterialCommunityIcons name="account-edit-outline" size={64} color={themeColors.maroonPrimary} />
               </View>
@@ -334,12 +358,17 @@ export default function OnboardingScreen() {
                       color: themeColors.textPrimary,
                     },
                   ]}
-                  placeholder={isBM ? "Cth: Azrul Baharum" : "e.g. Azrul Baharum"}
+                  placeholder={isBM ? "Cth: Nama Penuh Anda" : "e.g. Your Full Name"}
                   placeholderTextColor={themeColors.textMuted}
                   value={agentName}
                   onChangeText={setAgentName}
                   autoFocus={step === 1}
                   returnKeyType="next"
+                  onFocus={() => {
+                    setTimeout(() => {
+                      onboardingScrollRef.current?.scrollTo({ y: 80, animated: true });
+                    }, 150);
+                  }}
                 />
               </View>
             </View>
@@ -569,6 +598,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingBottom: 24,
     paddingTop: 16,
+  },
+  keyboardActiveStepContainer: {
+    justifyContent: "flex-start",
+    paddingTop: 20,
   },
   iconFrame: {
     width: 120,
