@@ -1,18 +1,21 @@
 import React, { useEffect, useState, useRef } from "react";
 import * as Sentry from '@sentry/react-native';
-import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, StatusBar, Button, BackHandler } from "react-native";
+import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, StatusBar, Button, BackHandler, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Slot, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import firestore from "@react-native-firebase/firestore";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { onAuthStateChanged, firebaseAuth, User } from "@/services/firebase";
-import { getAppLockEnabled, getBiometricsEnabled, verifyAppLockPin, authenticateBiometric, getAppLockPin, setAppLockEnabled } from "@/services/security";
+import { getAppLockEnabled, getBiometricsEnabled, getAppLockPin, verifyAppLockPin, authenticateBiometric } from "@/services/security";
 import { PinKeypad } from "@/components/PinKeypad";
 import { AppSettingsProvider, useAppSettings } from "@/context/AppSettingsContext";
 import { COLORS } from "@/constants/theme";
-import { checkForAppUpdates, checkForManualAppUpdate } from "@/services/updater";
+import { checkForNativeAppUpdate } from "@/services/apkUpdater";
+import {
+  configureUpdateNotificationHandlers,
+  registerForUpdateNotifications,
+} from "@/services/updateNotifications";
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -20,14 +23,38 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 Sentry.init({
   dsn: 'https://5f6ba69eb0cba92e13ad453f2fb6c628@o4511887279587328.ingest.de.sentry.io/4511887297806416',
 
-  // Adds more context data to events (IP address, cookies, user, etc.)
-  // For more information, visit: https://docs.sentry.io/platforms/react-native/data-management/data-collected/
+  // Do NOT send PII (IP addresses, cookies, user identifiers, etc.) to Sentry.
   sendDefaultPii: false,
 
-  // Configure Session Replay
+  // Configure Session Replay with masking enabled to avoid capturing sensitive fields.
   replaysSessionSampleRate: 0.1,
   replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+  integrations: [
+    Sentry.mobileReplayIntegration({
+      // Mask all text and images by default to prevent PII capture in session recordings.
+      maskAllText: true,
+      maskAllImages: true,
+    }),
+    Sentry.feedbackIntegration(),
+  ],
+
+  // Strip sensitive fields before events are transmitted to Sentry.
+  beforeSend(event) {
+    // Remove user identity fields
+    if (event.user) {
+      delete event.user.ip_address;
+      delete event.user.email;
+      delete event.user.username;
+      delete event.user.id;
+    }
+    // Remove request-level data that may contain credentials or session tokens
+    if (event.request) {
+      delete event.request.cookies;
+      delete event.request.headers;
+      delete event.request.env;
+    }
+    return event;
+  },
 
   // uncomment the line below to enable Spotlight (https://spotlightjs.com)
   // spotlight: __DEV__,
@@ -42,35 +69,16 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
   useEffect(() => {
     const checkOnboarding = async () => {
       try {
-        let val = await AsyncStorage.getItem("hasCompletedOnboarding");
-
-        if (user && val !== "true") {
-          try {
-            const snap = await firestore().collection("users").doc(user.uid).get();
-            const firestoreFlag = Boolean(snap.data()?.onboardingCompleted);
-            if (firestoreFlag) {
-              await AsyncStorage.setItem("hasCompletedOnboarding", "true");
-              val = "true";
-            }
-          } catch (error: any) {
-            const msg = String(error?.code || error?.message || "");
-            if (!msg.includes("permission-denied") && !msg.includes("PERMISSION_DENIED")) {
-              throw error;
-            }
-            console.warn("Firestore onboarding lookup denied; using local state only.", error);
-          }
-        }
-
+        const val = await AsyncStorage.getItem("hasCompletedOnboarding");
         setHasCompletedOnboarding(val === "true");
       } catch (e) {
-        console.error("Error reading onboarding state:", e);
+        console.error(e);
       } finally {
         setIsOnboardingChecked(true);
       }
     };
-
     checkOnboarding();
-  }, [authLoaded, user]);
+  }, [segments]);
 
   useEffect(() => {
     if (!authLoaded || !isOnboardingChecked) return;
@@ -83,26 +91,16 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
     const inProtectedRoute = inTabs || inCaseRoute || inListingRoute;
     const inLogin = rootSegment === "login";
 
-    if (user) {
-      if (hasCompletedOnboarding) {
-        if (inOnboarding || inLogin) {
-          router.replace("/(tabs)" as any);
-        }
-      } else if (!inOnboarding) {
+    if (!hasCompletedOnboarding) {
+      if (!inOnboarding) {
         router.replace("/onboarding" as any);
       }
-      return;
-    }
-
-    if (hasCompletedOnboarding) {
-      if (inProtectedRoute || inOnboarding) {
-        router.replace("/login" as any);
+    } else {
+      if (!user && inProtectedRoute) {
+        router.replace("/login");
+      } else if (user && inLogin) {
+        router.replace("/(tabs)");
       }
-      return;
-    }
-
-    if (!inOnboarding && !inLogin) {
-      router.replace("/onboarding" as any);
     }
   }, [user, authLoaded, segments, isOnboardingChecked, hasCompletedOnboarding]);
 
@@ -202,12 +200,16 @@ function AppLockOverlay({
 // Inner layout component — uses themeColors for status bar and background
 function RootLayoutInner({
   user,
+  setUser,
   authLoaded,
+  setAuthLoaded,
 }: {
   user: User | null;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   authLoaded: boolean;
+  setAuthLoaded: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
-  const { themeColors, isDark } = useAppSettings();
+  const { themeColors, isDark, language } = useAppSettings();
   const router = useRouter();
   const segments = useSegments() as string[];
 
@@ -225,6 +227,36 @@ function RootLayoutInner({
     userRef.current = user;
   }, [user]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android" || __DEV__) return;
+
+    const timer = setTimeout(() => {
+      void checkForNativeAppUpdate({ language });
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [language]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    // Reuses the permission granted during onboarding to create the
+    // account-bound registration. It never re-prompts here — enabling after a
+    // denial happens explicitly from the Profile settings switch.
+    void registerForUpdateNotifications({ uid: user.uid, language });
+  }, [user?.uid, language]);
+
+  useEffect(() => {
+    return configureUpdateNotificationHandlers(
+      () => (userRef.current ? { uid: userRef.current.uid, language } : null),
+      () => {
+        // Never trust the notification payload: re-check the signed manifest so
+        // the package/version validation decides what the user is offered.
+        void checkForNativeAppUpdate({ language, forcePrompt: true });
+      }
+    );
+  }, [language]);
+
   const triggerUnlockAnimation = () => {
     setIsUnlockedSuccess(true);
     setTimeout(() => {
@@ -239,15 +271,6 @@ function RootLayoutInner({
     setAllowBiometrics(bioEnabled);
 
     if (lockEnabled) {
-      const storedPin = await getAppLockPin();
-      if (!storedPin) {
-        // Fail-safe recovery: disable lock if no PIN exists to avoid hard lockout loops.
-        await setAppLockEnabled(false);
-        setIsLocked(false);
-        setPinError("");
-        return;
-      }
-
       setIsLocked(true);
       setPinError("");
     } else {
@@ -265,7 +288,15 @@ function RootLayoutInner({
     }
   };
 
-  const handleBiometricSuccess = () => {
+  const handleBiometricSuccess = async () => {
+    // Biometric unlock is only valid when a PIN is enrolled. If the stored
+    // PIN entry is absent or malformed (e.g. cleared on a rooted device),
+    // deny access rather than silently granting it.
+    const enrolledPin = await getAppLockPin();
+    if (!enrolledPin) {
+      setPinError("PIN not set up. Please re-enroll your PIN in Settings.");
+      return;
+    }
     setPinError("");
     triggerUnlockAnimation();
   };
@@ -283,12 +314,19 @@ function RootLayoutInner({
   }, [isLocked, allowBiometrics, isUnlockedSuccess]);
 
   useEffect(() => {
-    if (user) {
-      checkAndAuthenticate();
-    }
-  }, [user]);
+    let initialCheckDone = false;
 
-  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setAuthLoaded(true);
+      SplashScreen.hideAsync().catch(() => {});
+
+      if (firebaseUser && !initialCheckDone) {
+        initialCheckDone = true;
+        checkAndAuthenticate();
+      }
+    });
+
     const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
       if (nextAppState === "inactive" || nextAppState === "background") {
         backgroundTimeRef.current = Date.now();
@@ -307,46 +345,23 @@ function RootLayoutInner({
     });
 
     return () => {
+      unsubscribe();
       subscription.remove();
     };
   }, []);
 
   useEffect(() => {
-    if (!authLoaded) return;
-
-    const runUpdateCheck = async () => {
-      try {
-        const hasManualUpdate = await checkForManualAppUpdate(true);
-        if (!hasManualUpdate) {
-          await checkForAppUpdates({ silent: true, autoApply: true });
-        }
-      } catch (error) {
-        console.warn("Startup update check failed:", error);
-      }
-    };
-
-    runUpdateCheck();
-  }, [authLoaded]);
-
-  useEffect(() => {
     const backSubscription = BackHandler.addEventListener("hardwareBackPress", () => {
       const rootSegment = segments[0];
-      const inDetailFlow = rootSegment === "listing" || rootSegment === "case";
-
-      if (!inDetailFlow) {
-        return false;
+      if (rootSegment === "listing") {
+        router.replace("/(tabs)/listings");
+        return true;
       }
-
-      const canGoBack = typeof (router as any).canGoBack === "function"
-        ? (router as any).canGoBack()
-        : false;
-
-      if (canGoBack) {
-        return false;
+      if (rootSegment === "case") {
+        router.replace("/(tabs)/cases");
+        return true;
       }
-
-      router.replace("/(tabs)");
-      return true;
+      return false;
     });
 
     return () => {
@@ -366,7 +381,7 @@ function RootLayoutInner({
       <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
         <AuthGuard user={user} authLoaded={authLoaded} />
         <Slot />
-        {__DEV__ && (
+        {__DEV__ && Platform.OS !== "web" && (
           <View style={{ position: "absolute", bottom: 20, right: 20 }}>
             <Button title="Try Sentry" onPress={() => { Sentry.captureException(new Error("First error")); }} />
           </View>
@@ -419,7 +434,9 @@ function RootLayout() {
     <AppSettingsProvider>
       <RootLayoutInner
         user={user}
+        setUser={setUser}
         authLoaded={authLoaded}
+        setAuthLoaded={setAuthLoaded}
       />
     </AppSettingsProvider>
   );
