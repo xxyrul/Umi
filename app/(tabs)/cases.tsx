@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -19,10 +19,9 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SPACING } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { FilterChip, CaseCard } from "@/components";
+import { CaseCard } from "@/components";
 import { deleteCase, updateCase } from "@/services/storage";
-import firestore from "@react-native-firebase/firestore";
-import auth from "@react-native-firebase/auth";
+import { firestore, auth } from "@/services/firebase";
 import { scheduleCaseReminder } from "@/services/notifications";
 import type { PropertyCase, CaseStatus } from "@/types/case";
 
@@ -51,6 +50,43 @@ const SECONDARY_STATUS_LIST: CaseStatus[] = [
   "Review",
 ];
 
+type CaseSortOption = "newest" | "oldest" | "name-asc" | "name-desc" | "id";
+
+const CASE_SORT_OPTIONS: Array<{ id: CaseSortOption; label: string }> = [
+  { id: "newest", label: "Newest" },
+  { id: "oldest", label: "Oldest" },
+  { id: "name-asc", label: "A–Z" },
+  { id: "name-desc", label: "Z–A" },
+  { id: "id", label: "ID" },
+];
+
+function getDateSortValue(value?: string): number {
+  if (!value) return 0;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function compareCases(a: PropertyCase, b: PropertyCase, sortOption: CaseSortOption): number {
+  if (sortOption === "name-asc" || sortOption === "name-desc") {
+    const comparison = (a.namaCase || "").localeCompare(b.namaCase || "", undefined, {
+      sensitivity: "base",
+      numeric: true,
+    });
+    return sortOption === "name-desc" ? -comparison : comparison;
+  }
+
+  if (sortOption === "id") {
+    return (a.id || "").localeCompare(b.id || "", undefined, {
+      sensitivity: "base",
+      numeric: true,
+    });
+  }
+
+  const aDate = getDateSortValue(a.updatedAt || a.createdAt);
+  const bDate = getDateSortValue(b.updatedAt || b.createdAt);
+  return sortOption === "oldest" ? aDate - bDate : bDate - aDate;
+}
+
 export default function CasesScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -61,13 +97,11 @@ export default function CasesScreen() {
   const [filteredCases, setFilteredCases] = useState<PropertyCase[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<CaseStatus | "All" | "Active">("All");
+  const [sortOption, setSortOption] = useState<CaseSortOption>("newest");
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // ScrollView Auto-Scroll Ref & Layout state
-  const scrollViewRef = useRef<ScrollView>(null);
-  const [scrollViewWidth, setScrollViewWidth] = useState(300);
-  const chipLayouts = useRef<{ [key: string]: { x: number; width: number } }>({});
 
   // Status Change Modal State
   const [selectedCase, setSelectedCase] = useState<PropertyCase | null>(null);
@@ -81,10 +115,36 @@ export default function CasesScreen() {
 
   const { status } = useLocalSearchParams<{ status?: string }>();
 
+  const getStatusLabel = (value: CaseStatus | "All" | "Active") => {
+    switch (value) {
+      case "All":
+        return t("all");
+      case "Active":
+        return t("statusAktif");
+      case "Viewing":
+        return t("statusViewing");
+      case "Booking Paid":
+        return t("statusBookingPaid");
+      case "Loan Approved":
+        return t("statusLoanApproved");
+      case "SPA Signed":
+        return t("statusSpaSigned");
+      case "Completed":
+        return t("statusCompleted");
+      case "Cancelled":
+        return t("statusCancelled");
+      case "Pending":
+        return t("statusPending");
+      case "Review":
+        return t("statusReview");
+    }
+  };
+
   const applyFilters = (
     allCases: PropertyCase[],
     queryText: string,
-    status: CaseStatus | "All" | "Active"
+    status: CaseStatus | "All" | "Active",
+    selectedSort: CaseSortOption
   ) => {
     let result = [...allCases];
 
@@ -113,6 +173,7 @@ export default function CasesScreen() {
       result = result.filter((c) => c.status === status);
     }
 
+    result.sort((a, b) => compareCases(a, b, selectedSort));
     setFilteredCases(result);
   };
 
@@ -173,25 +234,12 @@ export default function CasesScreen() {
       }
 
       setSelectedStatus(targetStatus);
-
-      // Scroll to the selected chip in horizontal Carousel
-      const timer = setTimeout(() => {
-        const layout = chipLayouts.current[targetStatus];
-        if (layout && scrollViewRef.current && scrollViewWidth > 0) {
-          const targetX = layout.x - (scrollViewWidth / 2) + (layout.width / 2);
-          scrollViewRef.current.scrollTo({
-            x: Math.max(0, targetX),
-            animated: true,
-          });
-        }
-      }, 150);
-      return () => clearTimeout(timer);
     }
-  }, [status, scrollViewWidth]);
+  }, [status]);
 
   useEffect(() => {
-    applyFilters(cases, searchQuery, selectedStatus);
-  }, [searchQuery, selectedStatus, cases]);
+    applyFilters(cases, searchQuery, selectedStatus, sortOption);
+  }, [searchQuery, selectedStatus, sortOption, cases]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -216,19 +264,6 @@ export default function CasesScreen() {
     }
   };
 
-  const handleFilterPress = (status: CaseStatus | "All" | "Active") => {
-    setSelectedStatus(status);
-
-    const layout = chipLayouts.current[status];
-    if (layout && scrollViewRef.current) {
-      const targetX = layout.x - (scrollViewWidth / 2) + (layout.width / 2);
-      scrollViewRef.current.scrollTo({
-        x: Math.max(0, targetX),
-        animated: true,
-      });
-    }
-  };
-
   const handleDeleteCase = async (caseId: string) => {
     try {
       await deleteCase(caseId);
@@ -244,6 +279,13 @@ export default function CasesScreen() {
     setSelectedCase(caseItem);
     setShowFullHistory(false);
     setIsStatusModalVisible(true);
+  };
+
+  const handleOpenReminderModal = (caseItem: PropertyCase) => {
+    setSelectedCase(caseItem);
+    setReminderNote(caseItem.reminderNote || "");
+    setReminderDays(3);
+    setIsReminderModalVisible(true);
   };
 
   const handleUpdateStatus = async (newStatus: CaseStatus) => {
@@ -361,7 +403,7 @@ export default function CasesScreen() {
         paddingTop: headerPaddingTop,
       }}
     >
-      <View style={{ width: "100%", maxWidth: contentMaxWidth }}>
+      <View style={{ width: "100%", maxWidth: contentMaxWidth, flex: 1 }}>
         {/* Header */}
         <View
           style={{
@@ -432,33 +474,74 @@ export default function CasesScreen() {
         </View>
       </View>
 
-      {/* Horizontal Status Chips Carousel */}
-      <View style={{ marginBottom: SPACING.md }}>
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
-          onLayout={(e) => setScrollViewWidth(e.nativeEvent.layout.width)}
+      {/* Compact Status Filter */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: SPACING.lg,
+          marginBottom: SPACING.md,
+          gap: SPACING.sm,
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+          <MaterialCommunityIcons name="filter-variant" size={18} color={themeColors.maroonPrimary} />
+          <Text style={{ color: themeColors.textMuted, fontSize: 12, fontWeight: "700" }}>
+            {t("filterCases")}
+          </Text>
+        </View>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setIsFilterModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${t("filterCases")}: ${getStatusLabel(selectedStatus)}`}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            borderWidth: 1,
+            borderRadius: 999,
+            borderColor: selectedStatus !== "All" ? themeColors.maroonPrimary : themeColors.borderColor,
+            backgroundColor: selectedStatus !== "All" ? themeColors.maroonLight : themeColors.surfaceContainer,
+            paddingHorizontal: 12,
+            paddingVertical: 7,
+          }}
         >
-          {FILTER_STATUSES.map((status) => (
-            <View
-              key={status}
-              onLayout={(e) => {
-                chipLayouts.current[status] = {
-                  x: e.nativeEvent.layout.x,
-                  width: e.nativeEvent.layout.width,
-                };
-              }}
-            >
-              <FilterChip
-                label={status === "All" ? t("all") : status}
-                isActive={selectedStatus === status}
-                onPress={() => handleFilterPress(status)}
-              />
-            </View>
-          ))}
-        </ScrollView>
+          <Text style={{ color: selectedStatus !== "All" ? themeColors.maroonPrimary : themeColors.textSecondary, fontSize: 12, fontWeight: "800" }}>
+            {getStatusLabel(selectedStatus)}
+          </Text>
+          <MaterialCommunityIcons name="chevron-down" size={16} color={themeColors.textMuted} />
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: SPACING.lg, marginBottom: SPACING.md }}>
+        <Text style={{ fontSize: 13, fontWeight: "800", color: themeColors.textPrimary }}>
+          {filteredCases.length} {filteredCases.length === 1 ? "case" : "cases"}
+        </Text>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => setIsSortModalVisible(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Sort cases by ${CASE_SORT_OPTIONS.find((option) => option.id === sortOption)?.label}`}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            borderWidth: 1,
+            borderRadius: 999,
+            paddingHorizontal: 10,
+            paddingVertical: 6,
+            backgroundColor: themeColors.surfaceContainer,
+            borderColor: themeColors.borderColor,
+          }}
+        >
+          <MaterialCommunityIcons name="sort-calendar-ascending" size={16} color={themeColors.textMuted} />
+          <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textSecondary }}>
+            {CASE_SORT_OPTIONS.find((option) => option.id === sortOption)?.label}
+          </Text>
+          <MaterialCommunityIcons name="chevron-down" size={16} color={themeColors.textMuted} />
+        </TouchableOpacity>
       </View>
 
       {/* Cases List */}
@@ -470,10 +553,12 @@ export default function CasesScreen() {
         <FlatList
           data={filteredCases}
           keyExtractor={(item) => item.id}
+          style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
             paddingHorizontal: SPACING.lg,
-            paddingBottom: 130,
+            paddingBottom: Math.max(insets.bottom, 24) + 104,
           }}
+          scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -488,6 +573,7 @@ export default function CasesScreen() {
               onPress={() => router.push(`/case/${item.id}` as any)}
               onDelete={handleDeleteCase}
               onStatusPress={handleOpenStatusModal}
+              onReminderPress={handleOpenReminderModal}
             />
           )}
           ListEmptyComponent={
@@ -555,6 +641,172 @@ export default function CasesScreen() {
       >
         <MaterialCommunityIcons name="plus" size={30} color="#FFF" />
       </TouchableOpacity>
+
+      <Modal
+        visible={isFilterModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setIsFilterModalVisible(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingHorizontal: 18,
+              paddingTop: 12,
+              paddingBottom: 28,
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: themeColors.borderColor,
+                alignSelf: "center",
+                marginBottom: 12,
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "700",
+                color: themeColors.textPrimary,
+                marginBottom: 12,
+                textAlign: "center",
+              }}
+            >
+              {t("filterCases")}
+            </Text>
+            {FILTER_STATUSES.map((option) => {
+              const active = selectedStatus === option;
+              return (
+                <TouchableOpacity
+                  key={option}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSelectedStatus(option);
+                    setIsFilterModalVisible(false);
+                  }}
+                  style={{
+                    minHeight: 46,
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    paddingHorizontal: 14,
+                    marginBottom: 8,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: active ? themeColors.maroonLight : "transparent",
+                    borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "700",
+                      color: active ? themeColors.maroonPrimary : themeColors.textSecondary,
+                    }}
+                  >
+                    {getStatusLabel(option)}
+                  </Text>
+                  {active ? <MaterialCommunityIcons name="check" size={18} color={themeColors.maroonPrimary} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal
+        visible={isSortModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsSortModalVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setIsSortModalVisible(false)}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingHorizontal: 18,
+              paddingTop: 12,
+              paddingBottom: 28,
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: themeColors.borderColor,
+                alignSelf: "center",
+                marginBottom: 12,
+              }}
+            />
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "700",
+                color: themeColors.textPrimary,
+                marginBottom: 12,
+                textAlign: "center",
+              }}
+            >
+              Sort cases
+            </Text>
+            {CASE_SORT_OPTIONS.map((option) => {
+              const active = sortOption === option.id;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setSortOption(option.id);
+                    setIsSortModalVisible(false);
+                  }}
+                  style={{
+                    minHeight: 46,
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    paddingHorizontal: 14,
+                    marginBottom: 8,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: active ? themeColors.maroonLight : "transparent",
+                    borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: active ? themeColors.maroonPrimary : themeColors.textSecondary }}>
+                    {option.label}
+                  </Text>
+                  {active ? <MaterialCommunityIcons name="check" size={18} color={themeColors.maroonPrimary} /> : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* 1. Status Selection Action Sheet Modal */}
       <Modal
