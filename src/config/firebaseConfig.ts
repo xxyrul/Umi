@@ -28,26 +28,16 @@ function requireEnv(key: string, value: string | undefined): string {
 
 // Keep these as direct property accesses: Expo statically inlines
 // process.env.EXPO_PUBLIC_* references into native production bundles.
-export const FIREBASE_API_KEY = requireEnv(
-  "EXPO_PUBLIC_FIREBASE_API_KEY",
-  process.env.EXPO_PUBLIC_FIREBASE_API_KEY
-);
-export const FIREBASE_PROJECT_ID = requireEnv(
-  "EXPO_PUBLIC_FIREBASE_PROJECT_ID",
-  process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID
-);
-export const FIREBASE_STORAGE_BUCKET = requireEnv(
-  "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET",
-  process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
-);
-export const FIREBASE_MESSAGING_SENDER_ID = requireEnv(
-  "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
-  process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-);
-export const FIREBASE_APP_ID = requireEnv(
-  "EXPO_PUBLIC_FIREBASE_APP_ID",
-  process.env.EXPO_PUBLIC_FIREBASE_APP_ID
-);
+export const FIREBASE_API_KEY =
+  process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyAdBYUf_RcZHPrVD1tsAiQt7q1l7lbbLp0";
+export const FIREBASE_PROJECT_ID =
+  process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "umiren-d6a66";
+export const FIREBASE_STORAGE_BUCKET =
+  process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "umiren-d6a66.firebasestorage.app";
+export const FIREBASE_MESSAGING_SENDER_ID =
+  process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "975924997372";
+export const FIREBASE_APP_ID =
+  process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:975924997372:android:bea9520b748ca68f70fb79";
 
 /**
  * This is a public OAuth client identifier, not a credential. It must match

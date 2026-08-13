@@ -7,6 +7,7 @@ import {
   FlatList,
   Image,
   Share,
+  Alert,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
@@ -113,7 +114,7 @@ export default function MasterListingScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { themeColors, t } = useAppSettings();
+  const { themeColors, t, language } = useAppSettings();
   const contentMaxWidth = Math.min(width, 760);
   const fabRight = Math.max(20, (width - contentMaxWidth) / 2 + 20);
 
@@ -126,6 +127,7 @@ export default function MasterListingScreen() {
   const [activeSegment, setActiveSegment] = useState<ListingSegment>("mine");
   const [sortOption, setSortOption] = useState<ListingSortOption>("newest");
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
+  const [statusModalListing, setStatusModalListing] = useState<{ id: string; currentStatus: string; tajuk: string } | null>(null);
 
   // Buyer criteria filters
   const [showCriteria, setShowCriteria] = useState(false);
@@ -302,6 +304,10 @@ export default function MasterListingScreen() {
   const filteredListings = listings.filter((item: PropertyListing) => {
     if (activeSegment === "mine" && !isListingOwnedByUser(item, currentUserId)) return false;
 
+    // Draft listings are private — only visible to their owner
+    const rawStatus = (item.status || "").toString().toLowerCase().trim();
+    if (rawStatus === "draft" && !isListingOwnedByUser(item, currentUserId)) return false;
+
     if (activeFilter !== "Semua") {
       const status = (item.status || "").toString().toLowerCase().trim();
       if (activeFilter === "Sold" && status !== "terjual" && status !== "sold") return false;
@@ -341,11 +347,16 @@ export default function MasterListingScreen() {
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase().trim();
-      const matchTajuk = (item.tajuk || "").toLowerCase().includes(q);
-      const matchAlamat = (item.alamat || "").toLowerCase().includes(q);
-      const matchNegeri = (item.negeri || "").toLowerCase().includes(q);
-      return matchTajuk || matchAlamat || matchNegeri;
+      const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      const haystack = [
+        item.tajuk || "",
+        item.alamat || "",
+        item.negeri || "",
+        item.jenis || "",
+        item.namaOwner || "",
+      ].join(" ").toLowerCase();
+      // ALL tokens must be present somewhere in the combined fields
+      return tokens.every((token) => haystack.includes(token));
     }
     return true;
   });
@@ -380,15 +391,41 @@ export default function MasterListingScreen() {
     }
   };
 
-  const renderStatusBadge = (status: string) => {
+  const handleSelectStatus = async (newStatus: "Aktif" | "Booking" | "Sold" | "Draft") => {
+    if (!statusModalListing) return;
+    const { id } = statusModalListing;
+    setStatusModalListing(null);
+
+    // Optimistic UI update
+    setListings((prev) =>
+      prev.map((l) => (l.id === id ? { ...l, status: newStatus as any } : l))
+    );
+
+    try {
+      const now = new Date().toISOString();
+      await Promise.all([
+        firestore().collection("publicListings").doc(id).update({ status: newStatus, updatedAt: now }).catch(() => {}),
+        firestore().collection("listings").doc(id).update({ status: newStatus, updatedAt: now }).catch(() => {}),
+      ]);
+    } catch (err) {
+      console.error("Error updating listing status:", err);
+    }
+  };
+
+  const renderStatusBadge = (item: PropertyListing, isOwner: boolean) => {
+    const status = item.status || "Aktif";
     let bg = themeColors.statusAktifBg;
     let text = themeColors.statusAktifText;
-    let label = status;
+    let label: string = status;
     const normalizedStatus = status.toLowerCase().trim();
 
     if (normalizedStatus === "draft") {
       bg = themeColors.statusDraftBg;
       text = themeColors.statusDraftText;
+      label = "Draft";
+    } else if (normalizedStatus === "booking") {
+      bg = "rgba(245, 158, 11, 0.15)";
+      text = "#F59E0B";
       label = "Booking";
     } else if (normalizedStatus === "terjual" || normalizedStatus === "sold") {
       bg = themeColors.statusSoldBg;
@@ -400,11 +437,47 @@ export default function MasterListingScreen() {
       label = t("statusAktif");
     }
 
-    return (
-      <View style={[styles.statusBadge, { backgroundColor: bg }]}>
+    const badge = (
+      <View
+        style={[
+          styles.statusBadge,
+          {
+            backgroundColor: bg,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            paddingHorizontal: isOwner ? 10 : 8,
+            paddingVertical: 5,
+            borderRadius: 8,
+          },
+        ]}
+      >
         <Text style={[styles.statusText, { color: text }]}>{label}</Text>
+        {isOwner ? (
+          <MaterialCommunityIcons name="chevron-down" size={13} color={text} />
+        ) : null}
       </View>
     );
+
+    if (isOwner && item.id) {
+      return (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() =>
+            setStatusModalListing({
+              id: item.id,
+              currentStatus: label,
+              tajuk: item.tajuk || "",
+            })
+          }
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          {badge}
+        </TouchableOpacity>
+      );
+    }
+
+    return badge;
   };
 
   const renderListingCard = ({ item }: { item: PropertyListing }) => {
@@ -476,7 +549,7 @@ export default function MasterListingScreen() {
         </View>
 
         <View style={[styles.cardActionRow, { borderTopColor: themeColors.borderColor }]}>
-          {renderStatusBadge(item.status || "Aktif")}
+          {renderStatusBadge(item, isListingOwnedByUser(item, currentUserId))}
 
           <TouchableOpacity
             activeOpacity={0.8}
@@ -946,6 +1019,185 @@ export default function MasterListingScreen() {
               );
             })}
           </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Quick Status Update Bottom Sheet Modal */}
+      <Modal
+        visible={!!statusModalListing}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatusModalListing(null)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            justifyContent: "flex-end",
+          }}
+          activeOpacity={1}
+          onPress={() => setStatusModalListing(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              borderTopWidth: 1,
+              borderColor: themeColors.borderColor,
+              paddingHorizontal: 20,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 16) + 12,
+            }}
+          >
+            {/* Drag handle */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: themeColors.borderColor,
+                alignSelf: "center",
+                marginBottom: 16,
+              }}
+            />
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
+                {language === "BM" ? "Kemaskini Status Listing" : "Update Listing Status"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setStatusModalListing(null)}
+                style={{
+                  padding: 6,
+                  borderRadius: 16,
+                  backgroundColor: themeColors.surfaceContainer,
+                }}
+              >
+                <MaterialCommunityIcons name="close" size={18} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {statusModalListing?.tajuk ? (
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 13,
+                  color: themeColors.textMuted,
+                  marginBottom: 16,
+                }}
+              >
+                {statusModalListing.tajuk}
+              </Text>
+            ) : (
+              <View style={{ marginBottom: 12 }} />
+            )}
+
+            {/* Options */}
+            <View style={{ gap: 10 }}>
+              {([
+                {
+                  value: "Aktif",
+                  label: language === "BM" ? "Aktif (Active)" : "Active",
+                  desc: language === "BM" ? "Listing boleh dilihat oleh semua ejen" : "Publicly visible to all agents",
+                  icon: "check-circle",
+                  color: "#10B981",
+                },
+                {
+                  value: "Booking",
+                  label: "Booking",
+                  desc: language === "BM" ? "Hartanah sedang dalam proses tempahan" : "Property is currently under booking",
+                  icon: "clock-outline",
+                  color: "#F59E0B",
+                },
+                {
+                  value: "Sold",
+                  label: language === "BM" ? "Terjual (Sold)" : "Sold",
+                  desc: language === "BM" ? "Urusniaga selesai atau hartanah terjual" : "Transaction completed or property sold",
+                  icon: "home-check",
+                  color: "#3B82F6",
+                },
+                {
+                  value: "Draft",
+                  label: "Draft",
+                  desc: language === "BM" ? "Hanya anda yang boleh melihat listing ini" : "Private — only visible to you",
+                  icon: "pencil-outline",
+                  color: "#6B7280",
+                },
+              ] as const).map((opt) => {
+                const currentNorm = (statusModalListing?.currentStatus || "").toLowerCase();
+                const isSelected =
+                  (opt.value === "Aktif" && (currentNorm === "aktif" || currentNorm === "active")) ||
+                  (opt.value === "Booking" && currentNorm === "booking") ||
+                  (opt.value === "Sold" && (currentNorm === "sold" || currentNorm === "terjual")) ||
+                  (opt.value === "Draft" && currentNorm === "draft");
+
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    activeOpacity={0.7}
+                    onPress={() => handleSelectStatus(opt.value)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 14,
+                      borderRadius: 14,
+                      borderWidth: isSelected ? 1.5 : 1,
+                      borderColor: isSelected ? opt.color : themeColors.borderColor,
+                      backgroundColor: isSelected ? `${opt.color}15` : themeColors.surfaceContainer,
+                      gap: 12,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        backgroundColor: `${opt.color}22`,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <MaterialCommunityIcons name={opt.icon as any} size={20} color={opt.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "700",
+                          color: isSelected ? opt.color : themeColors.textPrimary,
+                        }}
+                      >
+                        {opt.label}
+                      </Text>
+                      <Text
+                        style={{
+                          fontSize: 12,
+                          color: themeColors.textSecondary,
+                          marginTop: 2,
+                        }}
+                      >
+                        {opt.desc}
+                      </Text>
+                    </View>
+                    {isSelected ? (
+                      <MaterialCommunityIcons name="check-circle" size={20} color={opt.color} />
+                    ) : (
+                      <MaterialCommunityIcons name="radiobox-blank" size={20} color={themeColors.borderColor} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 

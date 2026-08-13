@@ -33,7 +33,7 @@ import { getCurrentUserProfile, signOut, getUserInitials } from "@/services/auth
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { firestore } from "@/services/firebase";
 import Constants from "expo-constants";
-import * as FileSystem from "expo-file-system/legacy";
+import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import {
@@ -317,6 +317,35 @@ export default function ProfileScreen() {
         return sum;
       }, 0);
 
+      // Helper to format date
+      const formatDate = (isoString: string | undefined | null) => {
+        if (!isoString) return "";
+        try {
+          const d = new Date(isoString);
+          if (isNaN(d.getTime())) return isoString;
+          const day = String(d.getDate()).padStart(2, "0");
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const year = d.getFullYear();
+          return `${day}/${month}/${year}`;
+        } catch {
+          return isoString;
+        }
+      };
+
+      // Helper to format CSV row with 9 columns (the max column count)
+      const csvRow = (cells: any[], totalCols = 9) => {
+        const cleanCells = cells.map(c => {
+          if (c === undefined || c === null) return '""';
+          // Replace all types of weird whitespace with regular spaces
+          const cleanStr = c.toString().replace(/[\u00A0\u202F]/g, " ").replace(/"/g, '""');
+          return `"${cleanStr}"`;
+        });
+        while (cleanCells.length < totalCols) {
+          cleanCells.push('""');
+        }
+        return cleanCells.join(",") + "\n";
+      };
+
       // Estimated commission (2% of total value)
       const estimatedCommission = totalValue * 0.02;
 
@@ -326,39 +355,56 @@ export default function ProfileScreen() {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
       });
-      const formattedValue = formatter.format(totalValue).replace("MYR", "RM");
-      const formattedCommission = formatter.format(estimatedCommission).replace("MYR", "RM");
+
+      // Clean special Unicode spaces from formatting
+      const rawValue = formatter.format(totalValue).replace("MYR", "RM");
+      const rawCommission = formatter.format(estimatedCommission).replace("MYR", "RM");
+      const formattedValue = rawValue.replace(/[\u00A0\u202F]/g, " ");
+      const formattedCommission = rawCommission.replace(/[\u00A0\u202F]/g, " ");
+
+      const rawGenTime = new Date().toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" });
+      const genTime = rawGenTime.replace(/[\u00A0\u202F]/g, " ");
 
       // Construct CSV content with UTF-8 BOM so Excel opens it with correct encoding
-      let csvContent = `\ufeff"DRT Master Listing CRM Report"\n`;
-      csvContent += `"Generated At","${new Date().toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" })} (MYT)"\n`;
-      csvContent += `"Total Active Cases","${activeCases}"\n`;
-      csvContent += `"Total Portfolio Value","${formattedValue}"\n`;
-      csvContent += `"Estimated Commission (2%)","${formattedCommission}"\n\n`;
+      let csvContent = "\ufeff";
+      csvContent += csvRow(["DRT Master Listing CRM Report"]);
+      csvContent += csvRow(["Generated At", `${genTime} (MYT)`]);
+      csvContent += csvRow(["Total Active Cases", String(activeCases)]);
+      csvContent += csvRow(["Total Portfolio Value", formattedValue]);
+      csvContent += csvRow(["Estimated Commission (2%)", formattedCommission]);
+      csvContent += csvRow([]); // Empty spacer row
 
-      csvContent += `"PROPERTY LISTINGS"\n`;
-      csvContent += `"ID","Title","Price","Address","State","Type","Status","Agent ID","Created At"\n`;
+      csvContent += csvRow(["PROPERTY LISTINGS"]);
+      csvContent += csvRow(["ID", "Title", "Price", "Address", "State", "Type", "Status", "Agent ID", "Created At"]);
       listings.forEach(l => {
         if (!l) return;
-        const cleanTitle = (l.tajuk || "").toString().replace(/"/g, '""');
-        const cleanHarga = (l.harga !== undefined && l.harga !== null) ? l.harga.toString().replace(/"/g, '""') : "";
-        const cleanAddress = (l.alamat || "").toString().replace(/"/g, '""');
-        const cleanState = (l.negeri || "").toString().replace(/"/g, '""');
-        const cleanType = (l.jenis || "").toString().replace(/"/g, '""');
-        const cleanStatus = (l.status || "").toString().replace(/"/g, '""');
-        csvContent += `"${l.id}","${cleanTitle}","${cleanHarga}","${cleanAddress}","${cleanState}","${cleanType}","${cleanStatus}","${l.agentId || ""}","${l.createdAt || ""}"\n`;
+        csvContent += csvRow([
+          l.id,
+          l.tajuk || "",
+          (l.harga !== undefined && l.harga !== null) ? l.harga.toString() : "",
+          l.alamat || "",
+          l.negeri || "",
+          l.jenis || "",
+          l.status || "",
+          l.agentId || "",
+          formatDate(l.createdAt),
+        ]);
       });
 
-      csvContent += `\n"PROPERTY CASES"\n`;
-      csvContent += `"ID","Case Name","Status","Vendor","Buyer","Finance","Created At"\n`;
+      csvContent += csvRow([]); // Empty spacer row
+      csvContent += csvRow(["PROPERTY CASES"]);
+      csvContent += csvRow(["ID", "Case Name", "Status", "Vendor", "Buyer", "Finance", "Created At"]);
       cases.forEach(c => {
         if (!c) return;
-        const cleanCaseName = (c.namaCase || "").toString().replace(/"/g, '""');
-        const cleanStatus = (c.status || "").toString().replace(/"/g, '""');
-        const cleanVendor = (c.vendorName || "").toString().replace(/"/g, '""');
-        const cleanBuyer = (c.buyerName || "").toString().replace(/"/g, '""');
-        const cleanFinance = (c.finance || "").toString().replace(/"/g, '""');
-        csvContent += `"${c.id}","${cleanCaseName}","${cleanStatus}","${cleanVendor}","${cleanBuyer}","${cleanFinance}","${c.createdAt || ""}"\n`;
+        csvContent += csvRow([
+          c.id,
+          c.namaCase || "",
+          c.status || "",
+          c.vendorName || "",
+          c.buyerName || "",
+          c.finance || "",
+          formatDate(c.createdAt),
+        ]);
       });
 
       // Show alert
@@ -374,10 +420,12 @@ export default function ProfileScreen() {
             text: language === "BM" ? "Kongsi / Simpan" : "Share / Save",
             onPress: async () => {
               try {
-                const fileUri = FileSystem.documentDirectory + "DRT_Master_Listing_Report.csv";
-                await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-                  encoding: FileSystem.EncodingType.UTF8,
-                });
+                const file = new ExpoFile(Paths.document, "DRT_Master_Listing_Report.csv");
+                if (!file.exists) {
+                  file.create();
+                }
+                file.write(csvContent);
+                const fileUri = file.uri;
 
                 if (await Sharing.isAvailableAsync()) {
                   await Sharing.shareAsync(fileUri, {

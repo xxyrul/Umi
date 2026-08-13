@@ -97,6 +97,7 @@ export default function TambahScreen() {
   const [jenis, setJenis] = useState("Residential / Teres");
   const [pegangan, setPegangan] = useState<PeganganType>("Freehold");
   const [lot, setLot] = useState<LotStatusType>("Bumi Lot");
+  const [listingStatus, setListingStatus] = useState<"Aktif" | "Booking" | "Sold" | "Draft">("Aktif");
   const [bilikTidur, setBilikTidur] = useState("3");
   const [bilikAir, setBilikAir] = useState("2");
   const [keluasan, setKeluasan] = useState("");
@@ -201,7 +202,10 @@ export default function TambahScreen() {
     if (!editId) return;
     const loadListingForEdit = async () => {
       try {
-        const doc = await firestore().collection("listings").doc(editId).get();
+        let doc = await firestore().collection("listings").doc(editId).get();
+        if (!doc.exists) {
+          doc = await firestore().collection("publicListings").doc(editId).get();
+        }
         if (doc.exists) {
           const data = doc.data() as PropertyListing;
           if (data.tajuk) setTajuk(data.tajuk);
@@ -211,6 +215,7 @@ export default function TambahScreen() {
           if (data.jenis) setJenis(data.jenis);
           if (data.pegangan) setPegangan(data.pegangan as PeganganType);
           if (data.lot) setLot(data.lot as LotStatusType);
+          if (data.status) setListingStatus(data.status as any);
           if (data.bilikTidur) setBilikTidur(String(data.bilikTidur));
           if (data.bilikAir) setBilikAir(String(data.bilikAir));
           if (data.keluasan) setKeluasan(String(data.keluasan));
@@ -295,16 +300,46 @@ export default function TambahScreen() {
         return;
       }
 
-      const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+      // Try last known position first (instant — uses cached GPS, no satellite wait)
+      let coords: { latitude: number; longitude: number } | null = null;
+      const lastKnown = await Location.getLastKnownPositionAsync({
+        maxAge: 5 * 60 * 1000, // Accept cached positions up to 5 minutes old
+        requiredAccuracy: 200,  // Accept up to 200m accuracy for last known
       });
 
-      const coords = {
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      };
-      setLocation(coords);
-      await autoDetectAddressAndState(coords.latitude, coords.longitude);
+      if (lastKnown) {
+        coords = {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+        };
+        setLocation(coords);
+        // Start reverse geocoding immediately with the cached position
+        autoDetectAddressAndState(coords.latitude, coords.longitude);
+      }
+
+      // Always attempt a fresh fix in the background (improves accuracy silently)
+      // If no lastKnown, this is the blocking call the user waits for
+      try {
+        const freshLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          timeInterval: 8000,   // Don't wait longer than 8s for a fresh fix
+        });
+        const freshCoords = {
+          latitude: freshLoc.coords.latitude,
+          longitude: freshLoc.coords.longitude,
+        };
+        // Only update if meaningfully different from last known (> 50m)
+        const shouldUpdate = !coords ||
+          Math.abs(freshCoords.latitude - coords.latitude) > 0.0005 ||
+          Math.abs(freshCoords.longitude - coords.longitude) > 0.0005;
+        if (shouldUpdate) {
+          setLocation(freshCoords);
+          await autoDetectAddressAndState(freshCoords.latitude, freshCoords.longitude);
+        }
+      } catch {
+        // Fresh fix failed or timed out — that's fine if we already have lastKnown
+        if (!coords) throw new Error("Could not obtain GPS location. Please try again outdoors.");
+      }
     } catch (err: any) {
       console.error("Location Pinning Error:", err);
       Alert.alert("Location Error", err?.message || "Failed to pin current GPS location.");
@@ -312,6 +347,7 @@ export default function TambahScreen() {
       setIsFetchingLocation(false);
     }
   };
+
 
   // Pick Images
   const handlePickImages = async () => {
@@ -378,6 +414,7 @@ export default function TambahScreen() {
     setJenis("Residential / Teres");
     setPegangan("Freehold");
     setLot("Bumi Lot");
+    setListingStatus("Aktif");
     setBilikTidur("3");
     setBilikAir("2");
     setKeluasan("");
@@ -422,7 +459,7 @@ export default function TambahScreen() {
         namaOwner: namaOwner.trim(),
         telOwner: telOwner.trim(),
         navLink: navLink.trim(),
-        status: "Aktif" as const,
+        status: listingStatus,
       };
 
       const files = {
@@ -465,7 +502,7 @@ export default function TambahScreen() {
   };
 
   const headerPaddingTop =
-    Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6;
+    Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 12;
 
   return (
     <KeyboardAvoidingView
@@ -473,8 +510,16 @@ export default function TambahScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {/* Header */}
-      <View style={[styles.header, { paddingTop: headerPaddingTop, borderBottomColor: themeColors.borderColor }]}>
-        <Text style={[styles.headerTitle, { color: themeColors.maroonPrimary }]}>
+      <View style={[styles.header, { paddingTop: headerPaddingTop, borderBottomColor: themeColors.borderColor, flexDirection: "row", alignItems: "center" }]}>
+        {(isEditMode || router.canGoBack()) && (
+          <TouchableOpacity
+            onPress={() => router.canGoBack() ? router.back() : router.replace("/(tabs)/listings")}
+            style={{ padding: 6, borderRadius: 20, backgroundColor: themeColors.surfaceContainer, marginRight: 12 }}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={22} color={themeColors.textPrimary} />
+          </TouchableOpacity>
+        )}
+        <Text style={[styles.headerTitle, { color: themeColors.maroonPrimary, flex: 1 }]}>
           {isEditMode ? t("editListing") : t("addListing")}
         </Text>
       </View>
@@ -715,10 +760,60 @@ export default function TambahScreen() {
           style={[styles.input, { marginTop: 8, color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
         />
 
-        {/* Owner Details */}
+        {/* Listing Status */}
+        <Text style={[styles.sectionTitle, { color: themeColors.maroonPrimary }]}>
+          {language === "BM" ? "Status Listing" : "Listing Status"}
+        </Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
+          {([
+            { value: "Aktif",   label: language === "BM" ? "Aktif" : "Active",  icon: "check-circle",       color: "#10B981" },
+            { value: "Booking", label: "Booking",                                 icon: "clock-outline",      color: "#F59E0B" },
+            { value: "Sold",    label: language === "BM" ? "Terjual" : "Sold",    icon: "home-check",         color: "#3B82F6" },
+            { value: "Draft",   label: "Draft",                                   icon: "pencil-outline",     color: "#6B7280" },
+          ] as const).map((opt) => {
+            const isActive = listingStatus === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                onPress={() => setListingStatus(opt.value)}
+                style={[
+                  {
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingHorizontal: 16,
+                    paddingVertical: 12,
+                    borderRadius: 10,
+                    borderWidth: 2,
+                    flex: 1,
+                    minWidth: "45%",
+                    justifyContent: "center",
+                    borderColor: isActive ? opt.color : themeColors.borderColor,
+                    backgroundColor: isActive ? `${opt.color}18` : themeColors.cardBackground,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={opt.icon as any}
+                  size={18}
+                  color={isActive ? opt.color : themeColors.textMuted}
+                />
+                <Text style={{
+                  fontWeight: "700",
+                  fontSize: 14,
+                  color: isActive ? opt.color : themeColors.textSecondary,
+                }}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Agent Details */}
         <Text style={[styles.sectionTitle, { color: themeColors.maroonPrimary }]}>{t("ownerDetails")}</Text>
         <TextInput
-          placeholder={t("ownerNamePlaceholder") || "Nama Owner"}
+          placeholder={t("ownerNamePlaceholder") || "Nama Ejen"}
           placeholderTextColor={themeColors.textMuted}
           value={namaOwner}
           onChangeText={setNamaOwner}
@@ -727,7 +822,7 @@ export default function TambahScreen() {
         />
 
         <TextInput
-          placeholder={t("ownerPhonePlaceholder") || "No. Telefon Owner"}
+          placeholder={t("ownerPhonePlaceholder") || "No. Telefon Ejen"}
           placeholderTextColor={themeColors.textMuted}
           value={telOwner}
           onChangeText={setTelOwner}

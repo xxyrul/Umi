@@ -143,7 +143,7 @@ export default function CalculatorScreen() {
           {
             backgroundColor: themeColors.cardBackground,
             borderBottomColor: themeColors.borderColor,
-            paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6,
+            paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 12,
           },
         ]}
       >

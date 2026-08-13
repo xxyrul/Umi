@@ -19,45 +19,45 @@ import {
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-Sentry.init({
-  dsn: 'https://5f6ba69eb0cba92e13ad453f2fb6c628@o4511887279587328.ingest.de.sentry.io/4511887297806416',
-
-  // Do NOT send PII (IP addresses, cookies, user identifiers, etc.) to Sentry.
-  sendDefaultPii: false,
-
-  // Configure Session Replay with masking enabled to avoid capturing sensitive fields.
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
-  integrations: [
-    Sentry.mobileReplayIntegration({
-      // Mask all text and images by default to prevent PII capture in session recordings.
-      maskAllText: true,
-      maskAllImages: true,
-    }),
-    Sentry.feedbackIntegration(),
-  ],
-
-  // Strip sensitive fields before events are transmitted to Sentry.
-  beforeSend(event) {
-    // Remove user identity fields
-    if (event.user) {
-      delete event.user.ip_address;
-      delete event.user.email;
-      delete event.user.username;
-      delete event.user.id;
-    }
-    // Remove request-level data that may contain credentials or session tokens
-    if (event.request) {
-      delete event.request.cookies;
-      delete event.request.headers;
-      delete event.request.env;
-    }
-    return event;
-  },
-
-  // uncomment the line below to enable Spotlight (https://spotlightjs.com)
-  // spotlight: __DEV__,
-});
+// Sentry.init({
+//   dsn: 'https://5f6ba69eb0cba92e13ad453f2fb6c628@o4511887279587328.ingest.de.sentry.io/4511887297806416',
+// 
+//   // Do NOT send PII (IP addresses, cookies, user identifiers, etc.) to Sentry.
+//   sendDefaultPii: false,
+// 
+//   // Configure Session Replay with masking enabled to avoid capturing sensitive fields.
+//   replaysSessionSampleRate: 0.1,
+//   replaysOnErrorSampleRate: 1,
+//   integrations: [
+//     Sentry.mobileReplayIntegration({
+//       // Mask all text and images by default to prevent PII capture in session recordings.
+//       maskAllText: true,
+//       maskAllImages: true,
+//     }),
+//     Sentry.feedbackIntegration(),
+//   ],
+// 
+//   // Strip sensitive fields before events are transmitted to Sentry.
+//   beforeSend(event) {
+//     // Remove user identity fields
+//     if (event.user) {
+//       delete event.user.ip_address;
+//       delete event.user.email;
+//       delete event.user.username;
+//       delete event.user.id;
+//     }
+//     // Remove request-level data that may contain credentials or session tokens
+//     if (event.request) {
+//       delete event.request.cookies;
+//       delete event.request.headers;
+//       delete event.request.env;
+//     }
+//     return event;
+//   },
+// 
+//   // uncomment the line below to enable Spotlight (https://spotlightjs.com)
+//   // spotlight: __DEV__,
+// });
 
 function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolean }) {
   const segments = useSegments() as string[];
@@ -426,4 +426,4 @@ function RootLayout() {
   );
 }
 
-export default Sentry.wrap(RootLayout);
+export default RootLayout;
