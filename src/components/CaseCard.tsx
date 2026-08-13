@@ -1,9 +1,9 @@
 import React from "react";
-import { View, Text, TouchableOpacity, Alert } from "react-native";
+import { View, Text, TouchableOpacity, Alert, Linking } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SPACING } from "@/constants/theme";
 import { StatusBadge } from "./StatusBadge";
-import type { PropertyCase } from "@/types/case";
+import type { PropertyCase, CaseStatus } from "@/types/case";
 import { useAppSettings } from "@/context/AppSettingsContext";
 
 interface CaseCardProps {
@@ -11,9 +11,18 @@ interface CaseCardProps {
   onPress?: () => void;
   onDelete?: (caseId: string) => void;
   onStatusPress?: (caseItem: PropertyCase) => void;
+  onReminderPress?: (caseItem: PropertyCase) => void;
 }
 
-export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress }: CaseCardProps) {
+const CASE_PROGRESS_STAGES: CaseStatus[] = [
+  "Viewing",
+  "Booking Paid",
+  "Loan Approved",
+  "SPA Signed",
+  "Completed",
+];
+
+export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress, onReminderPress }: CaseCardProps) {
   const { themeColors, language, t } = useAppSettings();
 
   const handleLongPress = () => {
@@ -46,6 +55,110 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress }: C
 
   const vendorDisplay = caseItem.vendorName || caseItem.clientName || "—";
   const buyerDisplay = caseItem.buyerName || "—";
+  const currentStageIndex = CASE_PROGRESS_STAGES.indexOf(caseItem.status);
+
+  const getStatusLabel = (status: CaseStatus) => {
+    const labels: Record<CaseStatus, string> = {
+      Viewing: t("statusViewing"),
+      "Booking Paid": t("statusBookingPaid"),
+      "Loan Approved": t("statusLoanApproved"),
+      "SPA Signed": t("statusSpaSigned"),
+      Completed: t("statusCompleted"),
+      Cancelled: t("statusCancelled"),
+      Pending: t("statusPending"),
+      Review: t("statusReview"),
+    };
+    return labels[status];
+  };
+
+  const formatReminderDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleString(language === "BM" ? "ms-MY" : "en-MY", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const handleCall = (phone?: string) => {
+    if (!phone) {
+      Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
+      return;
+    }
+    const cleanPhone = phone.replace(/[^0-9+]/g, "");
+    Linking.openURL(`tel:${cleanPhone}`).catch(() => {
+      Alert.alert(t("errorTitle"), t("callFailed"));
+    });
+  };
+
+  const handleWhatsApp = (phone?: string, name?: string) => {
+    if (!phone) {
+      Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
+      return;
+    }
+    let cleanPhone = phone.replace(/[^0-9]/g, "");
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = `60${cleanPhone.slice(1)}`;
+    }
+    const message = encodeURIComponent(
+      `Salam / Hai ${name || "Client"}, saya berkenaan kes hartanah anda: "${caseItem.namaCase}".`,
+    );
+    Linking.openURL(`https://wa.me/${cleanPhone}?text=${message}`).catch(() => {
+      Alert.alert(t("errorTitle"), t("waFailed"));
+    });
+  };
+
+  const renderPartyActions = (phone: string | undefined, name: string) => (
+    <View style={{ flexDirection: "row", gap: 6, marginTop: 7 }}>
+      <TouchableOpacity
+        activeOpacity={0.75}
+        disabled={!phone}
+        onPress={(event) => {
+          event.stopPropagation();
+          handleCall(phone);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${t("callLabel")} ${name}`}
+        style={{
+          width: 34,
+          height: 30,
+          borderRadius: 8,
+          backgroundColor: phone ? themeColors.maroonLight : themeColors.surfaceContainerLow,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: phone ? 1 : 0.55,
+        }}
+      >
+        <MaterialCommunityIcons name="phone-outline" size={15} color={themeColors.maroonPrimary} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        activeOpacity={0.75}
+        disabled={!phone}
+        onPress={(event) => {
+          event.stopPropagation();
+          handleWhatsApp(phone, name);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${t("whatsappLabel")} ${name}`}
+        style={{
+          width: 34,
+          height: 30,
+          borderRadius: 8,
+          backgroundColor: phone ? "#D1FAE5" : themeColors.surfaceContainerLow,
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: phone ? 1 : 0.55,
+        }}
+      >
+        <MaterialCommunityIcons name="whatsapp" size={16} color="#047857" />
+      </TouchableOpacity>
+    </View>
+  );
 
   return (
     <TouchableOpacity
@@ -128,7 +241,7 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress }: C
             }}
           >
             <Text style={{ fontSize: 10, fontWeight: "700", color: "#F59E0B", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
-              Vendor
+              {t("vendorLabel")}
             </Text>
             <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }} numberOfLines={1}>
               {vendorDisplay}
@@ -138,6 +251,7 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress }: C
                 {caseItem.vendorPhone}
               </Text>
             ) : null}
+            {renderPartyActions(caseItem.vendorPhone, vendorDisplay)}
           </View>
 
           {/* Buyer */}
@@ -152,7 +266,7 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress }: C
             }}
           >
             <Text style={{ fontSize: 10, fontWeight: "700", color: "#10B981", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>
-              Buyer
+              {t("buyerLabel")}
             </Text>
             <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }} numberOfLines={1}>
               {buyerDisplay}
@@ -162,29 +276,82 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress }: C
                 {caseItem.buyerPhone}
               </Text>
             ) : null}
+            {renderPartyActions(caseItem.buyerPhone, buyerDisplay)}
           </View>
         </View>
 
-        {/* Status history log entry */}
-        {caseItem.statusHistory && caseItem.statusHistory.length > 0 && (
-          <View
-            style={{
-              marginTop: 10,
-              backgroundColor: themeColors.surfaceContainer,
-              borderRadius: 8,
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <MaterialCommunityIcons name="history" size={14} color={themeColors.textMuted} />
-            <Text style={{ fontSize: 11, color: themeColors.textMuted, flex: 1 }} numberOfLines={1}>
-              {caseItem.statusHistory[caseItem.statusHistory.length - 1]}
-            </Text>
+        {currentStageIndex >= 0 ? (
+          <View style={{ marginTop: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={{ color: themeColors.textMuted, fontSize: 11, fontWeight: "700" }}>
+                {t("currentStage")}
+              </Text>
+              <Text style={{ color: themeColors.maroonPrimary, fontSize: 11, fontWeight: "800" }}>
+                {currentStageIndex + 1}/{CASE_PROGRESS_STAGES.length}
+              </Text>
+            </View>
+            <View style={{ flexDirection: "row", gap: 4 }}>
+              {CASE_PROGRESS_STAGES.map((stage, index) => (
+                <View
+                  key={stage}
+                  style={{
+                    flex: 1,
+                    height: 5,
+                    borderRadius: 3,
+                    backgroundColor:
+                      index <= currentStageIndex ? themeColors.maroonPrimary : themeColors.borderColor,
+                  }}
+                />
+              ))}
+            </View>
           </View>
-        )}
+        ) : null}
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={(event) => {
+            event.stopPropagation();
+            if (!caseItem.reminderDate) {
+              onReminderPress?.(caseItem);
+            }
+          }}
+          style={{
+            marginTop: 10,
+            backgroundColor: caseItem.reminderDate ? themeColors.accentSuccessLight : themeColors.surfaceContainer,
+            borderRadius: 8,
+            paddingVertical: 7,
+            paddingHorizontal: 10,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <MaterialCommunityIcons
+            name={caseItem.reminderDate ? "calendar-clock" : "calendar-plus-outline"}
+            size={15}
+            color={caseItem.reminderDate ? themeColors.accentSuccess : themeColors.textMuted}
+          />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 10, color: themeColors.textMuted, fontWeight: "700", textTransform: "uppercase" }}>
+              {t("followUpLabel")}
+            </Text>
+            <Text style={{ fontSize: 11, color: themeColors.textSecondary, fontWeight: "600", marginTop: 2 }} numberOfLines={1}>
+              {caseItem.reminderDate
+                ? `${t("followUpOn")}: ${formatReminderDate(caseItem.reminderDate)}`
+                : t("followUpNone")}
+            </Text>
+            {!caseItem.reminderDate ? (
+              <Text style={{ fontSize: 10, color: themeColors.maroonPrimary, fontWeight: "800", marginTop: 3 }}>
+                {t("addFollowUp")}
+              </Text>
+            ) : null}
+            {caseItem.reminderNote ? (
+              <Text style={{ fontSize: 10, color: themeColors.textMuted, marginTop: 2 }} numberOfLines={1}>
+                {caseItem.reminderNote}
+              </Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
 
         {/* Finance info + Large Touch Area Buttons */}
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12, gap: 6 }}>
