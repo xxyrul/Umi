@@ -20,7 +20,6 @@ export default function CalculatorScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { themeColors, t } = useAppSettings();
-  const headerTopPadding = Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 14;
 
   // Mode: "quick" vs "detailed"
   const [entryMode, setEntryMode] = useState<"quick" | "detailed">("quick");
@@ -144,20 +143,27 @@ export default function CalculatorScreen() {
           {
             backgroundColor: themeColors.cardBackground,
             borderBottomColor: themeColors.borderColor,
-            paddingTop: headerTopPadding,
+            paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6,
           },
         ]}
       >
         <TouchableOpacity
           onPress={() => router.back()}
-          style={[styles.headerIconButton, { backgroundColor: themeColors.surfaceContainer }]}
+          style={{
+            padding: 8,
+            borderRadius: 20,
+            backgroundColor: themeColors.surfaceContainer,
+            position: "absolute",
+            left: 16,
+            bottom: 8,
+            zIndex: 10,
+          }}
         >
           <MaterialCommunityIcons name="arrow-left" size={22} color={themeColors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: themeColors.maroonPrimary }]}>
           {t("dsrTitle")}
         </Text>
-        <View style={styles.headerRightSpacer} />
       </View>
 
       <ScrollView
@@ -552,27 +558,15 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-  },
-  headerIconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
     justifyContent: "center",
-  },
-  headerRightSpacer: {
-    width: 42,
-    height: 42,
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
-    flex: 1,
   },
   card: {
     borderRadius: 16,
