@@ -1,0 +1,2 @@
+- [Duplicate app trees](duplicate-app-trees.md) — two Expo Router screen trees exist; only the one resolved by the package entry runs, so verify before editing screens.
+- [Validated .replit edits](validated-replit-edits.md) — replace `.replit` through a schema-validated temporary candidate rather than direct edits.
