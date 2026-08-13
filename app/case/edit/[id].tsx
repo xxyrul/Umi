@@ -8,5 +8,5 @@ export default function CaseEditRoute() {
     return <Redirect href="/(tabs)/cases" />;
   }
 
-  return <Redirect href={{ pathname: "/case/form" as any, params: { caseId: id } }} />;
+  return <Redirect href={{ pathname: "/case/form", params: { caseId: id } }} />;
 }
