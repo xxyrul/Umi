@@ -69,6 +69,19 @@ service cloud.firestore {
       allow delete: if isAuthed() && isListingOwner(resource.data);
     }
 
+    match /publicListings/{listingId} {
+      // Signed-in agents may browse the safe listing projection. Sensitive
+      // owner documents remain in /listings and are owner-only.
+      allow read: if isAuthed();
+      allow create: if isAuthed()
+        && request.resource.data.agentId == request.auth.uid;
+      allow update: if isAuthed()
+        && resource.data.agentId == request.auth.uid
+        && request.resource.data.agentId == request.auth.uid;
+      allow delete: if isAuthed()
+        && resource.data.agentId == request.auth.uid;
+    }
+
     // Release announcement bookkeeping is written only by the trusted
     // server-side release notifier, which uses a service account and bypasses
     // these rules. Clients get no access.
