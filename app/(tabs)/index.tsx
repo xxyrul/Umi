@@ -285,7 +285,7 @@ export default function DashboardScreen() {
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
           <Text style={[styles.welcomeTitle, { color: themeColors.textPrimary }]}>
-            {t("greeting")}, {userProfile?.displayName ? userProfile.displayName.split(" ")[0] : "Azrul"} 👋
+            {t("greeting")}, {userProfile?.displayName ? userProfile.displayName.split(" ")[0] : "Agent"} 👋
           </Text>
           <Text style={[styles.welcomeSubtitle, { color: themeColors.textMuted }]}>
             {t("performanceSummary")}
