@@ -18,10 +18,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import firestore from "@react-native-firebase/firestore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { KeyboardAwareForm } from "@/components/KeyboardAwareForm";
 import { requestCalendarPermissions } from "@/services/calendar";
 import { requestNotificationPermissions } from "@/services/notifications";
 import { signInWithGoogle, initializeGoogleSignIn } from "@/services/auth";
@@ -37,16 +35,6 @@ export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [agentName, setAgentName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const scrollViewRef = React.useRef<ScrollView>(null);
-
-  const handleInputFocus = (offset: number) => {
-    requestAnimationFrame(() => {
-      scrollViewRef.current?.scrollTo({
-        y: offset,
-        animated: true,
-      });
-    });
-  };
 
   // Permission explanation modal state
   const [showPermissionModal, setShowPermissionModal] = useState(false);
@@ -106,22 +94,6 @@ export default function OnboardingScreen() {
   const completeOnboarding = async () => {
     try {
       await saveOnboardingCompleted(agentName);
-      const currentUser = await AsyncStorage.getItem("currentUserUid");
-      if (currentUser) {
-        try {
-          await firestore().collection("users").doc(currentUser).set(
-            { onboardingCompleted: true, displayName: agentName.trim() || "User", updatedAt: new Date().toISOString() },
-            { merge: true }
-          );
-        } catch (error: any) {
-          const msg = String(error?.code || error?.message || "");
-          if (msg.includes("permission-denied") || msg.includes("PERMISSION_DENIED")) {
-            console.warn("Firestore onboarding write denied; continuing locally.", error);
-          } else {
-            console.warn("Could not sync onboarding state to Firestore:", error);
-          }
-        }
-      }
       router.replace("/login");
     } catch (e) {
       console.error(e);
@@ -152,28 +124,8 @@ export default function OnboardingScreen() {
 
     try {
       setIsLoading(true);
-      const signedInUser = await signInWithGoogle();
-      await saveOnboardingCompleted(agentName || signedInUser.displayName || "User");
-      await AsyncStorage.setItem("currentUserUid", signedInUser.uid);
-
-      try {
-        await firestore().collection("users").doc(signedInUser.uid).set(
-          {
-            uid: signedInUser.uid,
-            displayName: signedInUser.displayName || agentName || "User",
-            onboardingCompleted: true,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      } catch (error: any) {
-        const msg = String(error?.code || error?.message || "");
-        if (msg.includes("permission-denied") || msg.includes("PERMISSION_DENIED")) {
-          console.warn("Firestore sync denied after Google sign-in; continuing locally.", error);
-        } else {
-          console.warn("Google sign-in profile sync failed:", error);
-        }
-      }
+      await saveOnboardingCompleted(agentName);
+      await signInWithGoogle();
       router.replace("/(tabs)");
     } catch (error: any) {
       console.error("Google Sign-In error:", error);
@@ -215,28 +167,8 @@ export default function OnboardingScreen() {
       // Try Google sign-in without permissions
       try {
         setIsLoading(true);
-        const signedInUser = await signInWithGoogle();
-        await saveOnboardingCompleted(agentName || signedInUser.displayName || "User");
-        await AsyncStorage.setItem("currentUserUid", signedInUser.uid);
-
-        try {
-          await firestore().collection("users").doc(signedInUser.uid).set(
-            {
-              uid: signedInUser.uid,
-              displayName: signedInUser.displayName || agentName || "User",
-              onboardingCompleted: true,
-              updatedAt: new Date().toISOString(),
-            },
-            { merge: true }
-          );
-        } catch (error: any) {
-          const msg = String(error?.code || error?.message || "");
-          if (msg.includes("permission-denied") || msg.includes("PERMISSION_DENIED")) {
-            console.warn("Firestore sync denied on skip-permission path; continuing locally.", error);
-          } else {
-            console.warn("Skip-permission user sync failed:", error);
-          }
-        }
+        await saveOnboardingCompleted(agentName);
+        await signInWithGoogle();
         router.replace("/(tabs)");
       } catch (error: any) {
         console.error("Google Sign-In error:", error);
@@ -294,8 +226,17 @@ export default function OnboardingScreen() {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAwareForm bottomPadding={180}>
-        <View style={{ paddingHorizontal: 20 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={{ flexGrow: 1 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
+        >
           {/* Step 0: Welcome */}
           {step === 0 && (
             <View style={styles.stepContainer}>
@@ -399,7 +340,6 @@ export default function OnboardingScreen() {
                   onChangeText={setAgentName}
                   autoFocus={step === 1}
                   returnKeyType="next"
-                  onFocus={() => handleInputFocus(220)}
                 />
               </View>
             </View>
@@ -470,8 +410,8 @@ export default function OnboardingScreen() {
               </TouchableOpacity>
             </View>
           )}
-        </View>
-      </KeyboardAwareForm>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Footer Navigation Buttons (Step 0 & 1 only) */}
       {step < 2 && (
