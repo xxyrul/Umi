@@ -3,6 +3,7 @@ import { View, Text } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { STATUS_CONFIG } from "@/constants/theme";
 import type { CaseStatus } from "@/types/case";
+import { useAppSettings } from "@/context/AppSettingsContext";
 
 interface StatusBadgeProps {
   status: CaseStatus;
@@ -10,10 +11,22 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
+  const { t } = useAppSettings();
   const config = STATUS_CONFIG[status];
   if (!config) {
     return null;
   }
+
+  const statusLabel = {
+    Viewing: t("statusViewing"),
+    "Booking Paid": t("statusBookingPaid"),
+    "Loan Approved": t("statusLoanApproved"),
+    "SPA Signed": t("statusSpaSigned"),
+    Completed: t("statusCompleted"),
+    Cancelled: t("statusCancelled"),
+    Pending: t("statusPending"),
+    Review: t("statusReview"),
+  }[status] || status;
 
   const sizeConfig = {
     sm: {
@@ -64,7 +77,7 @@ export function StatusBadge({ status, size = "md" }: StatusBadgeProps) {
           letterSpacing: 0.5,
         }}
       >
-        {status}
+        {statusLabel}
       </Text>
     </View>
   );
