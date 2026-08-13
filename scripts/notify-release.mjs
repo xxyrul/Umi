@@ -19,6 +19,7 @@
  */
 import { createSign } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 const MANIFEST_PATH = path.resolve("dist/releases/latest.json");
@@ -46,7 +47,7 @@ function loadServiceAccount() {
   // server credentials by mistake.
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
-    fail("FIREBASE_SERVICE_ACCOUNT is not set. Provide the service account JSON via the environment.");
+    return null;
   }
 
   let parsed;
@@ -67,6 +68,44 @@ function base64Url(input) {
 }
 
 async function getAccessToken(serviceAccount) {
+  if (!serviceAccount) {
+    // Fallback to active credentials from Firebase CLI login
+    const configPath = path.join(os.homedir(), ".config", "configstore", "firebase-tools.json");
+    let raw;
+    try {
+      raw = await readFile(configPath, "utf8");
+    } catch {
+      fail("FIREBASE_SERVICE_ACCOUNT is not set, and Firebase CLI config was not found. Please log in with 'firebase login' first.");
+    }
+    const parsed = JSON.parse(raw);
+    const tokenData = parsed.tokens;
+    const refreshToken = tokenData?.refresh_token || (tokenData?.active && tokenData.active.refresh_token);
+    if (!refreshToken) {
+      fail("No active credentials found in Firebase CLI config. Please run 'firebase login'.");
+    }
+
+    const clientId = "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com";
+    const clientSecret = "j9iVZfS8kkCEFUPaAeJV0sAi";
+
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+      }),
+    });
+
+    if (!response.ok) {
+      fail(`CLI token refresh failed with ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    return data.access_token;
+  }
+
   const issuedAt = Math.floor(Date.now() / 1000);
   const claims = {
     iss: serviceAccount.client_email,
@@ -318,7 +357,15 @@ async function main() {
   const serviceAccount = loadServiceAccount();
   const manifest = await readManifest();
   const accessToken = await getAccessToken(serviceAccount);
-  const projectId = serviceAccount.project_id;
+  
+  let projectId = serviceAccount?.project_id;
+  if (!projectId) {
+    try {
+      const rc = JSON.parse(await readFile(".firebaserc", "utf8"));
+      projectId = rc.projects?.default;
+    } catch {}
+    projectId = projectId || "umiren-d6a66";
+  }
 
   const shouldSend = await claimRelease(projectId, accessToken, manifest.versionCode);
   if (!shouldSend) {

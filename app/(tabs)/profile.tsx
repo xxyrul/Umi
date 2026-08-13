@@ -33,6 +33,8 @@ import { getCurrentUserProfile, signOut, getUserInitials } from "@/services/auth
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { firestore } from "@/services/firebase";
 import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 
 import {
   getAppLockEnabled,
@@ -299,13 +301,14 @@ export default function ProfileScreen() {
       const allListings = listingsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PropertyListing);
       const cases = casesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PropertyCase);
 
-      const listings = allListings.filter(l => l.userId === user.uid || l.agentId === user.uid);
+      const listings = allListings.filter(l => l && (l.userId === user.uid || l.agentId === user.uid));
 
       // Total active cases (e.g. cases that are not completed and not cancelled)
-      const activeCases = cases.filter(c => c.status !== "Completed" && c.status !== "Cancelled").length;
+      const activeCases = cases.filter(c => c && c.status !== "Completed" && c.status !== "Cancelled").length;
 
       // Total portfolio property value (sum of harga of active/aktif listings)
       const totalValue = listings.reduce((sum, l) => {
+        if (!l || l.harga === undefined || l.harga === null) return sum;
         const status = (l.status || "").toString().toLowerCase();
         if (status === "aktif" || status === "active" || status === "booking" || status === "under loan" || status === "under spa") {
           const val = parseFloat(l.harga.toString().replace(/[^0-9.]/g, '')) || 0;
@@ -326,8 +329,8 @@ export default function ProfileScreen() {
       const formattedValue = formatter.format(totalValue).replace("MYR", "RM");
       const formattedCommission = formatter.format(estimatedCommission).replace("MYR", "RM");
 
-      // Construct CSV content
-      let csvContent = `"DRT Master Listing CRM Report"\n`;
+      // Construct CSV content with UTF-8 BOM so Excel opens it with correct encoding
+      let csvContent = `\ufeff"DRT Master Listing CRM Report"\n`;
       csvContent += `"Generated At","${new Date().toLocaleString("en-MY", { timeZone: "Asia/Kuala_Lumpur" })} (MYT)"\n`;
       csvContent += `"Total Active Cases","${activeCases}"\n`;
       csvContent += `"Total Portfolio Value","${formattedValue}"\n`;
@@ -336,18 +339,26 @@ export default function ProfileScreen() {
       csvContent += `"PROPERTY LISTINGS"\n`;
       csvContent += `"ID","Title","Price","Address","State","Type","Status","Agent ID","Created At"\n`;
       listings.forEach(l => {
-        const cleanTitle = (l.tajuk || "").replace(/"/g, '""');
-        const cleanAddress = (l.alamat || "").replace(/"/g, '""');
-        csvContent += `"${l.id}","${cleanTitle}","${l.harga}","${cleanAddress}","${l.negeri}","${l.jenis}","${l.status}","${l.agentId}","${l.createdAt || ""}"\n`;
+        if (!l) return;
+        const cleanTitle = (l.tajuk || "").toString().replace(/"/g, '""');
+        const cleanHarga = (l.harga !== undefined && l.harga !== null) ? l.harga.toString().replace(/"/g, '""') : "";
+        const cleanAddress = (l.alamat || "").toString().replace(/"/g, '""');
+        const cleanState = (l.negeri || "").toString().replace(/"/g, '""');
+        const cleanType = (l.jenis || "").toString().replace(/"/g, '""');
+        const cleanStatus = (l.status || "").toString().replace(/"/g, '""');
+        csvContent += `"${l.id}","${cleanTitle}","${cleanHarga}","${cleanAddress}","${cleanState}","${cleanType}","${cleanStatus}","${l.agentId || ""}","${l.createdAt || ""}"\n`;
       });
 
       csvContent += `\n"PROPERTY CASES"\n`;
       csvContent += `"ID","Case Name","Status","Vendor","Buyer","Finance","Created At"\n`;
       cases.forEach(c => {
-        const cleanCaseName = (c.namaCase || "").replace(/"/g, '""');
-        const cleanVendor = (c.vendorName || "").replace(/"/g, '""');
-        const cleanBuyer = (c.buyerName || "").replace(/"/g, '""');
-        csvContent += `"${c.id}","${cleanCaseName}","${c.status}","${cleanVendor}","${cleanBuyer}","${c.finance}","${c.createdAt || ""}"\n`;
+        if (!c) return;
+        const cleanCaseName = (c.namaCase || "").toString().replace(/"/g, '""');
+        const cleanStatus = (c.status || "").toString().replace(/"/g, '""');
+        const cleanVendor = (c.vendorName || "").toString().replace(/"/g, '""');
+        const cleanBuyer = (c.buyerName || "").toString().replace(/"/g, '""');
+        const cleanFinance = (c.finance || "").toString().replace(/"/g, '""');
+        csvContent += `"${c.id}","${cleanCaseName}","${cleanStatus}","${cleanVendor}","${cleanBuyer}","${cleanFinance}","${c.createdAt || ""}"\n`;
       });
 
       // Show alert
@@ -363,21 +374,41 @@ export default function ProfileScreen() {
             text: language === "BM" ? "Kongsi / Simpan" : "Share / Save",
             onPress: async () => {
               try {
-                await Share.share({
-                  message: csvContent,
-                  title: "DRT Master Listing CRM Report",
+                const fileUri = FileSystem.documentDirectory + "DRT_Master_Listing_Report.csv";
+                await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+                  encoding: FileSystem.EncodingType.UTF8,
                 });
-              } catch (shareErr) {
+
+                if (await Sharing.isAvailableAsync()) {
+                  await Sharing.shareAsync(fileUri, {
+                    mimeType: "text/csv",
+                    dialogTitle: language === "BM" ? "Kongsi Laporan Kes Hartanah" : "Share Property Cases Report",
+                    UTI: "public.comma-separated-values-text",
+                  });
+                } else {
+                  await Share.share({
+                    message: csvContent,
+                    title: "DRT Master Listing CRM Report",
+                  });
+                }
+              } catch (shareErr: any) {
                 console.error("Error sharing report:", shareErr);
+                Alert.alert(
+                  language === "BM" ? "Ralat Perkongsian" : "Sharing Error",
+                  shareErr.message || JSON.stringify(shareErr)
+                );
               }
             }
           },
           { text: "OK", style: "cancel" }
         ]
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error generating export report:", err);
-      Alert.alert("Error", "Failed to generate export report.");
+      Alert.alert(
+        language === "BM" ? "Ralat" : "Error",
+        (language === "BM" ? "Gagal menjana laporan eksport: " : "Failed to generate export report: ") + (err.message || JSON.stringify(err))
+      );
     }
   };
 

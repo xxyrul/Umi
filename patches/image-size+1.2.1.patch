@@ -1,7 +1,7 @@
-diff --git a/node_modules/metro/node_modules/image-size/dist/types/heif.js b/node_modules/metro/node_modules/image-size/dist/types/heif.js
+diff --git a/node_modules/image-size/dist/types/heif.js b/node_modules/image-size/dist/types/heif.js
 index 7997d3f..b7e456f 100644
---- a/node_modules/metro/node_modules/image-size/dist/types/heif.js
-+++ b/node_modules/metro/node_modules/image-size/dist/types/heif.js
+--- a/node_modules/image-size/dist/types/heif.js
++++ b/node_modules/image-size/dist/types/heif.js
 @@ -1,40 +1,12 @@
  "use strict";
  Object.defineProperty(exports, "__esModule", { value: true });
@@ -49,10 +49,10 @@ index 7997d3f..b7e456f 100644
 +        throw new Error('HEIF parser disabled for security (GHSA-5p2g-fcmc-qvqq)');
      },
  };
-diff --git a/node_modules/metro/node_modules/image-size/dist/types/icns.js b/node_modules/metro/node_modules/image-size/dist/types/icns.js
+diff --git a/node_modules/image-size/dist/types/icns.js b/node_modules/image-size/dist/types/icns.js
 index f2bfafe..c94f766 100644
---- a/node_modules/metro/node_modules/image-size/dist/types/icns.js
-+++ b/node_modules/metro/node_modules/image-size/dist/types/icns.js
+--- a/node_modules/image-size/dist/types/icns.js
++++ b/node_modules/image-size/dist/types/icns.js
 @@ -6,7 +6,7 @@ const utils_1 = require("./utils");
   * ICNS Header
   *
@@ -103,10 +103,10 @@ index f2bfafe..c94f766 100644
              imageSize = getImageSize(imageHeader[0]);
              imageOffset += imageHeader[1];
              result.images.push(imageSize);
-diff --git a/node_modules/metro/node_modules/image-size/dist/types/jxl-stream.js b/node_modules/metro/node_modules/image-size/dist/types/jxl-stream.js
+diff --git a/node_modules/image-size/dist/types/jxl-stream.js b/node_modules/image-size/dist/types/jxl-stream.js
 index e73316b..8983ef6 100644
---- a/node_modules/metro/node_modules/image-size/dist/types/jxl-stream.js
-+++ b/node_modules/metro/node_modules/image-size/dist/types/jxl-stream.js
+--- a/node_modules/image-size/dist/types/jxl-stream.js
++++ b/node_modules/image-size/dist/types/jxl-stream.js
 @@ -1,45 +1,12 @@
  "use strict";
  Object.defineProperty(exports, "__esModule", { value: true });
@@ -159,10 +159,10 @@ index e73316b..8983ef6 100644
 +        throw new Error('JXL stream parser disabled for security (GHSA-5p2g-fcmc-qvqq)');
      },
  };
-diff --git a/node_modules/metro/node_modules/image-size/dist/types/jxl.js b/node_modules/metro/node_modules/image-size/dist/types/jxl.js
+diff --git a/node_modules/image-size/dist/types/jxl.js b/node_modules/image-size/dist/types/jxl.js
 index f557b0a..f506530 100644
---- a/node_modules/metro/node_modules/image-size/dist/types/jxl.js
-+++ b/node_modules/metro/node_modules/image-size/dist/types/jxl.js
+--- a/node_modules/image-size/dist/types/jxl.js
++++ b/node_modules/image-size/dist/types/jxl.js
 @@ -1,59 +1,12 @@
  "use strict";
  Object.defineProperty(exports, "__esModule", { value: true });
