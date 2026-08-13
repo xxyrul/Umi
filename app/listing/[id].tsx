@@ -14,45 +14,15 @@ import {
   Platform,
   StatusBar,
   useWindowDimensions,
-  BackHandler,
 } from "react-native";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import firestore from "@react-native-firebase/firestore";
-import auth from "@react-native-firebase/auth";
+import { firestore, auth } from "@/services/firebase";
 import type { PropertyListing } from "@/types/listing";
 import { THEME } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { addEventToNativeCalendar } from "@/services/calendar";
-
-const normalizeStatusText = (value?: string | null): string => (value ?? "").trim().toLowerCase();
-
-function getLocalizedListingStatus(status: unknown, t: (key: any) => string): string {
-  const raw = typeof status === "string" ? status.trim() : "";
-  const normalized = normalizeStatusText(raw);
-
-  if (!normalized) return t("statusAktif");
-  if (["active", "aktif", "available", "viewing"].includes(normalized)) return t("statusAktif");
-  if (["booking", "booked", "reserved", "reservation"].includes(normalized)) return t("statusBooking");
-  if (["sold", "terjual", "sold out", "sold-out"].includes(normalized)) return t("statusSold");
-  if (["draft", "pending draft"].includes(normalized)) return t("filterDraft");
-  if (["under loan"].includes(normalized)) return t("statusUnderLoan");
-  if (["under spa"].includes(normalized)) return t("statusUnderSpa");
-  if (["expired"].includes(normalized)) return t("statusExpired");
-
-  return raw || t("statusAktif");
-}
-
-function getCanonicalListingStatus(status: unknown): "Active" | "Booking" | "Sold" | "Draft" {
-  const raw = typeof status === "string" ? status.trim() : "";
-  const normalized = normalizeStatusText(raw);
-
-  if (["booking", "booked", "reserved", "reservation"].includes(normalized)) return "Booking";
-  if (["sold", "terjual", "sold out", "sold-out"].includes(normalized)) return "Sold";
-  if (["draft", "pending draft"].includes(normalized)) return "Draft";
-  return "Active";
-}
 
 function getListingImagesList(listing: any): string[] {
   if (!listing) return [];
@@ -135,37 +105,18 @@ export default function PropertyDetailScreen() {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { themeColors, t, language } = useAppSettings();
 
-  useFocusEffect(
-    React.useCallback(() => {
-      const onBackPress = () => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace("/(tabs)/listings");
-        }
-        return true; // handled
-      };
-
-      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
-
-      return () => {
-        subscription.remove();
-      };
-    }, [router])
-  );
-
   const [listing, setListing] = useState<PropertyListing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageLoading, setImageLoading] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
-  const [contactProfile, setContactProfile] = useState<{ name: string; phone: string }>({
-    name: "",
-    phone: "",
-  });
 
   const heroGalleryRef = useRef<ScrollView>(null);
   const fullScreenGalleryRef = useRef<ScrollView>(null);
+
+  const handleBackToListings = () => {
+    router.replace("/(tabs)/listings");
+  };
 
   const goToImage = (index: number, allImages: string[], animated: boolean = true) => {
     const safeIndex = Math.max(0, Math.min(index, allImages.length - 1));
@@ -204,109 +155,32 @@ export default function PropertyDetailScreen() {
     return () => unsubscribe();
   }, [id]);
 
-  useEffect(() => {
-    if (!listing) {
-      setContactProfile({ name: "", phone: "" });
-      return;
-    }
-
-    const fallbackName = listing.namaOwner || listing.authorName || "Owner";
-    const fallbackPhone = listing.telOwner || "";
-
-    const loadContactProfile = async () => {
-      try {
-        if (!listing.userId) {
-          setContactProfile({ name: fallbackName, phone: fallbackPhone });
-          return;
-        }
-
-        const userDoc = await firestore().collection("users").doc(listing.userId).get();
-        const userData = userDoc.exists ? (userDoc.data() as Record<string, any> | undefined) : undefined;
-
-        const nextName =
-          userData?.displayName ||
-          userData?.fullName ||
-          userData?.name ||
-          userData?.agentName ||
-          fallbackName;
-
-        const nextPhone =
-          userData?.phoneNumber ||
-          userData?.phone ||
-          userData?.mobile ||
-          userData?.agentPhone ||
-          fallbackPhone;
-
-        setContactProfile({
-          name: nextName || fallbackName,
-          phone: nextPhone || fallbackPhone,
-        });
-      } catch (error) {
-        console.warn("Failed to fetch listing contact profile:", error);
-        setContactProfile({ name: fallbackName, phone: fallbackPhone });
-      }
-    };
-
-    loadContactProfile();
-  }, [listing?.userId, listing?.namaOwner, listing?.authorName, listing?.telOwner]);
-
-  const normalizePhoneForWhatsApp = (rawPhone?: string) => {
-    if (!rawPhone) return "";
-    let phone = rawPhone.replace(/[^0-9]/g, "");
-    if (!phone) return "";
-    if (phone.startsWith("0")) {
-      phone = "60" + phone.slice(1);
-    }
-    return phone;
-  };
-
-  const currentUser = auth().currentUser;
-  const isOwner = Boolean(currentUser && listing?.userId && listing.userId === currentUser.uid);
-  const isCreator = Boolean(
-    currentUser &&
-      (
-        (listing?.userId && listing.userId === currentUser.uid) ||
-        (listing?.agentId && listing.agentId === currentUser.uid)
-      )
-  );
-  const contactLabel = isOwner ? t("ownerDetails") : "Listing Agent / REN Information";
-  const contactName = isOwner ? listing?.namaOwner || t("ownerNoName") : contactProfile.name || listing?.authorName || listing?.namaOwner || "Listing Agent";
-  const contactPhone = isOwner ? listing?.telOwner || t("ownerNoPhone") : contactProfile.phone || listing?.telOwner || "No phone available";
-  const callLabel = isOwner ? t("callOwner") : "Call Agent";
-  const whatsappLabel = isOwner ? t("whatsappOwner") : "WhatsApp Agent";
-
-  const handleCallContact = () => {
-    const phone = (isOwner ? listing?.telOwner : contactProfile.phone || listing?.telOwner) || "";
-    if (!phone) {
+  // Phone Call Handler
+  const handleCallOwner = () => {
+    if (!listing?.telOwner) {
       Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
       return;
     }
-
-    const cleanPhone = phone.replace(/[^0-9+]/g, "");
+    const cleanPhone = listing.telOwner.replace(/[^0-9+]/g, "");
     Linking.openURL(`tel:${cleanPhone}`).catch(() => {
       Alert.alert(t("errorTitle"), t("callFailed"));
     });
   };
 
   // WhatsApp Handler
-  const handleWhatsAppContact = () => {
-    const phone = (isOwner ? listing?.telOwner : contactProfile.phone || listing?.telOwner) || "";
-    if (!phone) {
+  const handleWhatsAppOwner = () => {
+    if (!listing?.telOwner) {
       Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
       return;
     }
-
-    const waPhone = normalizePhoneForWhatsApp(phone);
-    if (!waPhone) {
-      Alert.alert(t("noInfoTitle"), t("noPhoneMsg"));
-      return;
+    let phone = listing.telOwner.replace(/[^0-9]/g, "");
+    if (phone.startsWith("0")) {
+      phone = "60" + phone.slice(1);
     }
-
-    const WhatsAppContactName = isOwner ? listing?.namaOwner || "Owner" : contactProfile.name || listing?.authorName || "Listing Agent";
     const message = encodeURIComponent(
-      `Salam / Hai ${WhatsAppContactName}, saya berkenaan listing hartanah: "${listing?.tajuk || "property"}".`
+      `Salam / Hai ${listing.namaOwner || "Owner"}, saya berkenaan listing hartanah: "${listing.tajuk}".`
     );
-    const url = `https://wa.me/${waPhone}?text=${message}`;
+    const url = `https://wa.me/${phone}?text=${message}`;
     Linking.openURL(url).catch(() => {
       Alert.alert(t("waError"), t("waFailed"));
     });
@@ -451,7 +325,7 @@ export default function PropertyDetailScreen() {
               setIsLoading(true);
               await firestore().collection("listings").doc(id).delete();
               Alert.alert(t("successTitle"), t("listingDeleted"));
-              router.back();
+              handleBackToListings();
             } catch (err: any) {
               console.error("Failed to delete listing:", err);
               Alert.alert(t("errorTitle"), err?.message || "Failed to delete listing.");
@@ -478,7 +352,7 @@ export default function PropertyDetailScreen() {
         <MaterialCommunityIcons name="home-remove-outline" size={60} color={themeColors.maroonPrimary} />
         <Text style={[styles.notFoundTitle, { color: themeColors.textPrimary }]}>{t("noListingsFound")}</Text>
         <Text style={[styles.notFoundSub, { color: themeColors.textMuted }]}>{t("recordDeleted")}</Text>
-        <TouchableOpacity style={[styles.backBtn, { backgroundColor: themeColors.maroonPrimary }]} onPress={() => router.back()}>
+        <TouchableOpacity style={[styles.backBtn, { backgroundColor: themeColors.maroonPrimary }]} onPress={handleBackToListings}>
           <MaterialCommunityIcons name="arrow-left" size={18} color="#FFF" />
           <Text style={styles.backBtnText}>{t("goBack")}</Text>
         </TouchableOpacity>
@@ -490,21 +364,15 @@ export default function PropertyDetailScreen() {
   const hasImages = allImages.length > 0;
   const formattedPrice =
     typeof listing.harga === "number" ? listing.harga.toLocaleString() : listing.harga;
-  const rawListingStatus =
-    (listing as any).status ??
-    (listing as any).listingStatus ??
-    (listing as any).statusListing ??
-    (listing as any).propertyStatus;
-  const canonicalStatus = getCanonicalListingStatus(rawListingStatus);
-  const localizedStatus = getLocalizedListingStatus(rawListingStatus, t);
-  const statusColors =
-    canonicalStatus === "Booking"
-      ? { bg: themeColors.statusBookingBg, text: themeColors.statusBookingText }
-      : canonicalStatus === "Sold"
-        ? { bg: themeColors.statusSoldBg, text: themeColors.statusSoldText }
-        : canonicalStatus === "Draft"
-          ? { bg: themeColors.statusDraftBg, text: themeColors.statusDraftText }
-          : { bg: themeColors.statusAktifBg, text: themeColors.statusAktifText };
+
+  const currentUser = auth().currentUser;
+  const isCreator = Boolean(
+    currentUser &&
+      (
+        (listing.userId && listing.userId === currentUser.uid) ||
+        (listing.agentId && listing.agentId === currentUser.uid)
+      )
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
@@ -570,7 +438,7 @@ export default function PropertyDetailScreen() {
           {/* Floating Back Button */}
           <TouchableOpacity
             style={[styles.floatingBackButton, { top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6 }]}
-            onPress={() => router.back()}
+            onPress={handleBackToListings}
           >
             <MaterialCommunityIcons name="arrow-left" size={22} color={themeColors.maroonPrimary} />
           </TouchableOpacity>
@@ -639,9 +507,8 @@ export default function PropertyDetailScreen() {
           {/* HEADER SECTION */}
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
             <View style={styles.statusRow}>
-              <Text style={[styles.statusCaption, { color: themeColors.textSecondary }]}>Status</Text>
-              <View style={[styles.statusBadge, { backgroundColor: statusColors.bg }]}> 
-                <Text style={[styles.statusText, { color: statusColors.text }]}>{localizedStatus}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: themeColors.maroonPrimary }]}>
+                <Text style={styles.statusText}>{listing.status || "Aktif"}</Text>
               </View>
               {listing.jenis ? (
                 <View style={[styles.jenisBadge, { backgroundColor: themeColors.surfaceContainer }]}>
@@ -716,7 +583,8 @@ export default function PropertyDetailScreen() {
             </View>
           </View>
 
-          {isOwner && (
+          {/* LOCATION & NAVIGATION CARD — private to the listing creator */}
+          {isCreator && (
             <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
               <View style={styles.vaultTitleRow}>
                 <MaterialCommunityIcons name="navigation-variant-outline" size={22} color={themeColors.maroonPrimary} />
@@ -732,6 +600,7 @@ export default function PropertyDetailScreen() {
               </Text>
 
               <View style={{ flexDirection: "row", gap: 10 }}>
+                {/* Waze Button */}
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={handleOpenWaze}
@@ -750,6 +619,7 @@ export default function PropertyDetailScreen() {
                   <Text style={{ color: "#FFFFFF", fontSize: 16, fontWeight: "700" }}>Waze</Text>
                 </TouchableOpacity>
 
+                {/* Google Maps Button */}
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={handleOpenGoogleMaps}
@@ -771,36 +641,39 @@ export default function PropertyDetailScreen() {
             </View>
           )}
 
+          {/* OWNER DETAILS CARD */}
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
-            <Text style={[styles.cardSectionTitle, { color: themeColors.maroonPrimary }]}>{contactLabel}</Text>
+            <Text style={[styles.cardSectionTitle, { color: themeColors.maroonPrimary }]}>{t("ownerDetails")}</Text>
 
             <View style={styles.ownerInfoRow}>
               <View style={[styles.ownerAvatar, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
                 <MaterialCommunityIcons name="account" size={26} color={themeColors.maroonPrimary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.ownerName, { color: themeColors.textPrimary, fontSize: 16 }]}>{contactName}</Text>
-                <Text style={[styles.ownerPhone, { color: themeColors.textSecondary, fontSize: 15 }]}>{contactPhone}</Text>
+                <Text style={[styles.ownerName, { color: themeColors.textPrimary, fontSize: 16 }]}>{listing.namaOwner || t("ownerNoName")}</Text>
+                <Text style={[styles.ownerPhone, { color: themeColors.textSecondary, fontSize: 15 }]}>{listing.telOwner || t("ownerNoPhone")}</Text>
               </View>
             </View>
 
             <View style={styles.contactActionRow}>
+              {/* Phone Call */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={handleCallContact}
+                onPress={handleCallOwner}
                 style={[styles.callButton, { backgroundColor: themeColors.maroonPrimary, height: 52, justifyContent: "center", alignItems: "center" }]}
               >
                 <MaterialCommunityIcons name="phone" size={20} color={themeColors.canvasBackground} />
-                <Text style={[styles.callButtonText, { color: themeColors.canvasBackground, fontSize: 16 }]}>{callLabel}</Text>
+                <Text style={[styles.callButtonText, { color: themeColors.canvasBackground, fontSize: 16 }]}>{t("callOwner")}</Text>
               </TouchableOpacity>
 
+              {/* WhatsApp */}
               <TouchableOpacity
                 activeOpacity={0.8}
-                onPress={handleWhatsAppContact}
+                onPress={handleWhatsAppOwner}
                 style={[styles.whatsappButton, { height: 52, justifyContent: "center", alignItems: "center" }]}
               >
                 <MaterialCommunityIcons name="whatsapp" size={20} color="#FFF" />
-                <Text style={[styles.whatsappButtonText, { color: "#FFF", fontSize: 16 }]}>{whatsappLabel}</Text>
+                <Text style={[styles.whatsappButtonText, { color: "#FFF", fontSize: 16 }]}>{t("whatsappOwner")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1199,11 +1072,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     marginBottom: 8,
-    flexWrap: "wrap",
-  },
-  statusCaption: {
-    fontSize: 12,
-    fontWeight: "700",
   },
   statusBadge: {
     backgroundColor: THEME.maroonPrimary,
