@@ -132,15 +132,37 @@ export default function PropertyDetailScreen() {
     }
 
     const unsubscribe = firestore()
-      .collection("listings")
+      .collection("publicListings")
       .doc(id)
       .onSnapshot(
         (docSnapshot) => {
           if (docSnapshot && docSnapshot.exists) {
-            setListing({
+            const publicListing = {
               id: docSnapshot.id,
               ...docSnapshot.data(),
-            } as PropertyListing);
+            } as PropertyListing;
+            setListing(publicListing);
+
+            const currentUid = auth().currentUser?.uid;
+            const isOwner =
+              currentUid &&
+              [publicListing.userId, publicListing.agentId].includes(currentUid);
+            if (isOwner) {
+              void firestore()
+                .collection("listings")
+                .doc(id)
+                .get()
+                .then((privateSnapshot) => {
+                  if (privateSnapshot.exists) {
+                    setListing({
+                      ...publicListing,
+                      ...privateSnapshot.data(),
+                      id: privateSnapshot.id,
+                    } as PropertyListing);
+                  }
+                })
+                .catch((error) => console.warn("Private listing details unavailable:", error));
+            }
           } else {
             setListing(null);
           }
@@ -324,6 +346,7 @@ export default function PropertyDetailScreen() {
             try {
               setIsLoading(true);
               await firestore().collection("listings").doc(id).delete();
+              await firestore().collection("publicListings").doc(id).delete();
               Alert.alert(t("successTitle"), t("listingDeleted"));
               handleBackToListings();
             } catch (err: any) {
