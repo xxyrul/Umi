@@ -5,6 +5,18 @@ import type { PropertyListing } from "@/types/listing";
 import { Alert, Platform } from "react-native";
 
 const CASES_COLLECTION = "cases";
+const LISTINGS_COLLECTION = "listings";
+const PUBLIC_LISTINGS_COLLECTION = "publicListings";
+
+/**
+ * Public listing cards are intentionally separate from the private listing
+ * document so authenticated agents can browse property details without
+ * receiving owner documents such as IC, geran, SPA, or utility-bill URLs.
+ */
+function toPublicListingPayload(listing: PropertyListing) {
+  const { geran, icOwner, spa, bilUtility, ...publicListing } = listing;
+  return publicListing;
+}
 
 /**
  * Get the current user's unique Firebase UID
@@ -461,7 +473,7 @@ export async function createPropertyListing(
   try {
     const agentId = getCurrentUserId();
     const now = new Date().toISOString();
-    const docRef = firestore().collection("listings").doc();
+    const docRef = firestore().collection(LISTINGS_COLLECTION).doc();
     const listingId = docRef.id;
 
     // Upload Property Images (Gambar Hartanah)
@@ -545,7 +557,13 @@ export async function createPropertyListing(
       updatedAt: now,
     };
 
-    await docRef.set(payload);
+    await Promise.all([
+      docRef.set(payload),
+      firestore()
+        .collection(PUBLIC_LISTINGS_COLLECTION)
+        .doc(listingId)
+        .set(toPublicListingPayload(payload)),
+    ]);
     return payload;
   } catch (error) {
     console.error("Error creating property listing:", error);
@@ -561,7 +579,7 @@ export async function updatePropertyListing(
   try {
     const now = new Date().toISOString();
     const currentUid = getCurrentUserId();
-    const existingDoc = await firestore().collection("listings").doc(listingId).get();
+    const existingDoc = await firestore().collection(LISTINGS_COLLECTION).doc(listingId).get();
     const existingListing = existingDoc.exists
       ? (existingDoc.data() as Partial<PropertyListing>)
       : null;
@@ -635,8 +653,8 @@ export async function updatePropertyListing(
       }
     }
 
-    // 3. Update firestore document
-    await firestore().collection("listings").doc(listingId).update({
+    // 3. Update the private document and its safe public projection.
+    const privateUpdate = {
       ...listingData,
       userId: existingListing?.userId || currentUid,
       agentId: existingListing?.agentId || currentUid,
@@ -648,7 +666,20 @@ export async function updatePropertyListing(
       spa: spaUrl,
       bilUtility: bilUtilityUrl,
       updatedAt: now,
-    });
+    };
+    const updatedListing = {
+      ...(existingListing || {}),
+      id: listingId,
+      ...privateUpdate,
+    } as PropertyListing;
+
+    await Promise.all([
+      firestore().collection(LISTINGS_COLLECTION).doc(listingId).update(privateUpdate),
+      firestore()
+        .collection(PUBLIC_LISTINGS_COLLECTION)
+        .doc(listingId)
+        .set(toPublicListingPayload(updatedListing)),
+    ]);
   } catch (error) {
     console.error("Error updating property listing:", error);
     throw error;
