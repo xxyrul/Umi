@@ -10,13 +10,11 @@ import {
   StyleSheet,
   StatusBar,
   Platform,
-  BackHandler,
 } from "react-native";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import firestore from "@react-native-firebase/firestore";
-import auth from "@react-native-firebase/auth";
+import { firestore, auth } from "@/services/firebase";
 import type { PropertyCase } from "@/types/case";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { SPACING } from "@/constants/theme";
@@ -27,28 +25,13 @@ export default function CaseDetailScreen() {
   const insets = useSafeAreaInsets();
   const { themeColors, t, language } = useAppSettings();
 
-  useFocusEffect(
-    React.useCallback(() => {
-      const onBackPress = () => {
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          router.replace("/(tabs)/cases");
-        }
-        return true; // handled
-      };
-
-      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
-
-      return () => {
-        subscription.remove();
-      };
-    }, [router])
-  );
-
   const [propertyCase, setPropertyCase] = useState<PropertyCase | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
+
+  const handleBackToCases = () => {
+    router.replace("/(tabs)/cases");
+  };
 
   useEffect(() => {
     if (!id) {
@@ -211,7 +194,7 @@ export default function CaseDetailScreen() {
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
       {/* Custom Header */}
       <View style={[styles.header, { paddingTop: headerPaddingTop, borderBottomColor: themeColors.borderColor }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+        <TouchableOpacity onPress={handleBackToCases} style={styles.headerButton}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={themeColors.textPrimary} />
         </TouchableOpacity>
 
