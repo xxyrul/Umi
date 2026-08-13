@@ -15,9 +15,8 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { SPACING } from "@/constants/theme";
-import firestore from "@react-native-firebase/firestore";
+import { firestore, auth } from "@/services/firebase";
 import storage from "@react-native-firebase/storage";
-import auth from "@react-native-firebase/auth";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import Constants from "expo-constants";
 
