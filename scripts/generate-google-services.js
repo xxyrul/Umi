@@ -18,7 +18,9 @@
  *   EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
  *   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
  *   EXPO_PUBLIC_FIREBASE_APP_ID
- *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
+ *   EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (optional legacy override; the canonical
+ *   project client ID below is used so stale environment values cannot break
+ *   native Google Sign-In)
  */
 
 const fs = require("fs");
@@ -30,7 +32,6 @@ const required = [
   "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET",
   "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID",
   "EXPO_PUBLIC_FIREBASE_APP_ID",
-  "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID",
 ];
 
 const missing = required.filter((k) => !process.env[k]);
@@ -48,7 +49,19 @@ const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
 const storageBucket = process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET;
 const messagingSenderId = process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
 const appId = process.env.EXPO_PUBLIC_FIREBASE_APP_ID;
-const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+// OAuth client IDs are public identifiers. This one is tied to the Firebase
+// project and Android package used by Umi. Do not replace it with an OAuth
+// client from another Firebase project.
+const canonicalWebClientId =
+  "975924997372-06nogtf16f250ope4ridpnodi9oh8fvc.apps.googleusercontent.com";
+const configuredWebClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+if (configuredWebClientId && configuredWebClientId !== canonicalWebClientId) {
+  console.warn(
+    "[generate-google-services] Ignoring a non-canonical EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID; " +
+      "using the Umi Firebase Web OAuth client instead."
+  );
+}
+const webClientId = canonicalWebClientId;
 
 // Derive package name from app ID: 1:SENDER:android:HEX -> not in appId,
 // so read from app.json as a fallback.
