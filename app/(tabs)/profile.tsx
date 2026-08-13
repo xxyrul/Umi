@@ -294,7 +294,7 @@ export default function ProfileScreen() {
         .get();
 
       // Fetch all listings but filter by user ownership
-      const listingsSnap = await firestore().collection("listings").get();
+      const listingsSnap = await firestore().collection("publicListings").get();
 
       const allListings = listingsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PropertyListing);
       const cases = casesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PropertyCase);
