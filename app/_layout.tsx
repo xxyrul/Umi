@@ -4,7 +4,6 @@ import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, Stat
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Slot, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { onAuthStateChanged, firebaseAuth, User } from "@/services/firebase";
 import { getAppLockEnabled, getBiometricsEnabled, getAppLockPin, verifyAppLockPin, authenticateBiometric } from "@/services/security";
@@ -63,22 +62,7 @@ Sentry.init({
 function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolean }) {
   const segments = useSegments() as string[];
   const router = useRouter();
-  const [isOnboardingChecked, setIsOnboardingChecked] = useState(false);
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
-
-  useEffect(() => {
-    const checkOnboarding = async () => {
-      try {
-        const val = await AsyncStorage.getItem("hasCompletedOnboarding");
-        setHasCompletedOnboarding(val === "true");
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsOnboardingChecked(true);
-      }
-    };
-    checkOnboarding();
-  }, [segments]);
+  const { hasCompletedOnboarding, isOnboardingChecked } = useAppSettings();
 
   useEffect(() => {
     if (!authLoaded || !isOnboardingChecked) return;
