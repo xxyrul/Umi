@@ -173,13 +173,6 @@ async function listEnabledDevices(projectId, accessToken) {
     body: JSON.stringify({
       structuredQuery: {
         from: [{ collectionId: "devices", allDescendants: true }],
-        where: {
-          fieldFilter: {
-            field: { fieldPath: "enabled" },
-            op: "EQUAL",
-            value: { booleanValue: true },
-          },
-        },
       },
     }),
   });
@@ -193,6 +186,7 @@ async function listEnabledDevices(projectId, accessToken) {
   const devices = [];
   const addDevice = (doc, fields, extra = {}) => {
     if (!fields) return;
+    if (fields.enabled?.booleanValue !== true) return;
     const token = fields.token?.stringValue;
     if (!token) return;
     devices.push({
@@ -230,7 +224,7 @@ async function listEnabledDevices(projectId, accessToken) {
     if (!doc) continue;
     for (const [fieldName, fieldValue] of Object.entries(doc.fields ?? {})) {
       if (!fieldName.startsWith("updateNotificationDevice_")) continue;
-      addDevice(doc, fieldValue?.mapValue?.fields, { fieldPath: fieldName });
+     addDevice(doc, fieldValue?.mapValue?.fields, { fieldPath: fieldName });
     }
   }
   return devices;
@@ -241,8 +235,10 @@ async function claimRelease(projectId, accessToken, versionCode) {
   const docPath = `/appReleaseNotifications/android-${versionCode}`;
   const existing = await firestoreRequest(projectId, docPath, accessToken);
 
-  if (existing.ok && !isForced) {
-    return false;
+  if (existing.ok) {
+    // A forced retry is needed when a previous run recorded the marker but
+    // could not deliver all messages. Do not try to create the marker again.
+    return isForced;
   }
   if (!existing.ok && existing.status !== 404) {
     failOnPermissionDenied("Release marker lookup", existing);
@@ -368,6 +364,13 @@ async function main() {
     }
 
     const errorBody = await response.text();
+    if (response.status === 403 && errorBody.includes("cloudmessaging.messages.create")) {
+      console.warn(
+        "[notify-release] FCM sending was rejected. Grant the notifier service account " +
+          "Firebase Cloud Messaging API Admin (roles/firebasecloudmessaging.admin), then retry with --force."
+      );
+      continue;
+    }
     const isStaleToken =
       response.status === 404 ||
       errorBody.includes("UNREGISTERED") ||
