@@ -13,7 +13,11 @@ import {
   Share,
   Platform,
   StatusBar,
+  AppState,
+  AppStateStatus,
   useWindowDimensions,
+  ToastAndroid,
+  NativeModules,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,6 +26,10 @@ import { firestore, auth } from "@/services/firebase";
 import type { PropertyListing } from "@/types/listing";
 import { THEME } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import * as Clipboard from "expo-clipboard";
+import * as IntentLauncher from "expo-intent-launcher";
 import { addEventToNativeCalendar } from "@/services/calendar";
 
 function getListingImagesList(listing: any): string[] {
@@ -52,6 +60,15 @@ function getListingImagesList(listing: any): string[] {
     }
   }
   return list;
+}
+
+function getListingImageUri(item: any): string | null {
+  if (!item) return null;
+  if (item.imageUrl && typeof item.imageUrl === "string" && item.imageUrl.trim()) return item.imageUrl.trim();
+  if (item.images && Array.isArray(item.images) && item.images.length > 0 && item.images[0]) return item.images[0];
+  if (item.gambar && Array.isArray(item.gambar) && item.gambar.length > 0 && item.gambar[0]) return item.gambar[0];
+  if (typeof item.gambar === "string" && item.gambar.trim()) return item.gambar.trim();
+  return null;
 }
 
 function extractCoordinatesFromUrl(url: string): { latitude: number; longitude: number } | null {
@@ -98,6 +115,37 @@ function extractSearchQueryFromUrl(url: string): string | null {
   return null;
 }
 
+function formatListingStatus(status?: string, lang?: string) {
+  const norm = (status || "Aktif").toLowerCase();
+  const isBM = lang === "BM";
+  if (norm === "aktif" || norm === "active") {
+    return { label: isBM ? "Aktif" : "Active", color: "#10B981", bg: "#10B98115", border: "#10B98135" };
+  }
+  if (norm === "booking") {
+    return { label: "Booking", color: "#F59E0B", bg: "#F59E0B15", border: "#F59E0B35" };
+  }
+  if (norm === "sold" || norm === "terjual") {
+    return { label: isBM ? "Terjual" : "Sold", color: "#3B82F6", bg: "#3B82F615", border: "#3B82F635" };
+  }
+  return { label: isBM ? "Draf" : "Draft", color: "#6B7280", bg: "#6B728015", border: "#6B728035" };
+}
+
+function formatPropertyType(jenis?: string, lang?: string) {
+  if (!jenis) return "";
+  if (lang === "BM") return jenis;
+  
+  return jenis
+    .replace(/Teres/gi, "Terrace")
+    .replace(/Kedai/gi, "Shop Lot")
+    .replace(/Pertanian/gi, "Agricultural")
+    .replace(/Banglo/gi, "Bungalow")
+    .replace(/Komersial/gi, "Commercial")
+    .replace(/Perumahan/gi, "Residential")
+    .replace(/Tanah/gi, "Land")
+    .replace(/Kilang/gi, "Factory")
+    .replace(/Pangsapuri/gi, "Apartment");
+}
+
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -110,12 +158,14 @@ export default function PropertyDetailScreen() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageLoading, setImageLoading] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [isSharingImage, setIsSharingImage] = useState(false);
 
   const heroGalleryRef = useRef<ScrollView>(null);
   const fullScreenGalleryRef = useRef<ScrollView>(null);
 
   const handleBackToListings = () => {
-    router.replace("/(tabs)/listings");
+    router.navigate("/(tabs)/listings");
   };
 
   const goToImage = (index: number, allImages: string[], animated: boolean = true) => {
@@ -131,50 +181,78 @@ export default function PropertyDetailScreen() {
       return;
     }
 
-    const unsubscribe = firestore()
-      .collection("publicListings")
-      .doc(id)
-      .onSnapshot(
-        (docSnapshot) => {
-          if (docSnapshot && docSnapshot.exists) {
-            const publicListing = {
-              id: docSnapshot.id,
-              ...docSnapshot.data(),
-            } as PropertyListing;
-            setListing(publicListing);
+    let unsubscribeSnapshot: (() => void) | null = null;
 
-            const currentUid = auth().currentUser?.uid;
-            const isOwner =
-              currentUid &&
-              [publicListing.userId, publicListing.agentId].includes(currentUid);
-            if (isOwner) {
-              void firestore()
-                .collection("listings")
-                .doc(id)
-                .get()
-                .then((privateSnapshot) => {
-                  if (privateSnapshot.exists) {
-                    setListing({
-                      ...publicListing,
-                      ...privateSnapshot.data(),
-                      id: privateSnapshot.id,
-                    } as PropertyListing);
-                  }
-                })
-                .catch((error) => console.warn("Private listing details unavailable:", error));
+    const attachListener = () => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+      }
+
+      unsubscribeSnapshot = firestore()
+        .collection("publicListings")
+        .doc(id)
+        .onSnapshot(
+          (docSnapshot) => {
+            if (docSnapshot && docSnapshot.exists) {
+              const publicListing = {
+                id: docSnapshot.id,
+                ...docSnapshot.data(),
+              } as PropertyListing;
+              setListing(publicListing);
+
+              const currentUid = auth().currentUser?.uid;
+              const isOwner =
+                currentUid &&
+                [publicListing.userId, publicListing.agentId].includes(currentUid);
+              if (isOwner) {
+                void firestore()
+                  .collection("listings")
+                  .doc(id)
+                  .get()
+                  .then((privateSnapshot) => {
+                    if (privateSnapshot.exists) {
+                      setListing({
+                        ...publicListing,
+                        ...privateSnapshot.data(),
+                        id: privateSnapshot.id,
+                      } as PropertyListing);
+                    }
+                  })
+                  .catch((error) => console.warn("Private listing details unavailable:", error));
+              }
+            } else {
+              setListing(null);
             }
-          } else {
-            setListing(null);
+            setIsLoading(false);
+          },
+          (error) => {
+            console.error("Error fetching listing details:", error);
+            setIsLoading(false);
           }
-          setIsLoading(false);
-        },
-        (error) => {
-          console.error("Error fetching listing details:", error);
-          setIsLoading(false);
-        }
-      );
+        );
+    };
 
-    return () => unsubscribe();
+    const detachListener = () => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+    };
+
+    attachListener();
+
+    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
+      if (nextAppState === "active") {
+        attachListener();
+      } else {
+        detachListener();
+      }
+    });
+
+    return () => {
+      detachListener();
+      subscription.remove();
+    };
   }, [id]);
 
   // Phone Call Handler
@@ -303,33 +381,196 @@ export default function PropertyDetailScreen() {
     });
   };
 
-  // 1-Click Promotional Share
-  const handleShare = async () => {
-    if (!listing) return;
-    try {
-      const formattedPrice =
-        typeof listing.harga === "number"
-          ? listing.harga.toLocaleString()
-          : listing.harga;
+  // Format share message
+  const getFormattedShareMessage = () => {
+    if (!listing) return "";
+    const formattedPrice =
+      typeof listing.harga === "number"
+        ? listing.harga.toLocaleString()
+        : listing.harga;
 
-      const sizeStr = listing.keluasan
-        ? (String(listing.keluasan).toLowerCase().includes("sq") ? listing.keluasan : `${listing.keluasan} sqft`)
-        : "N/A";
+    const sizeStr = listing.keluasan
+      ? (String(listing.keluasan).toLowerCase().includes("sq") ? listing.keluasan : `${listing.keluasan} sqft`)
+      : "N/A";
 
-      const message =
+    const isBM = language === "BM";
+
+    if (isBM) {
+      return (
         `WTS: ${listing.tajuk}\n` +
         `Harga: RM ${formattedPrice}\n` +
-        `Lokasi: ${listing.alamat ? `${listing.alamat}, ` : ""}${listing.negeri}\n` +
-        `Spesifikasi: ${listing.bilikTidur} Bilik, ${listing.bilikAir} Bilik Air | ${sizeStr}\n` +
+        `Lokasi: ${listing.alamat ? `${listing.alamat}, ` : ""}${listing.negeri || ""}\n` +
+        `Spesifikasi: ${listing.bilikTidur || 0} Bilik, ${listing.bilikAir || 0} Bilik Air | ${sizeStr}\n` +
         `Status: ${listing.pegangan || "Freehold"} / ${listing.lot || "Bumi Lot"}\n\n` +
-        `Berminat? Hubungi saya segera untuk viewing!`;
+        `Berminat? Hubungi saya segera untuk maklumat lanjut dan viewing!`
+      );
+    }
 
+    return (
+      `FOR SALE: ${listing.tajuk}\n` +
+      `Price: RM ${formattedPrice}\n` +
+      `Location: ${listing.alamat ? `${listing.alamat}, ` : ""}${listing.negeri || ""}\n` +
+      `Specs: ${listing.bilikTidur || 0} Beds, ${listing.bilikAir || 0} Baths | ${sizeStr}\n` +
+      `Tenure: ${listing.pegangan || "Freehold"} / ${listing.lot || "Bumi Lot"}\n\n` +
+      `Interested? Contact me now for more details and viewing appointment!`
+    );
+  };
+
+  // Helper to safely and quickly prepare image for sharing with caching
+  const prepareListingImageForSharing = async (imgUri: string, index: number = 0): Promise<string> => {
+    const cacheDir = FileSystem.cacheDirectory || "";
+    
+    if (imgUri.startsWith("http://") || imgUri.startsWith("https://")) {
+      // Create a deterministic hash/filename so we reuse already downloaded images instantly
+      let hash = 0;
+      for (let i = 0; i < imgUri.length; i++) {
+        hash = ((hash << 5) - hash) + imgUri.charCodeAt(i);
+        hash |= 0;
+      }
+      const filename = `cached_img_${Math.abs(hash)}_${index}.jpg`;
+      const targetPath = `${cacheDir}${filename}`;
+
+      try {
+        const info = await FileSystem.getInfoAsync(targetPath);
+        if (info.exists && info.size > 0) {
+          return targetPath;
+        }
+        const res = await FileSystem.downloadAsync(imgUri, targetPath);
+        return res.uri;
+      } catch (err) {
+        console.warn("Fast image download failed:", err);
+        return imgUri;
+      }
+    }
+
+    if (imgUri.startsWith("data:image")) {
+      const targetPath = `${cacheDir}share_b64_${Date.now()}_${index}.jpg`;
+      const base64Data = imgUri.split(",")[1];
+      if (base64Data) {
+        await FileSystem.writeAsStringAsync(targetPath, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        return targetPath;
+      }
+    }
+
+    if (imgUri.startsWith("file://")) {
+      return imgUri;
+    }
+
+    return imgUri;
+  };
+
+  // 1-Click Promotional Share -> Opens Modal
+  const handleShare = () => {
+    setIsShareModalVisible(true);
+  };
+
+  const handleShareWhatsApp = async () => {
+    setIsShareModalVisible(false);
+    if (!listing) return;
+    try {
+      const message = getFormattedShareMessage();
+      const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        await Share.share({ message, title: listing.tajuk });
+      }
+    } catch (e) {
+      console.error("WhatsApp share error:", e);
+      const message = getFormattedShareMessage();
+      await Share.share({ message, title: listing.tajuk });
+    }
+  };
+
+  const handleSharePhoto = async () => {
+    if (!listing) return;
+    const allImages = getListingImagesList(listing);
+    if (allImages.length === 0) {
+      Alert.alert(
+        language === "BM" ? "Tiada Gambar" : "No Photo Available",
+        language === "BM" ? "Listing ini tidak mempunyai gambar untuk dikongsi." : "This listing does not have any photos attached."
+      );
+      return;
+    }
+
+    setIsShareModalVisible(false);
+    setIsSharingImage(true);
+
+    try {
+      // 1. Auto-copy complete property details to clipboard and show toast
+      const message = getFormattedShareMessage();
+      try {
+        await Clipboard.setStringAsync(message);
+        if (Platform.OS === "android") {
+          ToastAndroid.show(
+            language === "BM"
+              ? "📋 Maklumat listing telah disalin! Sila tampal dalam ruangan teks/kapsyen."
+              : "📋 Listing details copied! Paste it in the caption/text field.",
+            ToastAndroid.LONG
+          );
+        }
+      } catch (clipErr) {
+        console.warn("Clipboard copy failed:", clipErr);
+      }
+
+      // 2. Prepare all available listing photos (up to 12)
+      const imagesToShare = allImages.slice(0, 12);
+      const preparedUris = await Promise.all(
+        imagesToShare.map((imgUri, idx) => prepareListingImageForSharing(imgUri, idx))
+      );
+
+      // 3. Multi-image Android sharing with native Parcelable Uri MultiShareModule
+      if (Platform.OS === "android" && NativeModules.MultiShare) {
+        try {
+          await NativeModules.MultiShare.shareMultipleImages(
+            preparedUris,
+            listing.tajuk || "Property Listing",
+            message
+          );
+          return;
+        } catch (nativeShareErr) {
+          console.warn("Native MultiShare fallback:", nativeShareErr);
+        }
+      }
+
+      // 4. Single photo share fallback via Sharing API
+      const primaryUri = preparedUris[0];
+      const isAvailable = await Sharing.isAvailableAsync();
+      
+      if (isAvailable) {
+        await Sharing.shareAsync(primaryUri, {
+          dialogTitle: listing.tajuk || "Property Listing",
+          mimeType: "image/jpeg",
+          UTI: "public.jpeg",
+        });
+      } else {
+        await Share.share({ message, title: listing.tajuk });
+      }
+    } catch (e) {
+      console.error("Photo share error:", e);
+      Alert.alert(
+        language === "BM" ? "Ralat Perkongsian" : "Share Error",
+        language === "BM" ? "Gagal memproses gambar untuk dikongsi." : "Failed to prepare images for sharing."
+      );
+    } finally {
+      setIsSharingImage(false);
+    }
+  };
+
+  const handleShareGeneric = async () => {
+    setIsShareModalVisible(false);
+    if (!listing) return;
+    try {
+      const message = getFormattedShareMessage();
       await Share.share({
         message,
-        title: `Listing: ${listing.tajuk}`,
+        title: listing.tajuk,
       });
-    } catch (error) {
-      console.error("Error sharing listing:", error);
+    } catch (e) {
+      console.error("Generic share error:", e);
     }
   };
 
@@ -530,12 +771,19 @@ export default function PropertyDetailScreen() {
           {/* HEADER SECTION */}
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, borderWidth: 1 }]}>
             <View style={styles.statusRow}>
-              <View style={[styles.statusBadge, { backgroundColor: themeColors.maroonPrimary }]}>
-                <Text style={styles.statusText}>{listing.status || "Aktif"}</Text>
-              </View>
+              {(() => {
+                const s = formatListingStatus(listing.status, language);
+                return (
+                  <View style={[styles.statusBadge, { backgroundColor: s.bg, borderColor: s.border, borderWidth: 1 }]}>
+                    <Text style={[styles.statusText, { color: s.color, fontWeight: "700" }]}>{s.label}</Text>
+                  </View>
+                );
+              })()}
               {listing.jenis ? (
                 <View style={[styles.jenisBadge, { backgroundColor: themeColors.surfaceContainer }]}>
-                  <Text style={[styles.jenisText, { color: themeColors.textSecondary }]}>{listing.jenis}</Text>
+                  <Text style={[styles.jenisText, { color: themeColors.textSecondary }]}>
+                    {formatPropertyType(listing.jenis, language)}
+                  </Text>
                 </View>
               ) : null}
             </View>
@@ -934,6 +1182,216 @@ export default function PropertyDetailScreen() {
             ))}
           </ScrollView>
         </View>
+      </Modal>
+
+      {/* Share Options Bottom Sheet Modal */}
+      <Modal
+        visible={isShareModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsShareModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            justifyContent: "flex-end",
+          }}
+          activeOpacity={1}
+          onPress={() => setIsShareModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              borderTopWidth: 1,
+              borderColor: themeColors.borderColor,
+              paddingHorizontal: 20,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 16) + 12,
+            }}
+          >
+            {/* Drag handle */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: themeColors.borderColor,
+                alignSelf: "center",
+                marginBottom: 16,
+              }}
+            />
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
+                {language === "BM" ? "Kongsi Listing" : "Share Listing"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsShareModalVisible(false)}
+                style={{
+                  padding: 6,
+                  borderRadius: 16,
+                  backgroundColor: themeColors.surfaceContainer,
+                }}
+              >
+                <MaterialCommunityIcons name="close" size={18} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {listing?.tajuk ? (
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 13,
+                  color: themeColors.textMuted,
+                  marginBottom: 16,
+                }}
+              >
+                {listing.tajuk}
+              </Text>
+            ) : (
+              <View style={{ marginBottom: 12 }} />
+            )}
+
+            {/* Share Options */}
+            <View style={{ gap: 10 }}>
+              {/* WhatsApp Option */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleShareWhatsApp}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#25D36622",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons name="whatsapp" size={22} color="#25D366" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "WhatsApp (Teks)" : "WhatsApp (Text)"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                    {language === "BM"
+                      ? "Buka WhatsApp terus dengan maklumat listing"
+                      : "Open WhatsApp directly with formatted property details"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+
+              {/* Photo & Caption Option */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleSharePhoto}
+                disabled={isSharingImage}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: `${themeColors.maroonPrimary}22`,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {isSharingImage ? (
+                    <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
+                  ) : (
+                    <MaterialCommunityIcons name="image-outline" size={22} color={themeColors.maroonPrimary} />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "Kongsi Gambar (Brochure)" : "Share Photo & Details"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                    {language === "BM"
+                      ? "Buka gambar dalam menu perkongsian (teks disalin ke papan keratan)"
+                      : "Open photo in share menu (caption copied to clipboard)"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+
+              {/* More Apps Option */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleShareGeneric}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#6366F122",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons name="share-variant-outline" size={22} color="#6366F1" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "Pilihan Lain" : "More Sharing Options"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                    {language === "BM"
+                      ? "Buka menu perkongsian sistem untuk aplikasi lain"
+                      : "Open system share sheet for Telegram, Copy, and other apps"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

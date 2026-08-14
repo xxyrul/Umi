@@ -36,13 +36,6 @@ import Constants from "expo-constants";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
-import {
-  getAppLockEnabled,
-  setAppLockEnabled,
-  getBiometricsEnabled,
-  setBiometricsEnabled,
-  getAppLockPin,
-} from "@/services/security";
 import type { UserProfile, PropertyCase } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 
@@ -66,13 +59,6 @@ export default function ProfileScreen() {
   const [updateAlertsEnabled, setUpdateAlertsEnabled] = useState(false);
   const [isSavingUpdateAlerts, setIsSavingUpdateAlerts] = useState(false);
 
-  // App Lock States
-  const [appLockEnabled, setAppLockEnabledState] = useState(false);
-  const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
-
-  // PIN Setup Modal state
-  const [showPinSetupModal, setShowPinSetupModal] = useState(false);
-
   // Interactive Account Settings State
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [isSavingAccount, setIsSavingAccount] = useState(false);
@@ -83,8 +69,6 @@ export default function ProfileScreen() {
     if (user?.displayName) {
       setDisplayNameInput(user.displayName);
     }
-    getAppLockEnabled().then(setAppLockEnabledState);
-    getBiometricsEnabled().then(setBiometricsEnabledState);
     getUpdateNotificationsEnabled().then(setUpdateAlertsEnabled);
   }, []);
 
@@ -175,30 +159,6 @@ export default function ProfileScreen() {
     } finally {
       setIsSavingAccount(false);
     }
-  };
-
-  const handleToggleAppLock = async (value: boolean) => {
-    if (value) {
-      const existingPin = await getAppLockPin();
-      if (!existingPin) {
-        setShowPinSetupModal(true);
-      } else {
-        setAppLockEnabledState(true);
-        await setAppLockEnabled(true);
-        setBiometricsEnabledState(true);
-        await setBiometricsEnabled(true);
-        Alert.alert(t("appLockActive"), t("appLockActiveMsg"));
-      }
-    } else {
-      setAppLockEnabledState(false);
-      await setAppLockEnabled(false);
-      Alert.alert(t("appLockOff"), t("appLockOffMsg"));
-    }
-  };
-
-  const handleToggleBiometrics = async (value: boolean) => {
-    setBiometricsEnabledState(value);
-    await setBiometricsEnabled(value);
   };
 
   const handleSignOut = () => {
@@ -650,7 +610,6 @@ export default function ProfileScreen() {
           {renderOptionRow("account-outline", t("accountSettings"), t("accountSubtitle"), () => setActiveSection("Account"))}
           {renderOptionRow("file-export-outline", t("exportReport"), t("exportSubtitle"), handleExportReport)}
           {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
-          {renderOptionRow("shield-lock-outline", t("securityPin"), t("securitySubtitle"), () => setActiveSection("Security"))}
           {renderOptionRow(
             "information-outline",
             t("appVersion"),
@@ -725,8 +684,6 @@ export default function ProfileScreen() {
               <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
                 {activeSection === "Account"
                   ? t("accountSettings")
-                  : activeSection === "Security"
-                  ? t("securityPin")
                   : activeSection === "Notifications"
                   ? t("notifications")
                   : activeSection === "Help"
@@ -781,33 +738,6 @@ export default function ProfileScreen() {
                     onPress={handleSaveAccount}
                     style={{ marginTop: SPACING.md, backgroundColor: themeColors.maroonPrimary }}
                   />
-                </View>
-              )}
-
-              {activeSection === "Security" && (
-                <View style={{ gap: SPACING.lg }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                        {t("appLockLabel")}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {t("appLockSub")}
-                      </Text>
-                    </View>
-                    <Switch value={appLockEnabled} onValueChange={handleToggleAppLock} trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }} thumbColor={appLockEnabled ? "#FFFFFF" : "#F3F4F6"} />
-                  </View>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                        {t("biometricsLabel")}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {t("biometricsSub")}
-                      </Text>
-                    </View>
-                    <Switch value={biometricsEnabled} onValueChange={handleToggleBiometrics} trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }} thumbColor={biometricsEnabled ? "#FFFFFF" : "#F3F4F6"} />
-                  </View>
                 </View>
               )}
 

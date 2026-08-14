@@ -10,6 +10,7 @@ import {
   StatusBar,
   StyleSheet,
   Modal,
+  AppState,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -66,60 +67,91 @@ export default function DashboardScreen() {
       }
     };
 
-    // Realtime Listener for Listings
-    const unsubListings = firestore()
-      .collection("publicListings")
-      .onSnapshot(
-        (snapshot) => {
-          if (snapshot) {
-            const fetchedListings: PropertyListing[] = snapshot.docs
-              .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing);
+    let unsubListings: (() => void) | null = null;
+    let unsubCases: (() => void) | null = null;
 
-            setListings(fetchedListings);
+    const attachDashboardListeners = () => {
+      if (unsubListings) unsubListings();
+      if (unsubCases) unsubCases();
+
+      // Realtime Listener for Listings
+      unsubListings = firestore()
+        .collection("publicListings")
+        .onSnapshot(
+          (snapshot) => {
+            if (snapshot) {
+              const fetchedListings: PropertyListing[] = snapshot.docs
+                .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing);
+
+              setListings(fetchedListings);
+            }
+            listingsLoaded = true;
+            checkLoadingFinished();
+          },
+          (error) => {
+            console.error("Realtime listings listener error:", error);
+            listingsLoaded = true;
+            checkLoadingFinished();
           }
-          listingsLoaded = true;
-          checkLoadingFinished();
-        },
-        (error) => {
-          console.error("Realtime listings listener error:", error);
-          listingsLoaded = true;
-          checkLoadingFinished();
-        }
-      );
+        );
 
-    // Realtime Listener for Cases
-    const unsubCases = firestore()
-      .collection("cases")
-      .where("userId", "==", userId)
-      .onSnapshot(
-        (snapshot) => {
-          if (snapshot) {
-            const fetchedCases: PropertyCase[] = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as PropertyCase[];
+      // Realtime Listener for Cases
+      unsubCases = firestore()
+        .collection("cases")
+        .where("userId", "==", userId)
+        .onSnapshot(
+          (snapshot) => {
+            if (snapshot) {
+              const fetchedCases: PropertyCase[] = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+              })) as PropertyCase[];
 
-            setAllCases(fetchedCases);
+              setAllCases(fetchedCases);
 
-            // Sort & take top 3 for Recent Cases list
-            const sortedCases = [...fetchedCases].sort((a, b) =>
-              (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
-            );
-            setRecentCases(sortedCases.slice(0, 3));
+              // Sort & take top 3 for Recent Cases list
+              const sortedCases = [...fetchedCases].sort((a, b) =>
+                (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
+              );
+              setRecentCases(sortedCases.slice(0, 3));
+            }
+            casesLoaded = true;
+            checkLoadingFinished();
+          },
+          (error) => {
+            console.error("Realtime cases listener error:", error);
+            casesLoaded = true;
+            checkLoadingFinished();
           }
-          casesLoaded = true;
-          checkLoadingFinished();
-        },
-        (error) => {
-          console.error("Realtime cases listener error:", error);
-          casesLoaded = true;
-          checkLoadingFinished();
-        }
-      );
+        );
+    };
+
+    const detachDashboardListeners = () => {
+      if (unsubListings) {
+        unsubListings();
+        unsubListings = null;
+      }
+      if (unsubCases) {
+        unsubCases();
+        unsubCases = null;
+      }
+    };
+
+    // Attach immediately
+    attachDashboardListeners();
+
+    // Pause listeners when app goes to background to save battery
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "active") {
+        attachDashboardListeners();
+      } else {
+        detachDashboardListeners();
+      }
+    });
 
     return () => {
-      unsubListings();
-      unsubCases();
+      detachDashboardListeners();
+      subscription.remove();
     };
   }, []);
 

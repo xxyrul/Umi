@@ -12,6 +12,8 @@ import {
   Platform,
   StatusBar,
   Modal,
+  AppState,
+  AppStateStatus,
   useWindowDimensions,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -177,45 +179,74 @@ export default function CasesScreen() {
     setFilteredCases(result);
   };
 
-  // Realtime Firestore Listener
+  // Realtime Firestore Listener (Lifecycle-aware to save battery)
   useEffect(() => {
-    const currentUser = auth().currentUser;
-    const userId = currentUser?.uid;
+    let unsubscribeSnapshot: (() => void) | null = null;
 
-    if (!userId) {
-      setIsLoading(false);
-      return;
-    }
+    const attachListener = () => {
+      const currentUser = auth().currentUser;
+      const userId = currentUser?.uid;
 
-    setIsLoading(true);
-    const unsubscribe = firestore()
-      .collection("cases")
-      .where("userId", "==", userId)
-      .onSnapshot(
-        (snapshot) => {
-          if (snapshot) {
-            const data = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as PropertyCase[];
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
 
-            data.sort((a, b) =>
-              (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
-            );
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+      }
 
-            setCases(data);
+      unsubscribeSnapshot = firestore()
+        .collection("cases")
+        .where("userId", "==", userId)
+        .onSnapshot(
+          (snapshot) => {
+            if (snapshot) {
+              const data = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+              })) as PropertyCase[];
+
+              data.sort((a, b) =>
+                (b.updatedAt || b.createdAt || "").localeCompare(a.updatedAt || a.createdAt || "")
+              );
+
+              setCases(data);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
+          },
+          (error) => {
+            console.error("Realtime cases error:", error);
+            setIsLoading(false);
+            setIsRefreshing(false);
           }
-          setIsLoading(false);
-          setIsRefreshing(false);
-        },
-        (error) => {
-          console.error("Realtime cases error:", error);
-          setIsLoading(false);
-          setIsRefreshing(false);
-        }
-      );
+        );
+    };
 
-    return () => unsubscribe();
+    const detachListener = () => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+    };
+
+    // Attach immediately
+    attachListener();
+
+    // Pause listener when backgrounded to prevent battery drain
+    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
+      if (nextAppState === "active") {
+        attachListener();
+      } else {
+        detachListener();
+      }
+    });
+
+    return () => {
+      detachListener();
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {

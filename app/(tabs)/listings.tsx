@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,8 +16,17 @@ import {
   StatusBar,
   Animated,
   Modal,
+  Linking,
+  AppState,
+  AppStateStatus,
   useWindowDimensions,
+  ToastAndroid,
+  NativeModules,
 } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import * as Clipboard from "expo-clipboard";
+import * as IntentLauncher from "expo-intent-launcher";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { firestore, auth } from "@/services/firebase";
@@ -101,6 +110,36 @@ function formatSizeLabel(value: string | number | undefined): string {
   return raw.toLowerCase().includes("sq") ? raw : `${raw} sqft`;
 }
 
+function getListingImagesList(listing: any): string[] {
+  if (!listing) return [];
+  const list: string[] = [];
+  const pushUnique = (value?: any) => {
+    if (!value || typeof value !== "string") return;
+    const cleaned = value.trim();
+    if (!cleaned) return;
+    if (!list.includes(cleaned)) {
+      list.push(cleaned);
+    }
+  };
+
+  pushUnique(listing.imageUrl);
+  if (listing.images && listing.images.length > 0) {
+    listing.images.forEach((img: any) => {
+      pushUnique(img);
+    });
+  }
+  if (listing.gambar) {
+    if (Array.isArray(listing.gambar)) {
+      listing.gambar.forEach((img: any) => {
+        pushUnique(img);
+      });
+    } else if (typeof listing.gambar === "string") {
+      pushUnique(listing.gambar);
+    }
+  }
+  return list;
+}
+
 function getListingImageUri(item: any): string | null {
   if (!item) return null;
   if (item.imageUrl) return item.imageUrl;
@@ -124,10 +163,12 @@ export default function MasterListingScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("Semua");
-  const [activeSegment, setActiveSegment] = useState<ListingSegment>("mine");
+  const [activeSegment, setActiveSegment] = useState<ListingSegment>("all");
   const [sortOption, setSortOption] = useState<ListingSortOption>("newest");
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [statusModalListing, setStatusModalListing] = useState<{ id: string; currentStatus: string; tajuk: string } | null>(null);
+  const [shareModalListing, setShareModalListing] = useState<PropertyListing | null>(null);
+  const [isSharingImage, setIsSharingImage] = useState(false);
 
   // Buyer criteria filters
   const [showCriteria, setShowCriteria] = useState(false);
@@ -148,7 +189,7 @@ export default function MasterListingScreen() {
   const [tenureRowWidth, setTenureRowWidth] = useState(0);
   const [lotStatusRowWidth, setLotStatusRowWidth] = useState(0);
 
-  const segmentAnim = useRef(new Animated.Value(0)).current;
+  const segmentAnim = useRef(new Animated.Value(1)).current;
   const [segmentBarWidth, setSegmentBarWidth] = useState(0);
 
   // ScrollView Auto-Scroll Ref & Layout state
@@ -218,45 +259,75 @@ export default function MasterListingScreen() {
     }
   };
 
-  // Realtime Firestore Listener
+  // Lifecycle-aware Realtime Firestore Listener (Saves Battery when backgrounded)
   useEffect(() => {
-    const currentUser = auth().currentUser;
-    const userId = currentUser?.uid;
+    let unsubscribeSnapshot: (() => void) | null = null;
 
-    if (!userId) {
-      setCurrentUserId("");
-      setIsLoading(false);
-      return;
-    }
-    setCurrentUserId(userId);
+    const attachListener = () => {
+      const currentUser = auth().currentUser;
+      const userId = currentUser?.uid;
 
-    const unsubscribe = firestore()
-      .collection("publicListings")
-      .onSnapshot(
-        (snapshot) => {
-          if (snapshot) {
-            const data = snapshot.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as PropertyListing[];
+      if (!userId) {
+        setCurrentUserId("");
+        setIsLoading(false);
+        return;
+      }
+      setCurrentUserId(userId);
 
-            data.sort((a, b) =>
-              (b.createdAt || "").localeCompare(a.createdAt || "")
-            );
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+      }
 
-            setListings(data);
+      unsubscribeSnapshot = firestore()
+        .collection("publicListings")
+        .onSnapshot(
+          (snapshot) => {
+            if (snapshot) {
+              const data = snapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+              })) as PropertyListing[];
+
+              data.sort((a, b) =>
+                (b.createdAt || "").localeCompare(a.createdAt || "")
+              );
+
+              setListings(data);
+            }
+            setIsLoading(false);
+            setIsRefreshing(false);
+          },
+          (error) => {
+            console.error("Realtime listings error:", error);
+            setIsLoading(false);
+            setIsRefreshing(false);
           }
-          setIsLoading(false);
-          setIsRefreshing(false);
-        },
-        (error) => {
-          console.error("Realtime listings error:", error);
-          setIsLoading(false);
-          setIsRefreshing(false);
-        }
-      );
+        );
+    };
 
-    return () => unsubscribe();
+    const detachListener = () => {
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+        unsubscribeSnapshot = null;
+      }
+    };
+
+    // Attach immediately
+    attachListener();
+
+    // Listen to background/foreground transitions to preserve battery
+    const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
+      if (nextAppState === "active") {
+        attachListener();
+      } else {
+        detachListener();
+      }
+    });
+
+    return () => {
+      detachListener();
+      subscription.remove();
+    };
   }, []);
 
   const handleRefresh = async () => {
@@ -278,7 +349,10 @@ export default function MasterListingScreen() {
     }
   };
 
-  const myListingsCount = listings.filter((item) => isListingOwnedByUser(item, currentUserId)).length;
+  const myListingsCount = useMemo(
+    () => listings.filter((item) => isListingOwnedByUser(item, currentUserId)).length,
+    [listings, currentUserId]
+  );
   const allListingsCount = listings.length;
 
   const activeCriteriaSummary: string[] = [];
@@ -300,94 +374,268 @@ export default function MasterListingScreen() {
     handleFilterPress("Semua");
   };
 
-  // Segment + Filter + Search Logic
-  const filteredListings = listings.filter((item: PropertyListing) => {
-    if (activeSegment === "mine" && !isListingOwnedByUser(item, currentUserId)) return false;
+  // Segment + Filter + Search Logic (Memoized for max performance)
+  const filteredListings = useMemo(() => {
+    return listings.filter((item: PropertyListing) => {
+      if (activeSegment === "mine" && !isListingOwnedByUser(item, currentUserId)) return false;
 
-    // Draft listings are private — only visible to their owner
-    const rawStatus = (item.status || "").toString().toLowerCase().trim();
-    if (rawStatus === "draft" && !isListingOwnedByUser(item, currentUserId)) return false;
+      // Draft listings are private — only visible to their owner
+      const rawStatus = (item.status || "").toString().toLowerCase().trim();
+      if (rawStatus === "draft" && !isListingOwnedByUser(item, currentUserId)) return false;
 
-    if (activeFilter !== "Semua") {
-      const status = (item.status || "").toString().toLowerCase().trim();
-      if (activeFilter === "Sold" && status !== "terjual" && status !== "sold") return false;
-      if (activeFilter === "Booking" && status !== "draft" && status !== "booking") return false;
-      if (activeFilter === "Aktif" && status !== "aktif" && status !== "active") return false;
-      if (activeFilter === "Draft" && status !== "draft") return false;
+      if (activeFilter !== "Semua") {
+        const status = (item.status || "").toString().toLowerCase().trim();
+        if (activeFilter === "Sold" && status !== "terjual" && status !== "sold") return false;
+        if (activeFilter === "Booking" && status !== "draft" && status !== "booking") return false;
+        if (activeFilter === "Aktif" && status !== "aktif" && status !== "active") return false;
+        if (activeFilter === "Draft" && status !== "draft") return false;
+      }
+
+      if (criteriaLocation.trim()) {
+        const locationQuery = criteriaLocation.toLowerCase().trim();
+        const alamat = (item.alamat || "").toLowerCase();
+        const negeri = (item.negeri || "").toLowerCase();
+        if (!alamat.includes(locationQuery) && !negeri.includes(locationQuery)) {
+          return false;
+        }
+      }
+
+      if (criteriaPropertyType !== "Any" && item.jenis !== criteriaPropertyType) {
+        return false;
+      }
+
+      if (criteriaTenure !== "Any" && (item.pegangan || "") !== criteriaTenure) {
+        return false;
+      }
+
+      if (criteriaLotStatus !== "Any" && (item.lot || "") !== criteriaLotStatus) {
+        return false;
+      }
+
+      const minPrice = parsePriceNumber(criteriaMinPrice);
+      const maxPrice = parsePriceNumber(criteriaMaxPrice);
+      if (minPrice !== null || maxPrice !== null) {
+        const itemPrice = parsePriceNumber(item.harga);
+        if (itemPrice === null) return false;
+        if (minPrice !== null && itemPrice < minPrice) return false;
+        if (maxPrice !== null && itemPrice > maxPrice) return false;
+      }
+
+      if (searchQuery.trim()) {
+        const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+        const haystack = [
+          item.tajuk || "",
+          item.alamat || "",
+          item.negeri || "",
+          item.jenis || "",
+          item.namaOwner || "",
+        ].join(" ").toLowerCase();
+        // ALL tokens must be present somewhere in the combined fields
+        return tokens.every((token) => haystack.includes(token));
+      }
+      return true;
+    });
+  }, [
+    listings,
+    activeSegment,
+    currentUserId,
+    activeFilter,
+    criteriaLocation,
+    criteriaPropertyType,
+    criteriaTenure,
+    criteriaLotStatus,
+    criteriaMinPrice,
+    criteriaMaxPrice,
+    searchQuery,
+  ]);
+
+  const sortedListings = useMemo(() => {
+    return [...filteredListings].sort((a, b) => compareListings(a, b, sortOption));
+  }, [filteredListings, sortOption]);
+
+  // Generate formatted listing message based on current language
+  const getFormattedShareMessage = (item: PropertyListing) => {
+    const formattedPrice =
+      typeof item.harga === "number"
+        ? item.harga.toLocaleString()
+        : item.harga;
+
+    const sizeStr = formatSizeLabel(item.keluasan) || "N/A";
+    const isBM = language === "BM";
+
+    if (isBM) {
+      return (
+        `WTS: ${item.tajuk}\n` +
+        `Harga: RM ${formattedPrice}\n` +
+        `Lokasi: ${item.alamat ? `${item.alamat}, ` : ""}${item.negeri || ""}\n` +
+        `Spesifikasi: ${item.bilikTidur || 0} Bilik, ${item.bilikAir || 0} Bilik Air | ${sizeStr}\n` +
+        `Status: ${item.pegangan || "Freehold"} / ${item.lot || "Bumi Lot"}\n\n` +
+        `Berminat? Hubungi saya segera untuk maklumat lanjut dan viewing!`
+      );
     }
 
-    if (criteriaLocation.trim()) {
-      const locationQuery = criteriaLocation.toLowerCase().trim();
-      const alamat = (item.alamat || "").toLowerCase();
-      const negeri = (item.negeri || "").toLowerCase();
-      if (!alamat.includes(locationQuery) && !negeri.includes(locationQuery)) {
-        return false;
+    return (
+      `FOR SALE: ${item.tajuk}\n` +
+      `Price: RM ${formattedPrice}\n` +
+      `Location: ${item.alamat ? `${item.alamat}, ` : ""}${item.negeri || ""}\n` +
+      `Specs: ${item.bilikTidur || 0} Beds, ${item.bilikAir || 0} Baths | ${sizeStr}\n` +
+      `Tenure: ${item.pegangan || "Freehold"} / ${item.lot || "Bumi Lot"}\n\n` +
+      `Interested? Contact me now for more details and viewing appointment!`
+    );
+  };
+
+  // 1-Click Share: Opens modern themed bottom sheet
+  const handleShare = (item: PropertyListing) => {
+    setShareModalListing(item);
+  };
+
+  const handleShareWhatsApp = async (item: PropertyListing) => {
+    setShareModalListing(null);
+    try {
+      const message = getFormattedShareMessage(item);
+      const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        await Share.share({ message, title: item.tajuk });
+      }
+    } catch (e) {
+      console.error("WhatsApp share error:", e);
+      const message = getFormattedShareMessage(item);
+      await Share.share({ message, title: item.tajuk });
+    }
+  };
+
+  // Helper to safely and quickly prepare image for sharing with caching
+  const prepareListingImageForSharing = async (imgUri: string, index: number = 0): Promise<string> => {
+    const cacheDir = FileSystem.cacheDirectory || "";
+    
+    if (imgUri.startsWith("http://") || imgUri.startsWith("https://")) {
+      // Create a deterministic hash/filename so we reuse already downloaded images instantly
+      let hash = 0;
+      for (let i = 0; i < imgUri.length; i++) {
+        hash = ((hash << 5) - hash) + imgUri.charCodeAt(i);
+        hash |= 0;
+      }
+      const filename = `cached_img_${Math.abs(hash)}_${index}.jpg`;
+      const targetPath = `${cacheDir}${filename}`;
+
+      try {
+        const info = await FileSystem.getInfoAsync(targetPath);
+        if (info.exists && info.size > 0) {
+          return targetPath;
+        }
+        const res = await FileSystem.downloadAsync(imgUri, targetPath);
+        return res.uri;
+      } catch (err) {
+        console.warn("Fast image download failed:", err);
+        return imgUri;
       }
     }
 
-    if (criteriaPropertyType !== "Any" && item.jenis !== criteriaPropertyType) {
-      return false;
+    if (imgUri.startsWith("data:image")) {
+      const targetPath = `${cacheDir}share_b64_${Date.now()}_${index}.jpg`;
+      const base64Data = imgUri.split(",")[1];
+      if (base64Data) {
+        await FileSystem.writeAsStringAsync(targetPath, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        return targetPath;
+      }
     }
 
-    if (criteriaTenure !== "Any" && (item.pegangan || "") !== criteriaTenure) {
-      return false;
+    if (imgUri.startsWith("file://")) {
+      return imgUri;
     }
 
-    if (criteriaLotStatus !== "Any" && (item.lot || "") !== criteriaLotStatus) {
-      return false;
+    return imgUri;
+  };
+
+  const handleSharePhoto = async (item: PropertyListing) => {
+    const allImages = getListingImagesList(item);
+    if (allImages.length === 0) {
+      Alert.alert(
+        language === "BM" ? "Tiada Gambar" : "No Photo Available",
+        language === "BM" ? "Listing ini tidak mempunyai gambar untuk dikongsi." : "This listing does not have any photos attached."
+      );
+      return;
     }
 
-    const minPrice = parsePriceNumber(criteriaMinPrice);
-    const maxPrice = parsePriceNumber(criteriaMaxPrice);
-    if (minPrice !== null || maxPrice !== null) {
-      const itemPrice = parsePriceNumber(item.harga);
-      if (itemPrice === null) return false;
-      if (minPrice !== null && itemPrice < minPrice) return false;
-      if (maxPrice !== null && itemPrice > maxPrice) return false;
-    }
+    setShareModalListing(null);
+    setIsSharingImage(true);
 
-    if (searchQuery.trim()) {
-      const tokens = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
-      const haystack = [
-        item.tajuk || "",
-        item.alamat || "",
-        item.negeri || "",
-        item.jenis || "",
-        item.namaOwner || "",
-      ].join(" ").toLowerCase();
-      // ALL tokens must be present somewhere in the combined fields
-      return tokens.every((token) => haystack.includes(token));
-    }
-    return true;
-  });
-  const sortedListings = [...filteredListings].sort((a, b) => compareListings(a, b, sortOption));
-
-  // 1-Click Share (Kongsi) Handler
-  const handleShare = async (item: PropertyListing) => {
     try {
-      const formattedPrice =
-        typeof item.harga === "number"
-          ? item.harga.toLocaleString()
-          : item.harga;
+      // 1. Auto-copy formatted listing message to clipboard and show toast
+      const message = getFormattedShareMessage(item);
+      try {
+        await Clipboard.setStringAsync(message);
+        if (Platform.OS === "android") {
+          ToastAndroid.show(
+            language === "BM"
+              ? "📋 Maklumat listing telah disalin! Sila tampal dalam ruangan teks/kapsyen."
+              : "📋 Listing details copied! Paste it in the caption/text field.",
+            ToastAndroid.LONG
+          );
+        }
+      } catch (clipErr) {
+        console.warn("Clipboard copy failed:", clipErr);
+      }
 
-      const sizeStr = item.keluasan
-        ? (String(item.keluasan).toLowerCase().includes("sq") ? item.keluasan : `${item.keluasan} sqft`)
-        : "N/A";
+      // 2. Prepare all available listing photos (up to 12)
+      const imagesToShare = allImages.slice(0, 12);
+      const preparedUris = await Promise.all(
+        imagesToShare.map((imgUri, idx) => prepareListingImageForSharing(imgUri, idx))
+      );
 
-      const message =
-        `WTS: ${item.tajuk}\n` +
-        `Harga: RM ${formattedPrice}\n` +
-        `Lokasi: ${item.alamat ? `${item.alamat}, ` : ""}${item.negeri}\n` +
-        `Spesifikasi: ${item.bilikTidur} Bilik, ${item.bilikAir} Bilik Air | ${sizeStr}\n` +
-        `Status: ${item.pegangan || "Freehold"} / ${item.lot || "Bumi Lot"}\n\n` +
-        `Berminat? Hubungi saya segera untuk viewing!`;
+      // 3. Multi-image Android sharing with native Parcelable Uri MultiShareModule
+      if (Platform.OS === "android" && NativeModules.MultiShare) {
+        try {
+          await NativeModules.MultiShare.shareMultipleImages(
+            preparedUris,
+            item.tajuk || "Property Listing",
+            message
+          );
+          return;
+        } catch (nativeShareErr) {
+          console.warn("Native MultiShare fallback:", nativeShareErr);
+        }
+      }
 
+      // 4. Single photo share fallback via Sharing API
+      const primaryUri = preparedUris[0];
+      const isAvailable = await Sharing.isAvailableAsync();
+      
+      if (isAvailable) {
+        await Sharing.shareAsync(primaryUri, {
+          dialogTitle: item.tajuk || "Property Listing",
+          mimeType: "image/jpeg",
+          UTI: "public.jpeg",
+        });
+      } else {
+        await Share.share({ message, title: item.tajuk });
+      }
+    } catch (e) {
+      console.error("Photo share error:", e);
+      Alert.alert(
+        language === "BM" ? "Ralat Perkongsian" : "Share Error",
+        language === "BM" ? "Gagal memproses gambar untuk dikongsi." : "Failed to prepare images for sharing."
+      );
+    } finally {
+      setIsSharingImage(false);
+    }
+  };
+
+  const handleShareGeneric = async (item: PropertyListing) => {
+    setShareModalListing(null);
+    try {
+      const message = getFormattedShareMessage(item);
       await Share.share({
         message,
-        title: `Listing: ${item.tajuk}`,
+        title: item.tajuk,
       });
-    } catch (error) {
-      console.error("Error sharing listing:", error);
+    } catch (e) {
+      console.error("Generic share error:", e);
     }
   };
 
@@ -922,6 +1170,11 @@ export default function MasterListingScreen() {
           data={sortedListings}
           keyExtractor={(item) => item.id}
           renderItem={renderListingCard}
+          removeClippedSubviews={Platform.OS === "android"}
+          maxToRenderPerBatch={8}
+          windowSize={5}
+          initialNumToRender={6}
+          updateCellsBatchingPeriod={50}
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
             paddingHorizontal: 16,
@@ -1196,6 +1449,216 @@ export default function MasterListingScreen() {
                   </TouchableOpacity>
                 );
               })}
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Share Options Bottom Sheet Modal */}
+      <Modal
+        visible={!!shareModalListing}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShareModalListing(null)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.65)",
+            justifyContent: "flex-end",
+          }}
+          activeOpacity={1}
+          onPress={() => setShareModalListing(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              borderTopWidth: 1,
+              borderColor: themeColors.borderColor,
+              paddingHorizontal: 20,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 16) + 12,
+            }}
+          >
+            {/* Drag handle */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: themeColors.borderColor,
+                alignSelf: "center",
+                marginBottom: 16,
+              }}
+            />
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 4,
+              }}
+            >
+              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
+                {language === "BM" ? "Kongsi Listing" : "Share Listing"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShareModalListing(null)}
+                style={{
+                  padding: 6,
+                  borderRadius: 16,
+                  backgroundColor: themeColors.surfaceContainer,
+                }}
+              >
+                <MaterialCommunityIcons name="close" size={18} color={themeColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {shareModalListing?.tajuk ? (
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 13,
+                  color: themeColors.textMuted,
+                  marginBottom: 16,
+                }}
+              >
+                {shareModalListing.tajuk}
+              </Text>
+            ) : (
+              <View style={{ marginBottom: 12 }} />
+            )}
+
+            {/* Share Options */}
+            <View style={{ gap: 10 }}>
+              {/* WhatsApp Option */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => shareModalListing && handleShareWhatsApp(shareModalListing)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#25D36622",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons name="whatsapp" size={22} color="#25D366" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "WhatsApp (Teks)" : "WhatsApp (Text)"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                    {language === "BM"
+                      ? "Buka WhatsApp terus dengan maklumat listing"
+                      : "Open WhatsApp directly with formatted property details"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+
+              {/* Photo & Caption Option */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => shareModalListing && handleSharePhoto(shareModalListing)}
+                disabled={isSharingImage}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: `${themeColors.maroonPrimary}22`,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {isSharingImage ? (
+                    <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
+                  ) : (
+                    <MaterialCommunityIcons name="image-outline" size={22} color={themeColors.maroonPrimary} />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "Kongsi Gambar (Brochure)" : "Share Photo & Details"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                    {language === "BM"
+                      ? "Buka gambar dalam menu perkongsian (teks disalin ke papan keratan)"
+                      : "Open photo in share menu (caption copied to clipboard)"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+
+              {/* More Apps Option */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => shareModalListing && handleShareGeneric(shareModalListing)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 14,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 12,
+                }}
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: "#6366F122",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons name="share-variant-outline" size={22} color="#6366F1" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "Pilihan Lain" : "More Sharing Options"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                    {language === "BM"
+                      ? "Buka menu perkongsian sistem untuk aplikasi lain"
+                      : "Open system share sheet for Telegram, Copy, and other apps"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
