@@ -10,6 +10,7 @@
     "android": "expo run:android",
     "start": "expo start",
     "notify:release": "node scripts/notify-release.mjs",
+    "notify:nudge": "node scripts/notify-release.mjs --nudge",
     "postinstall": "patch-package"
   },
   "dependencies": {

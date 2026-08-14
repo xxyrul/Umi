@@ -34,6 +34,8 @@ const TOKEN_SCOPES = [
 const args = new Set(process.argv.slice(2));
 const isDryRun = args.has("--dry-run");
 const isForced = args.has("--force");
+const isNudge = args.has("--nudge");
+const NUDGE_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
 function fail(message) {
   console.error(`[notify-release] ${message}`);
@@ -142,50 +144,43 @@ async function getAccessToken(serviceAccount) {
  * runs from an environment without the built output.
  */
 async function readManifest() {
-  let manifest;
+  let raw;
   try {
-    manifest = JSON.parse(await readFile(MANIFEST_PATH, "utf8"));
+    raw = await readFile(MANIFEST_PATH, "utf8");
   } catch {
-    const response = await fetch(`${LIVE_MANIFEST_URL}?t=${Date.now()}`, {
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) {
-      fail(`No local manifest at ${MANIFEST_PATH} and the live manifest returned ${response.status}.`);
+    const live = await fetch(LIVE_MANIFEST_URL);
+    if (!live.ok) {
+      fail(`Could not read manifest from ${MANIFEST_PATH} or ${LIVE_MANIFEST_URL}`);
     }
-    manifest = await response.json();
+    raw = await live.text();
   }
 
-  const downloadUrl = manifest.downloadUrl;
-  if (
-    typeof manifest.versionName !== "string" ||
-    !Number.isInteger(manifest.versionCode) ||
-    typeof downloadUrl !== "string"
-  ) {
-    fail("Release manifest is missing versionName, versionCode, or downloadUrl.");
-  }
-  if (manifest.packageName && manifest.packageName !== EXPECTED_PACKAGE) {
-    fail(`Release manifest targets an unexpected package: ${manifest.packageName}`);
-  }
-
-  let parsedUrl;
+  let parsed;
   try {
-    parsedUrl = new URL(downloadUrl);
+    parsed = JSON.parse(raw);
   } catch {
-    fail("Release manifest downloadUrl is not a valid URL.");
-  }
-  if (parsedUrl.protocol !== "https:" || parsedUrl.hostname !== RELEASE_HOSTNAME) {
-    fail(`Release manifest downloadUrl must be https on ${RELEASE_HOSTNAME}.`);
+    fail("Release manifest is not valid JSON.");
   }
 
-  return manifest;
+  if (
+    !parsed.versionName ||
+    typeof parsed.versionCode !== "number" ||
+    !parsed.downloadUrl ||
+    parsed.packageName !== EXPECTED_PACKAGE
+  ) {
+    fail("Release manifest has an unexpected schema.");
+  }
+
+  return parsed;
 }
 
 function firestoreUrl(projectId, suffix) {
   return `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents${suffix}`;
 }
 
-async function firestoreRequest(projectId, suffix, accessToken, init = {}) {
-  const response = await fetch(firestoreUrl(projectId, suffix), {
+async function firestoreRequest(projectId, pathSuffix, accessToken, init = {}) {
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents${pathSuffix}`;
+  const response = await fetch(url, {
     ...init,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -228,11 +223,13 @@ async function listEnabledDevices(projectId, accessToken) {
     if (fields.enabled?.booleanValue !== true) return;
     const token = fields.token?.stringValue;
     if (!token) return;
+    const lastNotifiedAt = fields.lastNotifiedAt?.stringValue ? Date.parse(fields.lastNotifiedAt.stringValue) : 0;
     devices.push({
       token,
       language: fields.language?.stringValue === "BM" ? "BM" : "EN",
       buildVersion: Number(fields.buildVersion?.integerValue ?? fields.buildVersion?.doubleValue ?? 0),
       documentPath: doc.name.split("/documents/")[1],
+      lastNotifiedAt: Number.isNaN(lastNotifiedAt) ? 0 : lastNotifiedAt,
       ...extra,
     });
   };
@@ -253,17 +250,17 @@ async function listEnabledDevices(projectId, accessToken) {
       },
     }),
   });
-  if (!fallbackResponse.ok) {
-    failOnPermissionDenied("User device lookup", fallbackResponse);
-    fail(`User device lookup failed with ${fallbackResponse.status}: ${await fallbackResponse.text()}`);
-  }
-
-  for (const row of await fallbackResponse.json()) {
-    const doc = row.document;
-    if (!doc) continue;
-    for (const [fieldName, fieldValue] of Object.entries(doc.fields ?? {})) {
-      if (!fieldName.startsWith("updateNotificationDevice_")) continue;
-     addDevice(doc, fieldValue?.mapValue?.fields, { fieldPath: fieldName });
+  if (fallbackResponse.ok) {
+    const userRows = await fallbackResponse.json();
+    for (const row of userRows) {
+      const doc = row.document;
+      if (!doc?.fields) continue;
+      for (const [key, value] of Object.entries(doc.fields)) {
+        if (!key.startsWith("updateNotificationDevice_")) continue;
+        const sub = value.mapValue?.fields;
+        if (!sub) continue;
+        addDevice(doc, sub, { fieldPath: key });
+      }
     }
   }
   return devices;
@@ -271,17 +268,13 @@ async function listEnabledDevices(projectId, accessToken) {
 
 /** Prevents a second run from re-announcing the same release. */
 async function claimRelease(projectId, accessToken, versionCode) {
-  const docPath = `/appReleaseNotifications/android-${versionCode}`;
-  const existing = await firestoreRequest(projectId, docPath, accessToken);
-
-  if (existing.ok) {
-    // A forced retry is needed when a previous run recorded the marker but
-    // could not deliver all messages. Do not try to create the marker again.
-    return isForced;
-  }
-  if (!existing.ok && existing.status !== 404) {
-    failOnPermissionDenied("Release marker lookup", existing);
-    fail(`Release marker lookup failed with ${existing.status}: ${await existing.text()}`);
+  if (isNudge) return true; // Nudge mode runs periodically
+  const docPath = `/system/releaseNotifications_${versionCode}`;
+  if (!isForced) {
+    const check = await firestoreRequest(projectId, docPath, accessToken);
+    if (check.ok) {
+      return false;
+    }
   }
 
   if (!isDryRun) {
@@ -302,11 +295,24 @@ async function claimRelease(projectId, accessToken, versionCode) {
       }
     );
     if (written.status === 409 && !isForced) return false;
-    if (!written.ok) {
+    if (!written.ok && written.status !== 409) {
       fail(`Unable to record release marker: ${await written.text()}`);
     }
   }
   return true;
+}
+
+async function recordDeviceNotified(projectId, accessToken, device) {
+  if (device.fieldPath) return; // Skip updating legacy map field paths
+  const docPath = `/${device.documentPath}?updateMask.fieldPaths=lastNotifiedAt`;
+  await firestoreRequest(projectId, docPath, accessToken, {
+    method: "PATCH",
+    body: JSON.stringify({
+      fields: {
+        lastNotifiedAt: { stringValue: new Date().toISOString() },
+      },
+    }),
+  });
 }
 
 async function deleteDevice(projectId, accessToken, device) {
@@ -333,11 +339,11 @@ function buildMessage(device, manifest) {
       token: device.token,
       notification: {
         title: isMalay
-          ? `Versi Umi ${manifest.versionName} Tersedia`
-          : `Umi ${manifest.versionName} Is Available`,
+          ? (isNudge ? `Peringatan: Versi Umi ${manifest.versionName} Tersedia` : `Versi Umi ${manifest.versionName} Tersedia`)
+          : (isNudge ? `Reminder: Umi ${manifest.versionName} Is Available` : `Umi ${manifest.versionName} Is Available`),
         body: isMalay
-          ? "Buka Umi untuk memuat turun kemas kini terbaru."
-          : "Open Umi to download the latest update.",
+          ? (isNudge ? "Kemas kini ke versi terkini untuk kelancaran dan ciri baru!" : "Buka Umi untuk memuat turun kemas kini terbaru.")
+          : (isNudge ? "Update to the latest version for improved features and stability!" : "Open Umi to download the latest update."),
       },
       data: {
         kind: "native-app-update",
@@ -374,18 +380,25 @@ async function main() {
   }
 
   const devices = await listEnabledDevices(projectId, accessToken);
+  const now = Date.now();
 
   // One notification per token, and never to a device already on this build.
   const seenTokens = new Set();
   const recipients = devices.filter((device) => {
     if (seenTokens.has(device.token)) return false;
     if (device.buildVersion >= manifest.versionCode) return false;
+    
+    // In nudge mode, verify 3-day cooldown
+    if (isNudge && device.lastNotifiedAt && now - device.lastNotifiedAt < NUDGE_COOLDOWN_MS) {
+      return false;
+    }
+
     seenTokens.add(device.token);
     return true;
   });
 
   console.log(
-    `[notify-release] ${manifest.versionName} (code ${manifest.versionCode}) -> ${recipients.length} device(s) of ${devices.length} registered.`
+    `[notify-release] ${isNudge ? "[Nudge Mode] " : ""}${manifest.versionName} (code ${manifest.versionCode}) -> ${recipients.length} device(s) of ${devices.length} registered.`
   );
 
   if (isDryRun) {
@@ -407,6 +420,7 @@ async function main() {
 
     if (response.ok) {
       sent += 1;
+      await recordDeviceNotified(projectId, accessToken, device);
       continue;
     }
 

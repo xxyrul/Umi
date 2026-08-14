@@ -1,9 +1,12 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Alert, Linking, Platform } from "react-native";
 
 const UPDATE_MANIFEST_URL = "https://umiren-d6a66.web.app/releases/latest.json";
 const RELEASE_HOSTNAME = "umiren-d6a66.web.app";
 const PACKAGE_NAME = "com.umi.caseflow";
+const LAST_DISMISSED_UPDATE_KEY = "umi_last_dismissed_update_timestamp";
+const NUDGE_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 Days
 
 export type NativeAppRelease = {
   versionName: string;
@@ -43,34 +46,33 @@ function isSafeDownloadUrl(downloadUrl: string) {
 }
 
 async function fetchReleaseManifest(): Promise<NativeAppRelease | null> {
-  if (Platform.OS !== "android" || __DEV__) {
+  if (Platform.OS !== "android") {
     return null;
   }
 
-  const response = await fetch(`${UPDATE_MANIFEST_URL}?t=${Date.now()}`, {
-    headers: { Accept: "application/json" },
+  const response = await fetch(UPDATE_MANIFEST_URL, {
+    headers: {
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
+    },
   });
 
   if (!response.ok) {
-    throw new Error(`Update manifest request failed with ${response.status}`);
+    throw new Error(`Failed to load release manifest: ${response.status}`);
   }
 
   const release = (await response.json()) as Partial<NativeAppRelease>;
+  const currentVersionCode = getCurrentVersionCode();
+
   if (
+    !release ||
     typeof release.versionName !== "string" ||
     typeof release.versionCode !== "number" ||
-    !Number.isInteger(release.versionCode) ||
     typeof release.downloadUrl !== "string" ||
+    release.versionCode <= currentVersionCode ||
+    (release.packageName && release.packageName !== PACKAGE_NAME) ||
     !isSafeDownloadUrl(release.downloadUrl)
   ) {
-    throw new Error("Update manifest has an invalid format");
-  }
-
-  if (release.packageName && release.packageName !== PACKAGE_NAME) {
-    throw new Error("Update manifest is for a different Android package");
-  }
-
-  if (release.versionCode <= getCurrentVersionCode()) {
     return null;
   }
 
@@ -102,8 +104,27 @@ export async function checkForNativeAppUpdate(options: CheckOptions = {}) {
       return null;
     }
 
-    if (!options.manual && !options.forcePrompt && promptedVersionCode === release.versionCode) {
-      return release;
+    // Check 3-day recurring cooldown for automatic checks
+    if (!options.manual && !options.forcePrompt && !release.mandatory) {
+      if (promptedVersionCode === release.versionCode) {
+        return release;
+      }
+
+      try {
+        const lastDismissedRaw = await AsyncStorage.getItem(LAST_DISMISSED_UPDATE_KEY);
+        if (lastDismissedRaw) {
+          const lastDismissed = JSON.parse(lastDismissedRaw);
+          if (
+            lastDismissed?.versionCode === release.versionCode &&
+            Date.now() - (lastDismissed?.timestamp || 0) < NUDGE_INTERVAL_MS
+          ) {
+            // Still within 3-day cooldown
+            return release;
+          }
+        }
+      } catch (storageErr) {
+        console.warn("[apkUpdater] Failed reading dismiss cooldown:", storageErr);
+      }
     }
 
     promptedVersionCode = release.versionCode;
@@ -118,7 +139,20 @@ export async function checkForNativeAppUpdate(options: CheckOptions = {}) {
       [
         ...(release.mandatory
           ? []
-          : [{ text: isMalay ? "Kemudian" : "Later", style: "cancel" as const }]),
+          : [
+              {
+                text: isMalay ? "Kemudian" : "Later",
+                style: "cancel" as const,
+                onPress: async () => {
+                  try {
+                    await AsyncStorage.setItem(
+                      LAST_DISMISSED_UPDATE_KEY,
+                      JSON.stringify({ versionCode: release.versionCode, timestamp: Date.now() })
+                    );
+                  } catch {}
+                },
+              },
+            ]),
         {
           text: isMalay ? "Muat Turun Kemas Kini" : "Download Update",
           onPress: async () => {
