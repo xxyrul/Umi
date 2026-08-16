@@ -841,16 +841,23 @@ export default function ProfileScreen() {
                     />
                   </View>
 
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", opacity: 0.65 }}>
                     <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                        {language === "BM" ? "Ringkasan E-mel Mingguan" : "Weekly Email Digest"}
-                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
+                          {language === "BM" ? "Ringkasan E-mel Mingguan" : "Weekly Email Digest"}
+                        </Text>
+                        <View style={{ backgroundColor: "rgba(255, 180, 180, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: "700", color: "#FFB4B4" }}>
+                            {language === "BM" ? "AKAN DATANG" : "COMING SOON"}
+                          </Text>
+                        </View>
+                      </View>
                       <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {language === "BM" ? "Laporan prestasi harta dihantar ke e-mel" : "Property performance digest sent to email"}
+                        {language === "BM" ? "Laporan prestasi harta dihantar ke e-mel secara automatik." : "Automated property performance digest sent to email."}
                       </Text>
                     </View>
-                    <Switch value={dailyDigestEnabled} onValueChange={setDailyDigestEnabled} trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }} thumbColor={dailyDigestEnabled ? "#FFFFFF" : "#F3F4F6"} />
+                    <Switch value={false} disabled={true} trackColor={{ false: "#4B5563", true: themeColors.maroonPrimary }} thumbColor="#9CA3AF" />
                   </View>
                 </View>
               )}
