@@ -304,7 +304,12 @@ export default function PropertyDetailScreen() {
       Alert.alert(t("docNone"), `"${docName}" ${t("docNotUploaded")}`);
       return;
     }
-    Linking.openURL(url).catch(() => {
+    const cleanUrl = url.trim();
+    if (!cleanUrl.startsWith("https://") && !cleanUrl.startsWith("http://")) {
+      Alert.alert(t("docOpenError"), "Invalid document URL scheme.");
+      return;
+    }
+    Linking.openURL(cleanUrl).catch(() => {
       Alert.alert(t("docOpenError"), t("docOpenFailed"));
     });
   };

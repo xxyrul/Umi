@@ -3,6 +3,7 @@ import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LIGHT_THEME, DARK_THEME } from "@/constants/theme";
 import { TRANSLATIONS, TranslationKeys } from "@/constants/translations";
+import { getCurrentUserProfile } from "@/services/auth";
 
 export type ThemeMode = "system" | "light" | "dark";
 export type LanguageMode = "BM" | "EN";

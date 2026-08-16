@@ -2,14 +2,19 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppSettings } from "@/context/AppSettingsContext";
 
 // Explicitly define the 4 main tabs that belong in the bottom bar
 const MAIN_TABS = ["index", "cases", "listings", "profile"] as const;
 
-function CustomFloatingTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+type FloatingTabBarProps = {
+  state: any;
+  descriptors: any;
+  navigation: any;
+};
+
+function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
   const { t } = useAppSettings();
 
