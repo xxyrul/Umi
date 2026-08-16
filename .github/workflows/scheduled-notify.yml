@@ -1,4 +1,4 @@
-name: Scheduled Release Notification (9 AM & 12 PM)
+name: Scheduled Release Notification (Today 9 AM & 12 PM Only)
 
 on:
   schedule:
@@ -20,7 +20,22 @@ jobs:
         with:
           node-version: 20
 
+      # Strict single-day guard: Only executes on 2026-08-17 (today)
+      - name: Check Target Date Guard
+        id: date_check
+        run: |
+          # Get current date in Asia/Kuala_Lumpur (MYT)
+          CURRENT_DATE=$(TZ="Asia/Kuala_Lumpur" date +'%Y-%m-%d')
+          echo "Current MYT date is: $CURRENT_DATE"
+          if [ "$CURRENT_DATE" != "2026-08-17" ]; then
+            echo "Target date 2026-08-17 has passed. Skipping broadcast."
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Broadcast Push Notification
+        if: steps.date_check.outputs.should_run == 'true'
         run: node scripts/notify-release.mjs --force
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
