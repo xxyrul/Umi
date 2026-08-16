@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Image,
   Alert,
   ScrollView,
   Platform,
@@ -14,6 +13,7 @@ import {
   StyleSheet,
   Linking,
   Share,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -36,12 +36,14 @@ import Constants from "expo-constants";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
+import { Image as ExpoImage } from "expo-image";
+import * as Haptics from "expo-haptics";
 import type { UserProfile, PropertyCase } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { language, themeColors, isDark, toggleTheme, setLanguage, t } = useAppSettings();
+  const { theme, setTheme, language, themeColors, isDark, toggleTheme, setLanguage, t } = useAppSettings();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
@@ -64,12 +66,18 @@ export default function ProfileScreen() {
   const [isSavingAccount, setIsSavingAccount] = useState(false);
 
   useEffect(() => {
-    const user = getCurrentUserProfile();
-    setProfile(user);
-    if (user?.displayName) {
-      setDisplayNameInput(user.displayName);
+    try {
+      const user = getCurrentUserProfile();
+      setProfile(user);
+      if (user?.displayName) {
+        setDisplayNameInput(user.displayName);
+      }
+      getUpdateNotificationsEnabled()
+        .then(setUpdateAlertsEnabled)
+        .catch(() => {});
+    } catch (e) {
+      console.warn("Profile load error:", e);
     }
-    getUpdateNotificationsEnabled().then(setUpdateAlertsEnabled);
   }, []);
 
   const handleToggleUpdateAlerts = async (value: boolean) => {
@@ -442,7 +450,7 @@ export default function ProfileScreen() {
         {/* Profile Avatar / Initials */}
         <View style={{ marginBottom: SPACING.lg, alignItems: "center" }}>
           {profile?.photoURL ? (
-            <Image
+            <ExpoImage
               source={{ uri: profile.photoURL }}
               style={{
                 width: 96,
@@ -452,6 +460,9 @@ export default function ProfileScreen() {
                 borderColor: themeColors.maroonPrimary,
                 marginBottom: SPACING.md,
               }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={200}
             />
           ) : (
             <View
@@ -512,11 +523,11 @@ export default function ProfileScreen() {
             {t("settingsTitle")}
           </Text>
 
-          {/* Dark / Light Mode Switcher */}
+          {/* Theme Mode Selector (Auto / Light / Dark) */}
           <View style={styles.preferenceRow}>
             <View style={styles.preferenceInfo}>
               <MaterialCommunityIcons
-                name={isDark ? "weather-night" : "weather-sunny"}
+                name={theme === "system" ? "cellphone-cog" : isDark ? "weather-night" : "weather-sunny"}
                 size={22}
                 color={themeColors.maroonPrimary}
               />
@@ -525,17 +536,59 @@ export default function ProfileScreen() {
                   {t("themeLabel")}
                 </Text>
                 <Text style={[styles.preferenceSubtitle, { color: themeColors.textMuted }]}>
-                  {isDark ? t("darkMode") : t("lightMode")}
+                  {theme === "system"
+                    ? `Auto (${isDark ? "Dark" : "Light"})`
+                    : isDark ? "Dark Mode" : "Light Mode"}
                 </Text>
               </View>
             </View>
 
-            <Switch
-              value={isDark}
-              onValueChange={toggleTheme}
-              trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }}
-              thumbColor={isDark ? "#FFFFFF" : "#F3F4F6"}
-            />
+            <View style={[styles.segmentContainer, { backgroundColor: themeColors.surfaceContainer }]}>
+              <TouchableOpacity
+                onPress={() => setTheme("system")}
+                style={[
+                  styles.segmentOption,
+                  theme === "system" && { backgroundColor: themeColors.maroonPrimary },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.segmentText,
+                    { color: theme === "system" ? "#FFF" : themeColors.textMuted },
+                  ]}
+                >
+                  Auto
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setTheme("light")}
+                style={[
+                  styles.segmentOption,
+                  theme === "light" && { backgroundColor: themeColors.maroonPrimary },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="weather-sunny"
+                  size={15}
+                  color={theme === "light" ? "#FFF" : themeColors.textMuted}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => setTheme("dark")}
+                style={[
+                  styles.segmentOption,
+                  theme === "dark" && { backgroundColor: themeColors.maroonPrimary },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="weather-night"
+                  size={15}
+                  color={theme === "dark" ? "#FFF" : themeColors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Language Switcher (BM / EN) */}
@@ -650,7 +703,8 @@ export default function ProfileScreen() {
         transparent={true}
         onRequestClose={() => setActiveSection(null)}
       >
-        <View
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={{
             flex: 1,
             backgroundColor: "rgba(0, 0, 0, 0.6)",
@@ -659,11 +713,11 @@ export default function ProfileScreen() {
         >
           <View
             style={{
-              backgroundColor: themeColors.cardBackground,
+              backgroundColor: isDark ? "#1E1E1E" : themeColors.cardBackground,
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
               borderWidth: 1,
-              borderColor: themeColors.borderColor,
+              borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : themeColors.borderColor,
               padding: SPACING.lg,
               maxHeight: "85%",
               minHeight: "45%",
@@ -871,7 +925,7 @@ export default function ProfileScreen() {
               )}
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Feedback Form Modal */}

@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   ScrollView,
-  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -16,6 +15,8 @@ import {
   AppStateStatus,
   useWindowDimensions,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -575,21 +576,21 @@ export default function CasesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Cases List */}
+      {/* Main Cases FlashList */}
       {isLoading ? (
         <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={filteredCases}
           keyExtractor={(item) => item.id}
+          estimatedItemSize={190}
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
             paddingHorizontal: SPACING.lg,
             paddingBottom: Math.max(insets.bottom, 24) + 104,
           }}
-          scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -601,7 +602,10 @@ export default function CasesScreen() {
           renderItem={({ item }) => (
             <CaseCard
               case={item}
-              onPress={() => router.push(`/case/${item.id}` as any)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                router.push(`/case/${item.id}` as any);
+              }}
               onDelete={handleDeleteCase}
               onStatusPress={handleOpenStatusModal}
               onReminderPress={handleOpenReminderModal}
@@ -654,19 +658,19 @@ export default function CasesScreen() {
         activeOpacity={0.9}
         style={{
           position: "absolute",
-          right: fabRight,
-          bottom: insets.bottom + 16,
+          right: 20,
+          bottom: 96,
           width: 56,
           height: 56,
           borderRadius: 28,
           backgroundColor: themeColors.maroonPrimary,
           alignItems: "center",
           justifyContent: "center",
-          elevation: 5,
+          elevation: 6,
           shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
+          shadowOffset: { width: 0, height: 3 },
           shadowOpacity: 0.3,
-          shadowRadius: 8,
+          shadowRadius: 4.5,
           zIndex: 999,
         }}
       >

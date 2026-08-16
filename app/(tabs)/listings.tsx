@@ -4,8 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  Image,
   Share,
   Alert,
   StyleSheet,
@@ -23,6 +21,9 @@ import {
   ToastAndroid,
   NativeModules,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { Image as ExpoImage } from "expo-image";
+import * as Haptics from "expo-haptics";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
@@ -740,13 +741,20 @@ export default function MasterListingScreen() {
         activeOpacity={0.92}
         onPress={() => {
           if (!item?.id) return;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
           router.push(`/listing/${item.id}` as any);
         }}
         style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
       >
         <View style={styles.cardMainRow}>
           {imageUri ? (
-            <Image source={{ uri: imageUri }} style={styles.thumbnail} />
+            <ExpoImage
+              source={{ uri: imageUri }}
+              style={styles.thumbnail}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+            />
           ) : (
             <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
               <MaterialCommunityIcons
@@ -1159,29 +1167,24 @@ export default function MasterListingScreen() {
         </View>
       </View>
 
-      {/* Main Property FlatList */}
+      {/* Main Property FlashList */}
       {isLoading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
           <Text style={[styles.loadingText, { color: themeColors.textMuted }]}>{t("masterListing")}...</Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={sortedListings}
           keyExtractor={(item) => item.id}
           renderItem={renderListingCard}
-          removeClippedSubviews={Platform.OS === "android"}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          initialNumToRender={6}
-          updateCellsBatchingPeriod={50}
+          estimatedItemSize={210}
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 12,
             paddingBottom: Math.max(insets.bottom, 24) + 132,
           }}
-          scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 132 }}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
@@ -1669,8 +1672,8 @@ export default function MasterListingScreen() {
         activeOpacity={0.9}
         style={{
           position: "absolute",
-          right: fabRight,
-          bottom: Math.max(insets.bottom, 8) + 16,
+          right: 20,
+          bottom: 96,
           height: 52,
           paddingHorizontal: 18,
           borderRadius: 26,
@@ -1678,11 +1681,11 @@ export default function MasterListingScreen() {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
-          elevation: 5,
+          elevation: 6,
           shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
+          shadowOffset: { width: 0, height: 3 },
           shadowOpacity: 0.3,
-          shadowRadius: 8,
+          shadowRadius: 4.5,
           zIndex: 999,
         }}
       >

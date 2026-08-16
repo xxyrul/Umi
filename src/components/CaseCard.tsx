@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, TouchableOpacity, Alert, Linking } from "react-native";
+import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SPACING } from "@/constants/theme";
 import { StatusBadge } from "./StatusBadge";
@@ -27,6 +28,7 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress, onR
 
   const handleLongPress = () => {
     if (!onDelete) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const isBM = language === "BM";
     const alertTitle = isBM ? "Padam Kes" : "Delete Case";
     const alertMessage = isBM

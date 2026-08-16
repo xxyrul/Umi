@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  Image,
   Modal,
   Linking,
   ActivityIndicator,
@@ -19,6 +18,9 @@ import {
   ToastAndroid,
   NativeModules,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
+import ImageViewing from "react-native-image-viewing";
+import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -198,12 +200,22 @@ export default function PropertyDetailScreen() {
                 id: docSnapshot.id,
                 ...docSnapshot.data(),
               } as PropertyListing;
-              setListing(publicListing);
 
               const currentUid = auth().currentUser?.uid;
               const isOwner =
                 currentUid &&
-                [publicListing.userId, publicListing.agentId].includes(currentUid);
+                [publicListing.userId, publicListing.agentId, (publicListing as any).created_by, (publicListing as any).ownerId].includes(currentUid);
+
+              // If listing is a draft and user is not owner, block access
+              const rawStatus = (publicListing.status || "").toString().toLowerCase().trim();
+              if (rawStatus === "draft" && !isOwner) {
+                setListing(null);
+                setIsLoading(false);
+                return;
+              }
+
+              setListing(publicListing);
+
               if (isOwner) {
                 void firestore()
                   .collection("listings")
@@ -663,15 +675,18 @@ export default function PropertyDetailScreen() {
                     key={`hero-${idx}`}
                     activeOpacity={0.95}
                     onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      setActiveImageIndex(idx);
                       setIsGalleryOpen(true);
-                      setTimeout(() => goToImage(idx, allImages, false), 0);
                     }}
                     style={{ width: screenWidth, height: 240 }}
                   >
-                    <Image
+                    <ExpoImage
                       source={{ uri: imgUri }}
                       style={styles.heroImage}
-                      resizeMode="cover"
+                      contentFit="cover"
+                      transition={200}
+                      cachePolicy="memory-disk"
                       onLoadStart={() => setImageLoading(true)}
                       onLoadEnd={() => setImageLoading(false)}
                     />
@@ -704,7 +719,7 @@ export default function PropertyDetailScreen() {
             style={[styles.floatingBackButton, { top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6 }]}
             onPress={handleBackToListings}
           >
-            <MaterialCommunityIcons name="arrow-left" size={22} color={themeColors.maroonPrimary} />
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#FFFFFF" />
           </TouchableOpacity>
 
           {/* Floating Delete Button */}
@@ -719,7 +734,7 @@ export default function PropertyDetailScreen() {
               ]}
               onPress={handleDeleteListing}
             >
-              <MaterialCommunityIcons name="delete-outline" size={20} color="#EA4335" />
+              <MaterialCommunityIcons name="delete-outline" size={20} color="#FF6B6B" />
             </TouchableOpacity>
           )}
 
@@ -735,7 +750,7 @@ export default function PropertyDetailScreen() {
               ]}
               onPress={() => router.push(`/listing/edit/${listing.id}` as any)}
             >
-              <MaterialCommunityIcons name="pencil-outline" size={20} color={themeColors.maroonPrimary} />
+              <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           )}
 
@@ -744,7 +759,7 @@ export default function PropertyDetailScreen() {
             style={[styles.floatingShareButton, { top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6 }]}
             onPress={handleShare}
           >
-            <MaterialCommunityIcons name="share-variant" size={20} color={themeColors.maroonPrimary} />
+            <MaterialCommunityIcons name="share-variant" size={20} color="#FFFFFF" />
           </TouchableOpacity>
 
           {/* Image Gallery Strip Indicators */}
@@ -760,7 +775,13 @@ export default function PropertyDetailScreen() {
                     activeImageIndex === idx && { borderColor: themeColors.maroonPrimary },
                   ]}
                 >
-                  <Image source={{ uri: imgUri }} style={styles.galleryThumb} />
+                  <ExpoImage
+                    source={{ uri: imgUri }}
+                    style={styles.galleryThumb}
+                    contentFit="cover"
+                    transition={150}
+                    cachePolicy="memory-disk"
+                  />
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -1147,42 +1168,60 @@ export default function PropertyDetailScreen() {
         </View>
       </ScrollView>
 
-      <Modal
+      {/* Airbnb-Style Native Pinch-to-Zoom Lightbox Gallery */}
+      <ImageViewing
+        images={allImages.map((uri) => ({ uri }))}
+        imageIndex={activeImageIndex}
         visible={isGalleryOpen}
-        transparent
-        animationType="fade"
         onRequestClose={() => setIsGalleryOpen(false)}
-      >
-        <View style={[styles.fullScreenModal, { paddingTop: Math.max(insets.top, 16), paddingBottom: Math.max(insets.bottom, 16) }]}> 
-          <View style={styles.fullScreenTopBar}>
+        onImageIndexChange={(index) => {
+          setActiveImageIndex(index);
+          heroGalleryRef.current?.scrollTo({ x: index * screenWidth, y: 0, animated: false });
+        }}
+        swipeToCloseEnabled={true}
+        doubleTapToZoomEnabled={true}
+        HeaderComponent={({ imageIndex }) => (
+          <View
+            style={{
+              paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 20) + 12,
+              paddingHorizontal: 20,
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "rgba(0,0,0,0.6)",
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 20,
+              }}
+            >
+              <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "600" }}>
+                {imageIndex + 1} / {allImages.length}
+              </Text>
+            </View>
+
             <TouchableOpacity
               onPress={() => setIsGalleryOpen(false)}
-              style={styles.fullScreenCloseBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 21,
+                backgroundColor: "rgba(0,0,0,0.65)",
+                justifyContent: "center",
+                alignItems: "center",
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.2)",
+              }}
             >
               <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.fullScreenCounter}>{hasImages ? `${activeImageIndex + 1} / ${allImages.length}` : ""}</Text>
           </View>
-
-          <ScrollView
-            ref={fullScreenGalleryRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
-              setActiveImageIndex(idx);
-              heroGalleryRef.current?.scrollTo({ x: idx * screenWidth, y: 0, animated: false });
-            }}
-          >
-            {allImages.map((imgUri, idx) => (
-              <View key={`full-${idx}`} style={{ width: screenWidth, height: screenHeight - Math.max(insets.top, 16) - Math.max(insets.bottom, 16) - 64 }}>
-                <Image source={{ uri: imgUri }} style={styles.fullScreenImage} resizeMode="contain" />
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
+        )}
+      />
 
       {/* Share Options Bottom Sheet Modal */}
       <Modal
@@ -1481,32 +1520,36 @@ const styles = StyleSheet.create({
   floatingBackButton: {
     position: "absolute",
     left: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
   floatingShareButton: {
     position: "absolute",
     right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
-    elevation: 4,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.15)",
   },
   galleryStrip: {
     position: "absolute",

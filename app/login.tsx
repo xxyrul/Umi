@@ -249,11 +249,11 @@ export default function LoginScreen() {
 
             {/* Footer Sign Up Switch */}
             <View style={styles.footerContainer}>
-              <Text style={styles.footerText}>
+              <Text style={[styles.footerText, { color: themeColors.textMuted }]}>
                 {isSigningUp ? "Sudah mempunyai akaun?" : "Belum mempunyai akaun?"}{" "}
               </Text>
               <TouchableOpacity onPress={() => setIsSigningUp(!isSigningUp)}>
-                <Text style={styles.footerLink}>
+                <Text style={[styles.footerLink, { color: "#FFB4B4" }]}>
                   {isSigningUp ? "Log Masuk Akaun" : "Daftar Akaun Baru"}
                 </Text>
               </TouchableOpacity>

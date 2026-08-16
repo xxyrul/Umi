@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LIGHT_THEME, DARK_THEME } from "@/constants/theme";
 import { TRANSLATIONS, TranslationKeys } from "@/constants/translations";
 
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = "system" | "light" | "dark";
 export type LanguageMode = "BM" | "EN";
 
 export interface AppSettingsContextType {
@@ -27,7 +28,8 @@ const STORAGE_KEY_LANG = "@umi_app_language";
 const AppSettingsContext = createContext<AppSettingsContextType | undefined>(undefined);
 
 export function AppSettingsProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>("light");
+  const systemColorScheme = useColorScheme();
+  const [theme, setThemeState] = useState<ThemeMode>("system");
   const [language, setLanguageState] = useState<LanguageMode>("BM");
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
   const [isOnboardingChecked, setIsOnboardingChecked] = useState<boolean>(false);
@@ -37,7 +39,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     async function loadPreferences() {
       try {
         const savedTheme = await AsyncStorage.getItem(STORAGE_KEY_THEME);
-        if (savedTheme === "light" || savedTheme === "dark") {
+        if (savedTheme === "system" || savedTheme === "light" || savedTheme === "dark") {
           setThemeState(savedTheme);
         }
 
@@ -103,8 +105,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     return dict[key] || TRANSLATIONS.BM[key] || String(key);
   };
 
-  const themeColors = theme === "dark" ? DARK_THEME : LIGHT_THEME;
-  const isDark = theme === "dark";
+  const isDark = theme === "system" ? systemColorScheme === "dark" : theme === "dark";
+  const themeColors = isDark ? DARK_THEME : LIGHT_THEME;
 
   return (
     <AppSettingsContext.Provider
