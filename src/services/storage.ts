@@ -686,6 +686,43 @@ export async function updatePropertyListing(
   }
 }
 
+/**
+ * Delete a Property Listing and dynamically clean up its orphaned storage files (images & docs)
+ */
+export async function deletePropertyListing(listingId: string): Promise<void> {
+  try {
+    const currentUid = getCurrentUserId();
+    const docRef = firestore().collection(LISTINGS_COLLECTION).doc(listingId);
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      const data = docSnap.data() as PropertyListing;
+      if (data.userId !== currentUid && data.agentId !== currentUid) {
+        throw new Error("Unauthorized to delete this listing.");
+      }
+    }
+
+    // 1. Delete Firestore private and public records
+    await Promise.all([
+      docRef.delete(),
+      firestore().collection(PUBLIC_LISTINGS_COLLECTION).doc(listingId).delete().catch(() => {}),
+    ]);
+
+    // 2. Dynamic Storage Cleanup: Delete all uploaded files under listings/{listingId}/
+    try {
+      const folderRef = storage().ref(`listings/${listingId}`);
+      const fileList = await folderRef.listAll();
+      await Promise.all(fileList.items.map((fileRef) => fileRef.delete().catch(() => {})));
+    } catch (storageErr) {
+      console.warn("Storage cleanup notice (non-fatal):", storageErr);
+    }
+  } catch (error) {
+    console.error("Error deleting property listing:", error);
+    throw error;
+  }
+}
+
+
 
 
 

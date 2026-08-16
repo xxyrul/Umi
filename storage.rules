@@ -5,21 +5,21 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Property listings documents (SPA, IC, Geran, Utility bills, Photos)
+    // Property listings documents (SPA, IC, Geran, Utility bills, Photos, Videos)
     // Files are uploaded under listings/{listingId}/{fileName}
     match /listings/{listingId}/{allPaths=**} {
       // Any authenticated agent can read property photos/documents
-      // Only authenticated agents can upload files with max size limit (25MB)
+      // Authenticated agents can upload files with generous limit (200MB)
       allow read: if isAuthed();
       allow write: if isAuthed()
-        && request.resource.size < 25 * 1024 * 1024;
+        && request.resource.size < 200 * 1024 * 1024;
     }
 
-    // Feedback screenshots (feedback/{feedbackId}/{fileName})
+    // Feedback screenshots & attachments (feedback/{feedbackId}/{fileName})
     match /feedback/{feedbackId}/{allPaths=**} {
       allow read: if isAuthed();
       allow write: if isAuthed()
-        && request.resource.size < 10 * 1024 * 1024;
+        && request.resource.size < 50 * 1024 * 1024;
     }
 
     // User profile pictures (users/{userId}/{fileName})
@@ -27,7 +27,7 @@ service firebase.storage {
       allow read: if isAuthed();
       allow write: if isAuthed()
         && request.auth.uid == userId
-        && request.resource.size < 5 * 1024 * 1024;
+        && request.resource.size < 20 * 1024 * 1024;
     }
 
     // Fallback: deny all other paths
