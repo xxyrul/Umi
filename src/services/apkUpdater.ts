@@ -1,12 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
 import { Alert, Linking, Platform } from "react-native";
 
 const UPDATE_MANIFEST_URL = "https://umiren-d6a66.web.app/releases/latest.json";
 const RELEASE_HOSTNAME = "umiren-d6a66.web.app";
 const PACKAGE_NAME = "com.umi.caseflow";
-const LAST_DISMISSED_UPDATE_KEY = "umi_last_dismissed_update_timestamp";
+const LAST_DISMISSED_UPDATE_KEY = "artha_last_dismissed_update_timestamp";
 const NUDGE_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 Days
+const UPDATE_CACHE_DIR = `${FileSystem.cacheDirectory}updates/`;
 
 export type NativeAppRelease = {
   versionName: string;
@@ -17,16 +20,16 @@ export type NativeAppRelease = {
   releaseNotes?: string[];
 };
 
-type CheckOptions = {
-  language?: "BM" | "EN";
-  manual?: boolean;
-  forcePrompt?: boolean;
-  suppressManualStatusAlert?: boolean;
-};
+export type DownloadProgressCallback = (progress: {
+  totalBytesWritten: number;
+  totalBytesExpectedToWrite: number;
+  percent: number;
+}) => void;
 
 let promptedVersionCode: number | null = null;
+let activeDownloadResumable: FileSystem.DownloadResumable | null = null;
 
-function getCurrentVersionCode() {
+export function getCurrentVersionCode() {
   const nativeBuildVersion = Number(Constants.nativeBuildVersion);
   const configuredBuildVersion = Number(Constants.expoConfig?.android?.versionCode);
   const validVersions = [nativeBuildVersion, configuredBuildVersion].filter(
@@ -45,7 +48,22 @@ function isSafeDownloadUrl(downloadUrl: string) {
   }
 }
 
-async function fetchReleaseManifest(): Promise<NativeAppRelease | null> {
+/**
+ * Automatically purges all previously downloaded APK files from cache.
+ * Keeps user device storage at 0MB occupied.
+ */
+export async function cleanupUpdateCache(): Promise<void> {
+  try {
+    const dirInfo = await FileSystem.getInfoAsync(UPDATE_CACHE_DIR);
+    if (dirInfo.exists) {
+      await FileSystem.deleteAsync(UPDATE_CACHE_DIR, { idempotent: true });
+    }
+  } catch (err) {
+    console.warn("[apkUpdater] Cleanup update cache error:", err);
+  }
+}
+
+export async function fetchReleaseManifest(): Promise<NativeAppRelease | null> {
   if (Platform.OS !== "android") {
     return null;
   }
@@ -88,100 +106,107 @@ async function fetchReleaseManifest(): Promise<NativeAppRelease | null> {
   };
 }
 
-export async function checkForNativeAppUpdate(options: CheckOptions = {}) {
+/**
+ * Downloads the APK directly inside the app with live progress reporting,
+ * then triggers Android native package installer intent.
+ */
+export async function downloadAndInstallUpdate(
+  release: NativeAppRelease,
+  onProgress?: DownloadProgressCallback
+): Promise<void> {
+  if (Platform.OS !== "android") {
+    throw new Error("In-app APK installation is only supported on Android.");
+  }
+
   try {
-    const release = await fetchReleaseManifest();
+    // 1. Ensure updates cache directory exists and is clean
+    await cleanupUpdateCache();
+    await FileSystem.makeDirectoryAsync(UPDATE_CACHE_DIR, { intermediates: true });
 
-    if (!release) {
-      if (options.manual && !options.suppressManualStatusAlert) {
-        Alert.alert(
-          options.language === "BM" ? "Aplikasi Terkini" : "App Up to Date",
-          options.language === "BM"
-            ? "Anda sedang menggunakan versi terkini Umi."
-            : "You are using the latest version of Umi."
-        );
-      }
-      return null;
-    }
+    const localFileUri = `${UPDATE_CACHE_DIR}artha_v${release.versionName}_${release.versionCode}.apk`;
 
-    // Check 3-day recurring cooldown for automatic checks
-    if (!options.manual && !options.forcePrompt && !release.mandatory) {
-      if (promptedVersionCode === release.versionCode) {
-        return release;
-      }
+    // 2. Stream download with progress tracking
+    activeDownloadResumable = FileSystem.createDownloadResumable(
+      release.downloadUrl,
+      localFileUri,
+      {},
+      (downloadProgress) => {
+        const totalBytesWritten = downloadProgress.totalBytesWritten;
+        const totalBytesExpectedToWrite = Math.max(1, downloadProgress.totalBytesExpectedToWrite);
+        const percent = Math.min(100, Math.round((totalBytesWritten / totalBytesExpectedToWrite) * 100));
 
-      try {
-        const lastDismissedRaw = await AsyncStorage.getItem(LAST_DISMISSED_UPDATE_KEY);
-        if (lastDismissedRaw) {
-          const lastDismissed = JSON.parse(lastDismissedRaw);
-          if (
-            lastDismissed?.versionCode === release.versionCode &&
-            Date.now() - (lastDismissed?.timestamp || 0) < NUDGE_INTERVAL_MS
-          ) {
-            // Still within 3-day cooldown
-            return release;
-          }
+        if (onProgress) {
+          onProgress({
+            totalBytesWritten,
+            totalBytesExpectedToWrite,
+            percent,
+          });
         }
-      } catch (storageErr) {
-        console.warn("[apkUpdater] Failed reading dismiss cooldown:", storageErr);
       }
-    }
-
-    promptedVersionCode = release.versionCode;
-    const isMalay = options.language === "BM";
-    const notes = release.releaseNotes?.length
-      ? `\n\n${release.releaseNotes.map((note) => `• ${note}`).join("\n")}`
-      : "";
-
-    Alert.alert(
-      isMalay ? `Versi Umi ${release.versionName} Tersedia` : `Umi ${release.versionName} Is Available`,
-      `${isMalay ? "Kemas kini aplikasi untuk mendapatkan ciri dan pembaikan terbaru." : "Update the app to get the latest features and fixes."}${notes}`,
-      [
-        ...(release.mandatory
-          ? []
-          : [
-              {
-                text: isMalay ? "Kemudian" : "Later",
-                style: "cancel" as const,
-                onPress: async () => {
-                  try {
-                    await AsyncStorage.setItem(
-                      LAST_DISMISSED_UPDATE_KEY,
-                      JSON.stringify({ versionCode: release.versionCode, timestamp: Date.now() })
-                    );
-                  } catch {}
-                },
-              },
-            ]),
-        {
-          text: isMalay ? "Muat Turun Kemas Kini" : "Download Update",
-          onPress: async () => {
-            try {
-              await Linking.openURL(release.downloadUrl);
-            } catch {
-              Alert.alert(
-                isMalay ? "Gagal Membuka Muat Turun" : "Unable to Open Download",
-                isMalay
-                  ? "Sila cuba lagi atau buka pautan kemas kini secara manual."
-                  : "Please try again or open the update link manually."
-              );
-            }
-          },
-        },
-      ]
     );
 
-    return release;
-  } catch (error) {
-    console.warn("[apkUpdater] Native update check failed:", error);
-    if (options.manual && !options.suppressManualStatusAlert) {
-      Alert.alert(
-        options.language === "BM" ? "Kemas Kini Tidak Tersedia" : "Update Check Unavailable",
-        options.language === "BM"
-          ? "Sila cuba semula kemudian."
-          : "Please try again later."
-      );
+    const downloadResult = await activeDownloadResumable.downloadAsync();
+    activeDownloadResumable = null;
+
+    if (!downloadResult || !downloadResult.uri) {
+      throw new Error("Download completed without valid file URI.");
     }
-    return null;
+
+    // 3. Obtain secure content URI from FileProvider
+    const contentUri = await FileSystem.getContentUriAsync(downloadResult.uri);
+
+    // 4. Launch Android Native Package Installer
+    await IntentLauncher.startActivityAsync("android.intent.action.INSTALL_PACKAGE", {
+      data: contentUri,
+      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+    });
+  } catch (error: any) {
+    activeDownloadResumable = null;
+    console.error("[apkUpdater] downloadAndInstallUpdate error:", error);
+    throw error;
   }
+}
+
+export function cancelActiveDownload(): void {
+  if (activeDownloadResumable) {
+    try {
+      activeDownloadResumable.cancelAsync().catch(() => {});
+    } catch {}
+    activeDownloadResumable = null;
+  }
+}
+
+export async function dismissUpdatePrompt(versionCode: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      LAST_DISMISSED_UPDATE_KEY,
+      JSON.stringify({ versionCode, timestamp: Date.now() })
+    );
+  } catch {}
+}
+
+export async function shouldShowUpdatePrompt(release: NativeAppRelease, manual: boolean = false): Promise<boolean> {
+  if (manual || release.mandatory) {
+    return true;
+  }
+
+  if (promptedVersionCode === release.versionCode) {
+    return false;
+  }
+
+  try {
+    const lastDismissedRaw = await AsyncStorage.getItem(LAST_DISMISSED_UPDATE_KEY);
+    if (lastDismissedRaw) {
+      const lastDismissed = JSON.parse(lastDismissedRaw);
+      if (
+        lastDismissed?.versionCode === release.versionCode &&
+        Date.now() - (lastDismissed?.timestamp || 0) < NUDGE_INTERVAL_MS
+      ) {
+        return false;
+      }
+    }
+  } catch {}
+
+  promptedVersionCode = release.versionCode;
+  return true;
 }

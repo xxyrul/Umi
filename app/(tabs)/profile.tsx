@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
-import { checkForNativeAppUpdate } from "@/services/apkUpdater";
+import { fetchReleaseManifest, NativeAppRelease } from "@/services/apkUpdater";
 import {
   getUpdateNotificationsEnabled,
   getLastUpdateNotificationFailure,
@@ -27,7 +27,7 @@ import {
   setUpdateNotificationsEnabled,
 } from "@/services/updateNotifications";
 import { SPACING } from "@/constants/theme";
-import { Button } from "@/components";
+import { Button, InAppUpdateModal } from "@/components";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { getCurrentUserProfile, signOut, getUserInitials } from "@/services/auth";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -187,17 +187,29 @@ export default function ProfileScreen() {
     ]);
   };
 
+  // In-App Update Modal State
+  const [profileRelease, setProfileRelease] = useState<NativeAppRelease | null>(null);
+  const [isProfileUpdateModalVisible, setIsProfileUpdateModalVisible] = useState(false);
+
   const handleCheckForUpdates = async () => {
-    // The native check is authoritative for APK releases. When it finds no
-    // APK update, let the OTA check below provide the single status dialog
-    // instead of stacking two "up to date" alerts.
-    const nativeUpdate = await checkForNativeAppUpdate({
-      language,
-      manual: true,
-      suppressManualStatusAlert: true,
-    });
-    if (!nativeUpdate) {
-      await checkForAppUpdates(false);
+    try {
+      const release = await fetchReleaseManifest();
+      if (release) {
+        setProfileRelease(release);
+        setIsProfileUpdateModalVisible(true);
+      } else {
+        Alert.alert(
+          language === "BM" ? "Aplikasi Terkini" : "App Up to Date",
+          language === "BM"
+            ? `Anda sedang menggunakan versi terkini Artha (v${Constants.expoConfig?.version || "1.1.34"}).`
+            : `You are using the latest version of Artha (v${Constants.expoConfig?.version || "1.1.34"}).`
+        );
+      }
+    } catch {
+      Alert.alert(
+        language === "BM" ? "Kemas Kini Tidak Tersedia" : "Update Check Unavailable",
+        language === "BM" ? "Sila cuba semula kemudian." : "Please try again later."
+      );
     }
   };
 
@@ -376,9 +388,11 @@ export default function ProfileScreen() {
       });
 
       // Show alert
-      const alertMsg = language === "BM"
-        ? `Ringkasan Kes DRT Master Listing v1.1.1:\n\n• Kes Aktif: ${activeCases} Hartanah\n• Nilai Keseluruhan: ${formattedValue}\n• Anggaran Komisen: ${formattedCommission}\n\nLaporan CSV berjaya dieksport!`
-        : `DRT Master Listing Summary v1.1.1:\n\n• Active Cases: ${activeCases} Properties\n• Total Value: ${formattedValue}\n• Estimated Commission: ${formattedCommission}\n\nCSV Report exported successfully!`;
+      const appVersion = Constants.expoConfig?.version || "1.1.34";
+      const alertMsg =
+        language === "BM"
+          ? `Ringkasan Kes Artha Master Listing v${appVersion}:\n\n• Kes Aktif: ${activeCases} Hartanah\n• Nilai Keseluruhan: ${formattedValue}\n• Anggaran Komisen: ${formattedCommission}\n\nLaporan CSV berjaya dieksport!`
+          : `Artha Master Listing Summary v${appVersion}:\n\n• Active Cases: ${activeCases} Properties\n• Total Value: ${formattedValue}\n• Estimated Commission: ${formattedCommission}\n\nCSV Report exported successfully!`;
 
       Alert.alert(
         language === "BM" ? "📊 Laporan Kes Hartanah" : "📊 Property Cases Report",
@@ -388,7 +402,7 @@ export default function ProfileScreen() {
             text: language === "BM" ? "Kongsi / Simpan" : "Share / Save",
             onPress: async () => {
               try {
-                const file = new ExpoFile(Paths.document, "DRT_Master_Listing_Report.csv");
+                const file = new ExpoFile(Paths.document, "Artha_Cases_Report.csv");
                 if (!file.exists) {
                   file.create();
                 }
@@ -404,7 +418,7 @@ export default function ProfileScreen() {
                 } else {
                   await Share.share({
                     message: csvContent,
-                    title: "DRT Master Listing CRM Report",
+                    title: "Artha Master Listing CRM Report",
                   });
                 }
               } catch (shareErr: any) {
@@ -893,7 +907,7 @@ export default function ProfileScreen() {
 
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    onPress={() => Linking.openURL("https://wa.me/601114190091?text=Hello%20DRT%20Master%20Listing%20Support")}
+                    onPress={() => Linking.openURL("https://wa.me/601114190091?text=Hello%20Artha%20Master%20Listing%20Support")}
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
@@ -911,7 +925,7 @@ export default function ProfileScreen() {
 
                   <TouchableOpacity
                     activeOpacity={0.8}
-                    onPress={() => Linking.openURL("mailto:azrul.baharum@proton.me?subject=Support%20Request%20-%20DRT%20Master%20Listing")}
+                    onPress={() => Linking.openURL("mailto:azrul.baharum@proton.me?subject=Support%20Request%20-%20Artha%20Master%20Listing")}
                     style={{
                       flexDirection: "row",
                       alignItems: "center",
@@ -939,6 +953,13 @@ export default function ProfileScreen() {
       <FeedbackForm
         visible={isFeedbackFormVisible}
         onClose={() => setIsFeedbackFormVisible(false)}
+      />
+
+      {/* In-App Update Modal */}
+      <InAppUpdateModal
+        visible={isProfileUpdateModalVisible}
+        release={profileRelease}
+        onClose={() => setIsProfileUpdateModalVisible(false)}
       />
     </View>
   );

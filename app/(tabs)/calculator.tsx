@@ -167,14 +167,14 @@ export default function CalculatorScreen() {
       </View>
 
       <ScrollView
+        style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: insets.bottom + 100,
+          paddingBottom: Math.max(insets.bottom, 24) + 140,
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets={true}
       >
         {/* Result Summary Card */}
         <View

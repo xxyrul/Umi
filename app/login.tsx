@@ -6,11 +6,11 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Image,
   ActivityIndicator,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -21,13 +21,14 @@ import {
   signInWithEmail,
   signUpWithEmail,
   initializeGoogleSignIn,
+  sendPasswordReset,
 } from "@/services/auth";
 import { THEME } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { themeColors, t } = useAppSettings();
+  const { themeColors } = useAppSettings();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -37,14 +38,13 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
 
+  const [isResetModalVisible, setIsResetModalVisible] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+
   useEffect(() => {
     initializeGoogleSignIn();
   }, []);
-
-  const validateEmail = (emailStr: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(emailStr);
-  };
 
   const handleGoogleSignIn = async () => {
     try {
@@ -90,6 +90,30 @@ export default function LoginScreen() {
     }
   };
 
+  const handleSendPasswordReset = async () => {
+    const targetEmail = resetEmail.trim() || identifier.trim();
+    if (!targetEmail || !targetEmail.includes("@")) {
+      Alert.alert("Email Diperlukan", "Sila masukkan alamat email yang sah untuk penetapan semula kata laluan.");
+      return;
+    }
+
+    try {
+      setIsResetting(true);
+      await sendPasswordReset(targetEmail);
+      setIsResetModalVisible(false);
+      setResetEmail("");
+      Alert.alert(
+        "Pautan Dihantar! ✉️",
+        `Pautan untuk menetapkan semula kata laluan telah dihantar ke ${targetEmail}. Sila semak peti masuk atau folder spam anda.`
+      );
+    } catch (error: any) {
+      console.error("Reset password error:", error);
+      Alert.alert("Ralat Reset Kata Laluan", error?.message || "Gagal menghantar pautan reset kata laluan.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
       <KeyboardAvoidingView
@@ -109,28 +133,21 @@ export default function LoginScreen() {
           automaticallyAdjustKeyboardInsets={true}
         >
           <View style={styles.container}>
-            {/* Branding Section (Stitch Design) */}
             <View style={styles.brandingSection}>
               <View style={[styles.brandBadge, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
                 <MaterialCommunityIcons name="domain" size={32} color={themeColors.maroonPrimary} />
               </View>
-              <Text style={[styles.brandTitle, { color: themeColors.maroonPrimary }]}>DRT MASTER LISTING</Text>
+              <Text style={[styles.brandTitle, { color: themeColors.maroonPrimary }]}>Artha</Text>
+              <Text style={[styles.brandCategory, { color: themeColors.textPrimary }]}>Master Listing CRM</Text>
               <Text style={[styles.brandSubtitle, { color: themeColors.textMuted }]}>We build trust, you build future</Text>
             </View>
 
-            {/* Form Section */}
             <View style={styles.formContainer}>
-              {/* Display Name Input (Only on Sign Up) */}
               {isSigningUp && (
                 <View style={styles.inputGroup}>
                   <Text style={[styles.label, { color: themeColors.textPrimary }]}>Nama Penuh</Text>
                   <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-                    <MaterialCommunityIcons
-                      name="account-outline"
-                      size={20}
-                      color={themeColors.textMuted}
-                      style={{ marginLeft: 12 }}
-                    />
+                    <MaterialCommunityIcons name="account-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                     <TextInput
                       style={[styles.textInput, { color: themeColors.textPrimary }]}
                       placeholder="Masukkan nama penuh"
@@ -142,16 +159,10 @@ export default function LoginScreen() {
                 </View>
               )}
 
-              {/* Email / Identifier Input */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: themeColors.textPrimary }]}>No. Telefon / Email</Text>
                 <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-                  <MaterialCommunityIcons
-                    name="account-outline"
-                    size={20}
-                    color={themeColors.textMuted}
-                    style={{ marginLeft: 12 }}
-                  />
+                  <MaterialCommunityIcons name="account-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                   <TextInput
                     style={[styles.textInput, { color: themeColors.textPrimary }]}
                     placeholder="Masukkan ID / E-mel anda"
@@ -160,21 +171,14 @@ export default function LoginScreen() {
                     autoCapitalize="none"
                     value={identifier}
                     onChangeText={setIdentifier}
-                    autoFocus={true}
                   />
                 </View>
               </View>
 
-              {/* Password Input */}
               <View style={styles.inputGroup}>
                 <Text style={[styles.label, { color: themeColors.textPrimary }]}>Kata Laluan</Text>
                 <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-                  <MaterialCommunityIcons
-                    name="lock-outline"
-                    size={20}
-                    color={themeColors.textMuted}
-                    style={{ marginLeft: 12 }}
-                  />
+                  <MaterialCommunityIcons name="lock-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                   <TextInput
                     style={[styles.textInput, { color: themeColors.textPrimary }]}
                     placeholder="Masukkan kata laluan"
@@ -183,32 +187,24 @@ export default function LoginScreen() {
                     value={password}
                     onChangeText={setPassword}
                   />
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={{ paddingRight: 12 }}
-                  >
-                    <MaterialCommunityIcons
-                      name={showPassword ? "eye-off-outline" : "eye-outline"}
-                      size={20}
-                      color={themeColors.textMuted}
-                    />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ paddingRight: 12 }}>
+                    <MaterialCommunityIcons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={themeColors.textMuted} />
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {/* Forgot Password Link */}
               {!isSigningUp && (
                 <TouchableOpacity
                   style={styles.forgotPasswordContainer}
-                  onPress={() =>
-                    Alert.alert("Lupa Kata Laluan", "Sila hubungi pentadbir sistem untuk penetapan semula kata laluan.")
-                  }
+                  onPress={() => {
+                    setResetEmail(identifier);
+                    setIsResetModalVisible(true);
+                  }}
                 >
                   <Text style={[styles.forgotPasswordText, { color: themeColors.maroonPrimary }]}>Lupa kata laluan?</Text>
                 </TouchableOpacity>
               )}
 
-              {/* Submit Button */}
               <TouchableOpacity
                 activeOpacity={0.85}
                 onPress={handleEmailSignIn}
@@ -238,11 +234,7 @@ export default function LoginScreen() {
                 disabled={isLoading}
                 style={[styles.googleButton, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }] }
               >
-                <Image
-                  source={require("../assets/google_logo.png")}
-                  style={styles.googleIcon}
-                  resizeMode="contain"
-                />
+                <MaterialCommunityIcons name="google" size={20} color="#EA4335" />
                 <Text style={[styles.googleButtonText, { color: themeColors.textPrimary }] }>Log Masuk dengan Google</Text>
               </TouchableOpacity>
             </View>
@@ -261,6 +253,88 @@ export default function LoginScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Forgot Password Custom Bottom Sheet Modal */}
+      <Modal
+        visible={isResetModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsResetModalVisible(false)}
+      >
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            justifyContent: "flex-end",
+          }}
+          activeOpacity={1}
+          onPress={() => setIsResetModalVisible(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              backgroundColor: themeColors.surfaceContainer,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingHorizontal: 24,
+              paddingTop: 20,
+              paddingBottom: Math.max(insets.bottom + 16, 28),
+              borderTopWidth: 1,
+              borderColor: themeColors.borderColor,
+            }}
+          >
+            {/* Header */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <View>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>Lupa Kata Laluan</Text>
+                <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
+                  Masukkan e-mel anda untuk menerima pautan penetapan semula.
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsResetModalVisible(false)}
+                style={{ padding: 4 }}
+              >
+                <MaterialCommunityIcons name="close" size={24} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Email input */}
+            <View style={{ marginBottom: 16 }}>
+              <Text style={[styles.label, { color: themeColors.textPrimary, marginBottom: 6 }]}>Alamat E-mel</Text>
+              <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+                <MaterialCommunityIcons name="email-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
+                <TextInput
+                  style={[styles.textInput, { color: themeColors.textPrimary }]}
+                  placeholder="nama@email.com"
+                  placeholderTextColor={themeColors.textMuted}
+                  value={resetEmail}
+                  onChangeText={setResetEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+            </View>
+
+            {/* Submit Reset Button */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleSendPasswordReset}
+              disabled={isResetting}
+              style={[styles.primaryButton, { backgroundColor: themeColors.maroonPrimary }, isResetting && { opacity: 0.7 }]}
+            >
+              {isResetting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <MaterialCommunityIcons name="send" size={18} color="#FFFFFF" />
+                  <Text style={styles.primaryButtonText}>Hantar Pautan Reset</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -287,10 +361,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   brandTitle: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: "800",
     color: THEME.maroonPrimary,
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
+  },
+  brandCategory: {
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   brandSubtitle: {
     fontSize: 13,

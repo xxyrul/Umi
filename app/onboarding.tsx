@@ -304,11 +304,11 @@ export default function OnboardingScreen() {
               </View>
 
               <Text style={[styles.title, { color: themeColors.maroonPrimary }]}>
-                {isBM ? "Selamat Datang ke Umi" : "Welcome to Umi"}
+                {isBM ? "Selamat Datang ke Artha" : "Welcome to Artha"}
               </Text>
 
               <Text style={[styles.subtitle, { color: themeColors.textMuted }]}>
-                DRT MASTER LISTING CRM
+                Master Listing CRM
               </Text>
 
               <Text style={[styles.description, { color: themeColors.textSecondary }]}>
@@ -444,11 +444,7 @@ export default function OnboardingScreen() {
                   <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
                 ) : (
                   <>
-                    <Image
-                      source={require("../assets/google_logo.png")}
-                      style={styles.googleLogo}
-                      resizeMode="contain"
-                    />
+                    <MaterialCommunityIcons name="google" size={20} color="#EA4335" />
                     <Text style={[styles.googleBtnText, { color: themeColors.textPrimary }] }>
                       {isBM ? "Log Masuk dengan Google" : "Sign in with Google"}
                     </Text>

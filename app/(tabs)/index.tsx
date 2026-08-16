@@ -277,7 +277,7 @@ export default function DashboardScreen() {
         ]}
       >
         <Text style={[styles.topBarTitle, { color: themeColors.maroonPrimary }]}>
-          Master Listing
+          Artha
         </Text>
 
         <View style={{ flexDirection: "row", gap: 8 }}>

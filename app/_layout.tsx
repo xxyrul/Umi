@@ -8,7 +8,13 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { onAuthStateChanged, firebaseAuth, User } from "@/services/firebase";
 import { AppSettingsProvider, useAppSettings } from "@/context/AppSettingsContext";
 import { COLORS } from "@/constants/theme";
-import { checkForNativeAppUpdate } from "@/services/apkUpdater";
+import {
+  fetchReleaseManifest,
+  shouldShowUpdatePrompt,
+  cleanupUpdateCache,
+  NativeAppRelease,
+} from "@/services/apkUpdater";
+import { InAppUpdateModal } from "@/components";
 import {
   configureUpdateNotificationHandlers,
   registerForUpdateNotifications,
@@ -112,11 +118,37 @@ function RootLayoutInner({
     userRef.current = user;
   }, [user]);
 
+  const [availableRelease, setAvailableRelease] = useState<NativeAppRelease | null>(null);
+  const [isUpdateModalVisible, setIsUpdateModalVisible] = useState(false);
+
+  // Self-cleaning storage: purge cached update installers on app startup
   useEffect(() => {
-    if (Platform.OS !== "android" || __DEV__) return;
+    if (Platform.OS === "android") {
+      void cleanupUpdateCache();
+    }
+  }, []);
+
+  const triggerUpdateCheck = async (force: boolean = false) => {
+    if (Platform.OS !== "android") return;
+    try {
+      const release = await fetchReleaseManifest();
+      if (release) {
+        const shouldShow = await shouldShowUpdatePrompt(release, force);
+        if (shouldShow) {
+          setAvailableRelease(release);
+          setIsUpdateModalVisible(true);
+        }
+      }
+    } catch (e) {
+      console.warn("[_layout] Update check failed:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
 
     const timer = setTimeout(() => {
-      void checkForNativeAppUpdate({ language });
+      void triggerUpdateCheck(false);
     }, 2500);
 
     return () => clearTimeout(timer);
@@ -132,7 +164,7 @@ function RootLayoutInner({
     return configureUpdateNotificationHandlers(
       () => (userRef.current ? { uid: userRef.current.uid, language } : null),
       () => {
-        void checkForNativeAppUpdate({ language, forcePrompt: true });
+        void triggerUpdateCheck(true);
       }
     );
   }, [language]);
@@ -180,6 +212,11 @@ function RootLayoutInner({
       <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
         <AuthGuard user={user} authLoaded={authLoaded} />
         <Slot />
+        <InAppUpdateModal
+          visible={isUpdateModalVisible}
+          release={availableRelease}
+          onClose={() => setIsUpdateModalVisible(false)}
+        />
         {__DEV__ && Platform.OS !== "web" && (
           <View style={{ position: "absolute", bottom: 20, right: 20 }}>
             <Button title="Try Sentry" onPress={() => { Sentry.captureException(new Error("First error")); }} />

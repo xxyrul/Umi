@@ -607,8 +607,9 @@ const styles = StyleSheet.create({
   },
   stepConnectorLine: {
     position: "absolute",
-    top: 32,
+    top: 24,
     bottom: -16,
+    left: 15,
     width: 2,
     zIndex: 1,
   },
@@ -629,6 +630,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     borderRadius: 12,
+    marginTop: 12,
     padding: 14,
     marginBottom: SPACING.lg,
   },

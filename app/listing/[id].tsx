@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   Modal,
   Linking,
@@ -164,7 +165,7 @@ export default function PropertyDetailScreen() {
   const [isSharingImage, setIsSharingImage] = useState(false);
 
   const heroGalleryRef = useRef<ScrollView>(null);
-  const fullScreenGalleryRef = useRef<ScrollView>(null);
+  const fullScreenGalleryRef = useRef<FlatList<string>>(null);
 
   const handleBackToListings = () => {
     router.navigate("/(tabs)/listings");
@@ -174,7 +175,9 @@ export default function PropertyDetailScreen() {
     const safeIndex = Math.max(0, Math.min(index, allImages.length - 1));
     setActiveImageIndex(safeIndex);
     heroGalleryRef.current?.scrollTo({ x: safeIndex * screenWidth, y: 0, animated });
-    fullScreenGalleryRef.current?.scrollTo({ x: safeIndex * screenWidth, y: 0, animated });
+    try {
+      fullScreenGalleryRef.current?.scrollToIndex({ index: safeIndex, animated });
+    } catch (_) {}
   };
 
   useEffect(() => {
@@ -643,8 +646,8 @@ export default function PropertyDetailScreen() {
 
   const allImages = getListingImagesList(listing);
   const hasImages = allImages.length > 0;
-  const formattedPrice =
-    typeof listing.harga === "number" ? listing.harga.toLocaleString() : listing.harga;
+  const numericPrice = typeof listing.harga === "number" ? listing.harga : Number(String(listing.harga || "0").replace(/[^0-9.]/g, ""));
+  const formattedPrice = !isNaN(numericPrice) && numericPrice > 0 ? numericPrice.toLocaleString("en-MY") : (listing.harga || "0");
 
   const currentUser = auth().currentUser;
   const isCreator = Boolean(
@@ -1173,21 +1176,25 @@ export default function PropertyDetailScreen() {
         </View>
       </ScrollView>
 
-      {/* Airbnb-Style Native Pinch-to-Zoom Lightbox Gallery */}
-      <ImageViewing
-        images={allImages.map((uri) => ({ uri }))}
-        imageIndex={activeImageIndex}
+      {/* Native 100% Opaque Fullscreen Photo Gallery */}
+      <Modal
         visible={isGalleryOpen}
+        transparent={false}
+        animationType="fade"
+        statusBarTranslucent={true}
         onRequestClose={() => setIsGalleryOpen(false)}
-        onImageIndexChange={(index) => {
-          setActiveImageIndex(index);
-          heroGalleryRef.current?.scrollTo({ x: index * screenWidth, y: 0, animated: false });
-        }}
-        swipeToCloseEnabled={true}
-        doubleTapToZoomEnabled={true}
-        HeaderComponent={({ imageIndex }) => (
+      >
+        <View style={{ flex: 1, backgroundColor: "#000000" }}>
+          <StatusBar barStyle="light-content" backgroundColor="#000000" />
+          
+          {/* Top Bar Header */}
           <View
             style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 10,
               paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 20) + 12,
               paddingHorizontal: 20,
               flexDirection: "row",
@@ -1197,14 +1204,16 @@ export default function PropertyDetailScreen() {
           >
             <View
               style={{
-                backgroundColor: "rgba(0,0,0,0.6)",
-                paddingHorizontal: 12,
+                backgroundColor: "rgba(30,30,30,0.85)",
+                paddingHorizontal: 14,
                 paddingVertical: 6,
                 borderRadius: 20,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.15)",
               }}
             >
-              <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "600" }}>
-                {imageIndex + 1} / {allImages.length}
+              <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>
+                {activeImageIndex + 1} / {allImages.length}
               </Text>
             </View>
 
@@ -1215,7 +1224,7 @@ export default function PropertyDetailScreen() {
                 width: 42,
                 height: 42,
                 borderRadius: 21,
-                backgroundColor: "rgba(0,0,0,0.65)",
+                backgroundColor: "rgba(30,30,30,0.85)",
                 justifyContent: "center",
                 alignItems: "center",
                 borderWidth: 1,
@@ -1225,8 +1234,53 @@ export default function PropertyDetailScreen() {
               <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        )}
-      />
+
+          {/* High Performance 60FPS Virtualized Fullscreen Swiper */}
+          <FlatList
+            ref={fullScreenGalleryRef}
+            data={allImages}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={activeImageIndex}
+            getItemLayout={(_, index) => ({
+              length: screenWidth,
+              offset: screenWidth * index,
+              index,
+            })}
+            keyExtractor={(_, index) => `fs-img-${index}`}
+            windowSize={3}
+            maxToRenderPerBatch={2}
+            initialNumToRender={2}
+            removeClippedSubviews={Platform.OS === "android"}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
+              setActiveImageIndex(idx);
+              heroGalleryRef.current?.scrollTo({ x: idx * screenWidth, y: 0, animated: false });
+            }}
+            renderItem={({ item: imgUri }) => (
+              <View
+                style={{
+                  width: screenWidth,
+                  height: screenHeight,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  backgroundColor: "#000000",
+                }}
+              >
+                <ExpoImage
+                  source={{ uri: imgUri }}
+                  style={{ width: screenWidth, height: "100%" }}
+                  contentFit="contain"
+                  cachePolicy="memory-disk"
+                  transition={100}
+                />
+              </View>
+            )}
+            style={{ flex: 1, backgroundColor: "#000000" }}
+          />
+        </View>
+      </Modal>
 
       {/* Share Options Bottom Sheet Modal */}
       <Modal

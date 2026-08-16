@@ -339,11 +339,11 @@ function buildMessage(device, manifest) {
       token: device.token,
       notification: {
         title: isMalay
-          ? (isNudge ? `Peringatan: Versi Umi ${manifest.versionName} Tersedia` : `Versi Umi ${manifest.versionName} Tersedia`)
-          : (isNudge ? `Reminder: Umi ${manifest.versionName} Is Available` : `Umi ${manifest.versionName} Is Available`),
+          ? (isNudge ? `Peringatan: Versi Artha ${manifest.versionName} Tersedia` : `Versi Artha ${manifest.versionName} Tersedia`)
+          : (isNudge ? `Reminder: Artha ${manifest.versionName} Is Available` : `Artha ${manifest.versionName} Is Available`),
         body: isMalay
-          ? (isNudge ? "Kemas kini ke versi terkini untuk kelancaran dan ciri baru!" : "Buka Umi untuk memuat turun kemas kini terbaru.")
-          : (isNudge ? "Update to the latest version for improved features and stability!" : "Open Umi to download the latest update."),
+          ? (isNudge ? "Kemas kini ke versi terkini untuk kelancaran dan ciri baru!" : "Buka Artha untuk memuat turun kemas kini terbaru.")
+          : (isNudge ? "Update to the latest version for improved features and stability!" : "Open Artha to download the latest update."),
       },
       data: {
         kind: "native-app-update",

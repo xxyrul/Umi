@@ -21,8 +21,13 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBar
   // Dynamic bottom offset adapting cleanly to 3-button navigation bar (insets.bottom ~ 48px) and gesture bar (insets.bottom ~ 16-24px)
   const bottomOffset = insets.bottom > 0 ? insets.bottom + 12 : 16;
 
-  // Filter routes to ONLY include the 4 main navigation tabs
-  const mainRoutes = state.routes.filter((route) =>
+  const currentRouteName = state.routes[state.index]?.name;
+  // If active screen is a full-screen form/sub-screen (e.g. tambah, calculator), hide the floating pill
+  if (currentRouteName && !(MAIN_TABS as readonly string[]).includes(currentRouteName)) {
+    return null;
+  }
+
+  const mainRoutes = state.routes.filter((route: any) =>
     (MAIN_TABS as readonly string[]).includes(route.name)
   );
 
