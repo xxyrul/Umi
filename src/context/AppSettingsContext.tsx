@@ -90,6 +90,14 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
     try {
       setLanguageState(lang);
       await AsyncStorage.setItem(STORAGE_KEY_LANG, lang);
+      
+      // Keep push notification language preference in sync with user profile
+      const user = getCurrentUserProfile();
+      if (user?.uid) {
+        import("@/services/updateNotifications").then(({ setUpdateNotificationsEnabled }) => {
+          setUpdateNotificationsEnabled({ uid: user.uid, language: lang }, true).catch(() => {});
+        });
+      }
     } catch (error) {
       console.error("Error saving language preference:", error);
     }

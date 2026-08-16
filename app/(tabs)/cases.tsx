@@ -659,7 +659,7 @@ export default function CasesScreen() {
         style={{
           position: "absolute",
           right: 20,
-          bottom: 96,
+          bottom: (insets.bottom > 0 ? insets.bottom + 12 : 16) + 68,
           width: 56,
           height: 56,
           borderRadius: 28,

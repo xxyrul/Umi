@@ -13,8 +13,8 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: BottomTabBarPr
   const insets = useSafeAreaInsets();
   const { t } = useAppSettings();
 
-  // Dynamic bottom offset adapting cleanly to Android gesture bars & iOS home indicators
-  const bottomOffset = insets.bottom > 0 ? insets.bottom + 6 : 16;
+  // Dynamic bottom offset adapting cleanly to 3-button navigation bar (insets.bottom ~ 48px) and gesture bar (insets.bottom ~ 16-24px)
+  const bottomOffset = insets.bottom > 0 ? insets.bottom + 12 : 16;
 
   // Filter routes to ONLY include the 4 main navigation tabs
   const mainRoutes = state.routes.filter((route) =>

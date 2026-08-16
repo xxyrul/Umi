@@ -1673,7 +1673,7 @@ export default function MasterListingScreen() {
         style={{
           position: "absolute",
           right: 20,
-          bottom: 96,
+          bottom: (insets.bottom > 0 ? insets.bottom + 12 : 16) + 68,
           height: 52,
           paddingHorizontal: 18,
           borderRadius: 26,
