@@ -16,7 +16,7 @@ type FloatingTabBarProps = {
 
 function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { t } = useAppSettings();
+  const { t, themeColors, isDark } = useAppSettings();
 
   // Dynamic bottom offset adapting cleanly to 3-button navigation bar (insets.bottom ~ 48px) and gesture bar (insets.bottom ~ 16-24px)
   const bottomOffset = insets.bottom > 0 ? insets.bottom + 12 : 16;
@@ -32,7 +32,17 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBar
   );
 
   return (
-    <View style={[styles.floatingContainer, { bottom: bottomOffset }]}>
+    <View
+      style={[
+        styles.floatingContainer,
+        {
+          bottom: bottomOffset,
+          backgroundColor: isDark ? "#1E1E1E" : "#FFFFFF",
+          borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : themeColors.borderColor,
+          shadowOpacity: isDark ? 0.35 : 0.12,
+        },
+      ]}
+    >
       {mainRoutes.map((route) => {
         const index = state.routes.findIndex((r) => r.key === route.key);
         const { options } = descriptors[route.key];
@@ -75,8 +85,8 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBar
           label = t("profile");
         }
 
-        const activeColor = "#FFB4B4";
-        const inactiveColor = "#71717A";
+        const activeColor = isDark ? "#FFB2B8" : themeColors.maroonPrimary;
+        const inactiveColor = isDark ? "#71717A" : "#6B7280";
         const tintColor = isFocused ? activeColor : inactiveColor;
 
         return (
@@ -100,7 +110,7 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBar
               numberOfLines={1}
               style={[
                 styles.tabLabel,
-                { color: tintColor },
+                { color: tintColor, fontWeight: isFocused ? "700" : "600" },
               ]}
             >
               {label}

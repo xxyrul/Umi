@@ -1304,7 +1304,7 @@ export default function MasterListingScreen() {
               borderColor: themeColors.borderColor,
               paddingHorizontal: 20,
               paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 16) + 12,
+              paddingBottom: Math.max(insets.bottom, 24) + 16,
             }}
           >
             {/* Drag handle */}

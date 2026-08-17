@@ -71,19 +71,21 @@ function base64Url(input) {
 
 async function getAccessToken(serviceAccount) {
   if (!serviceAccount) {
-    // Fallback to active credentials from Firebase CLI login
-    const configPath = path.join(os.homedir(), ".config", "configstore", "firebase-tools.json");
-    let raw;
-    try {
-      raw = await readFile(configPath, "utf8");
-    } catch {
-      fail("FIREBASE_SERVICE_ACCOUNT is not set, and Firebase CLI config was not found. Please log in with 'firebase login' first.");
-    }
-    const parsed = JSON.parse(raw);
-    const tokenData = parsed.tokens;
-    const refreshToken = tokenData?.refresh_token || (tokenData?.active && tokenData.active.refresh_token);
+    let refreshToken = process.env.FIREBASE_REFRESH_TOKEN || process.env.FIREBASE_TOKEN;
+
     if (!refreshToken) {
-      fail("No active credentials found in Firebase CLI config. Please run 'firebase login'.");
+      // Fallback to active credentials from Firebase CLI login file
+      const configPath = path.join(os.homedir(), ".config", "configstore", "firebase-tools.json");
+      try {
+        const raw = await readFile(configPath, "utf8");
+        const parsed = JSON.parse(raw);
+        const tokenData = parsed.tokens;
+        refreshToken = tokenData?.refresh_token || (tokenData?.active && tokenData.active.refresh_token);
+      } catch {}
+    }
+
+    if (!refreshToken) {
+      fail("No active credentials found. Set FIREBASE_SERVICE_ACCOUNT_JSON, FIREBASE_REFRESH_TOKEN, or log in with 'firebase login'.");
     }
 
     const clientId = "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com";

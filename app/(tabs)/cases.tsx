@@ -699,7 +699,7 @@ export default function CasesScreen() {
               borderTopRightRadius: 24,
               paddingHorizontal: 18,
               paddingTop: 12,
-              paddingBottom: 28,
+              paddingBottom: Math.max(insets.bottom, 24) + 16,
             }}
           >
             <View
@@ -785,7 +785,7 @@ export default function CasesScreen() {
               borderTopRightRadius: 24,
               paddingHorizontal: 18,
               paddingTop: 12,
-              paddingBottom: 28,
+              paddingBottom: Math.max(insets.bottom, 24) + 16,
             }}
           >
             <View
