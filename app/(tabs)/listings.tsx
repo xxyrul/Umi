@@ -756,6 +756,7 @@ export default function MasterListingScreen() {
               contentFit="cover"
               transition={200}
               cachePolicy="memory-disk"
+              recyclingKey={imageUri}
             />
           ) : (
             <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>

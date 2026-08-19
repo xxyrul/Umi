@@ -198,8 +198,7 @@ export default function PropertyDetailScreen() {
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
   const [isSharingImage, setIsSharingImage] = useState(false);
-
-  const heroGalleryRef = useRef<ScrollView>(null);
+  const heroGalleryRef = useRef<FlatList<string>>(null);
   const fullScreenGalleryRef = useRef<FlatList<string>>(null);
 
   const handleBackToListings = () => {
@@ -209,7 +208,9 @@ export default function PropertyDetailScreen() {
   const goToImage = (index: number, allImages: string[], animated: boolean = true) => {
     const safeIndex = Math.max(0, Math.min(index, allImages.length - 1));
     setActiveImageIndex(safeIndex);
-    heroGalleryRef.current?.scrollTo({ x: safeIndex * screenWidth, y: 0, animated });
+    try {
+      heroGalleryRef.current?.scrollToIndex({ index: safeIndex, animated });
+    } catch (_) {}
     try {
       fullScreenGalleryRef.current?.scrollToIndex({ index: safeIndex, animated });
     } catch (_) {}
@@ -703,19 +704,28 @@ export default function PropertyDetailScreen() {
         <View style={[styles.heroContainer, { backgroundColor: themeColors.maroonLight }]}>
           {hasImages ? (
             <>
-              <ScrollView
+              <FlatList
                 ref={heroGalleryRef}
+                data={allImages}
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                initialNumToRender={2}
+                maxToRenderPerBatch={2}
+                windowSize={3}
+                removeClippedSubviews={Platform.OS === "android"}
+                getItemLayout={(_, index) => ({
+                  length: screenWidth,
+                  offset: screenWidth * index,
+                  index,
+                })}
+                keyExtractor={(_, idx) => `hero-img-${idx}`}
                 onMomentumScrollEnd={(e) => {
                   const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
                   setActiveImageIndex(idx);
                 }}
-              >
-                {allImages.map((imgUri, idx) => (
+                renderItem={({ item: imgUri, index: idx }) => (
                   <TouchableOpacity
-                    key={`hero-${idx}`}
                     activeOpacity={0.95}
                     onPress={() => {
                       Haptics.selectionAsync().catch(() => {});
@@ -728,25 +738,18 @@ export default function PropertyDetailScreen() {
                       source={{ uri: imgUri }}
                       style={styles.heroImage}
                       contentFit="cover"
-                      transition={200}
+                      transition={150}
                       cachePolicy="memory-disk"
-                      onLoadStart={() => setImageLoading(true)}
-                      onLoadEnd={() => setImageLoading(false)}
+                      recyclingKey={imgUri}
                     />
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
-
-              {imageLoading && (
-                <View style={[StyleSheet.absoluteFill, { justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.1)" }]}>
-                  <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
-                </View>
-              )}
+                )}
+              />
 
               {allImages.length > 1 && (
                 <View style={styles.slideHintWrap}>
                   <MaterialCommunityIcons name="gesture-swipe-horizontal" size={15} color="#FFFFFF" />
-                  <Text style={styles.slideHintText}>Swipe photos</Text>
+                  <Text style={styles.slideHintText}>Swipe photos ({activeImageIndex + 1}/{allImages.length})</Text>
                 </View>
               )}
             </>
@@ -807,10 +810,18 @@ export default function PropertyDetailScreen() {
 
           {/* Image Gallery Strip Indicators */}
           {hasImages && allImages.length > 1 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryStrip}>
-              {allImages.map((imgUri, idx) => (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.galleryStrip}
+              data={allImages}
+              keyExtractor={(_, idx) => `thumb-${idx}`}
+              initialNumToRender={6}
+              maxToRenderPerBatch={4}
+              windowSize={3}
+              removeClippedSubviews={Platform.OS === "android"}
+              renderItem={({ item: imgUri, index: idx }) => (
                 <TouchableOpacity
-                  key={idx}
                   activeOpacity={0.8}
                   onPress={() => goToImage(idx, allImages)}
                   style={[
@@ -822,12 +833,13 @@ export default function PropertyDetailScreen() {
                     source={{ uri: imgUri }}
                     style={styles.galleryThumb}
                     contentFit="cover"
-                    transition={150}
+                    transition={100}
                     cachePolicy="memory-disk"
+                    recyclingKey={imgUri}
                   />
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              )}
+            />
           )}
         </View>
 
@@ -1180,7 +1192,9 @@ export default function PropertyDetailScreen() {
             onMomentumScrollEnd={(e) => {
               const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
               setActiveImageIndex(idx);
-              heroGalleryRef.current?.scrollTo({ x: idx * screenWidth, y: 0, animated: false });
+              try {
+                heroGalleryRef.current?.scrollToIndex({ index: idx, animated: false });
+              } catch (_) {}
             }}
             renderItem={({ item: imgUri }) => (
               <View
@@ -1198,6 +1212,7 @@ export default function PropertyDetailScreen() {
                   contentFit="contain"
                   cachePolicy="memory-disk"
                   transition={100}
+                  recyclingKey={imgUri}
                 />
               </View>
             )}
