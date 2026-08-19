@@ -15,6 +15,7 @@ export type NativeAppRelease = {
   versionName: string;
   versionCode: number;
   downloadUrl: string;
+  fileSizeBytes?: number;
   packageName?: string;
   mandatory?: boolean;
   releaseNotes?: string[];
@@ -99,6 +100,7 @@ export async function fetchReleaseManifest(): Promise<NativeAppRelease | null> {
     versionName: release.versionName,
     versionCode: release.versionCode,
     downloadUrl: release.downloadUrl,
+    fileSizeBytes: typeof release.fileSizeBytes === "number" ? release.fileSizeBytes : undefined,
     packageName: release.packageName,
     mandatory: release.mandatory ?? false,
     releaseNotes: Array.isArray(release.releaseNotes)
@@ -133,13 +135,23 @@ export async function downloadAndInstallUpdate(
       {},
       (downloadProgress) => {
         const totalBytesWritten = downloadProgress.totalBytesWritten;
-        const totalBytesExpectedToWrite = Math.max(1, downloadProgress.totalBytesExpectedToWrite);
-        const percent = Math.min(100, Math.round((totalBytesWritten / totalBytesExpectedToWrite) * 100));
+        const expected = downloadProgress.totalBytesExpectedToWrite > 0
+          ? downloadProgress.totalBytesExpectedToWrite
+          : (release.fileSizeBytes && release.fileSizeBytes > 0 ? release.fileSizeBytes : 0);
+
+        let percent = 0;
+        if (expected > 0) {
+          percent = Math.min(100, Math.max(0, Math.round((totalBytesWritten / expected) * 100)));
+        } else {
+          // If total size is unknown, estimate based on ~60MB APK or cap at 95% until complete
+          const estimated = 60 * 1024 * 1024;
+          percent = Math.min(95, Math.max(1, Math.round((totalBytesWritten / estimated) * 100)));
+        }
 
         if (onProgress) {
           onProgress({
             totalBytesWritten,
-            totalBytesExpectedToWrite,
+            totalBytesExpectedToWrite: expected,
             percent,
           });
         }
@@ -179,8 +191,18 @@ export function cancelActiveDownload(): void {
 
 export const getUpdateCacheSize = async (): Promise<number> => {
   try {
-    const dirInfo = await FileSystem.getInfoAsync(UPDATE_CACHE_DIR, { md5: false, size: true } as any);
-    return (dirInfo.exists && (dirInfo as any).size) ? (dirInfo as any).size : 0;
+    const dirInfo = await FileSystem.getInfoAsync(UPDATE_CACHE_DIR);
+    if (!dirInfo.exists) return 0;
+
+    const files = await FileSystem.readDirectoryAsync(UPDATE_CACHE_DIR);
+    let totalBytes = 0;
+    for (const file of files) {
+      const fileInfo = await FileSystem.getInfoAsync(`${UPDATE_CACHE_DIR}${file}`);
+      if (fileInfo.exists && typeof fileInfo.size === "number") {
+        totalBytes += fileInfo.size;
+      }
+    }
+    return totalBytes;
   } catch {
     return 0;
   }

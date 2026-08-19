@@ -201,11 +201,11 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
                 />
               </View>
 
-              {totalMb !== "0" && (
-                <Text style={[styles.mbCounter, { color: themeColors.textMuted }]}>
-                  {downloadedMb} MB / {totalMb} MB
-                </Text>
-              )}
+              <Text style={[styles.mbCounter, { color: themeColors.textMuted }]}>
+                {parseFloat(totalMb) > 0
+                  ? `${downloadedMb} MB / ${totalMb} MB`
+                  : `${downloadedMb} MB`}
+              </Text>
             </View>
           ) : null}
 

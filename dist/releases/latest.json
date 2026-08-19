@@ -3,6 +3,7 @@
   "versionName": "1.2.1",
   "versionCode": 45,
   "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.2.1.apk",
+  "fileSizeBytes": 61827554,
   "mandatory": false,
   "releaseNotes": [
     "Fixed navigation bar overlap on 3-button navigation devices.",

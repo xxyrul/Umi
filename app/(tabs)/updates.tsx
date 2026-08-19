@@ -116,14 +116,18 @@ export default function UpdatesScreen() {
       const dirInfo = await FileSystem.getInfoAsync(UPDATE_CACHE_DIR);
       if (dirInfo.exists) {
         await FileSystem.deleteAsync(UPDATE_CACHE_DIR, { idempotent: true });
-        setCacheSizeMb("0.00");
-        Alert.alert(
-          isMalay ? "Berjaya" : "Success",
-          isMalay ? "Cache storan telah dikosongkan." : "Storage cache cleared."
-        );
       }
+      setCacheSizeMb("0.00");
+      Alert.alert(
+        isMalay ? "Berjaya" : "Success",
+        isMalay ? "Cache storan telah dikosongkan (0.00 MB)." : "Storage cache cleared (0.00 MB)."
+      );
     } catch (error) {
       console.warn("Failed to clear cache", error);
+      Alert.alert(
+        isMalay ? "Ralat" : "Error",
+        isMalay ? "Gagal mengosongkan cache storan." : "Failed to clear storage cache."
+      );
     }
   };
 
@@ -259,11 +263,11 @@ export default function UpdatesScreen() {
                     ]}
                   />
                 </View>
-                {totalMb !== "0" && (
-                  <Text style={[styles.mbCounter, { color: themeColors.textMuted }]}>
-                    {downloadedMb} MB / {totalMb} MB
-                  </Text>
-                )}
+                <Text style={[styles.mbCounter, { color: themeColors.textMuted }]}>
+                  {parseFloat(totalMb) > 0
+                    ? `${downloadedMb} MB / ${totalMb} MB`
+                    : `${downloadedMb} MB`}
+                </Text>
               </View>
             )}
 
