@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, useColorScheme } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -9,17 +9,15 @@ import Animated, {
 } from "react-native-reanimated";
 import { ScrollAwareBarProvider, useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 
-const { width } = Dimensions.get("window");
-
 const TABS = [
-  { name: "index", label: "Dashboard", icon: "view-dashboard" },
-  { name: "cases", label: "Cases", icon: "folder-home" },
-  { name: "listings", label: "Listings", icon: "view-list" },
-  { name: "profile", label: "Profile", icon: "account" },
+  { name: "index", labelEN: "Dashboard", labelBM: "Utama", icon: "view-dashboard" },
+  { name: "cases", labelEN: "Cases", labelBM: "Kes", icon: "folder-home" },
+  { name: "listings", labelEN: "Listings", labelBM: "Listing", icon: "view-list" },
+  { name: "profile", labelEN: "Profile", labelBM: "Profil", icon: "account" },
 ];
 
 function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
-  const { themeColors, isDark } = useAppSettings();
+  const { themeColors, isDark, language } = useAppSettings();
   const { barTranslateY } = useScrollAwareBar();
 
   // The bar container slides down (hides) when scrolling down, based on context
@@ -59,6 +57,7 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
           const activeColor = isDark ? "#FFB2B8" : themeColors.maroonPrimary;
           const inactiveColor = isDark ? "#71717A" : "#6B7280";
           const tintColor = isFocused ? activeColor : inactiveColor;
+          const tabLabel = language === "BM" ? tab.labelBM : tab.labelEN;
 
           return (
             <TouchableOpacity key={tab.name} onPress={onPress} style={styles.tabItem}>
@@ -73,7 +72,7 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
                   { color: tintColor, fontWeight: isFocused ? "700" : "600" }
                 ]}
               >
-                {tab.label}
+                {tabLabel}
               </Text>
             </TouchableOpacity>
           );

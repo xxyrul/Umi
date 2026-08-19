@@ -72,7 +72,14 @@ export default function DashboardScreen() {
     let unsubCases: (() => void) | null = null;
 
     const attachDashboardListeners = () => {
-      if (unsubListings)       if (unsubCases) unsubCases();
+      if (unsubListings) {
+        unsubListings();
+        unsubListings = null;
+      }
+      if (unsubCases) {
+        unsubCases();
+        unsubCases = null;
+      }
 
       // Realtime Listener for Listings
       unsubListings = firestore()
@@ -128,7 +135,8 @@ export default function DashboardScreen() {
 
     const detachDashboardListeners = () => {
       if (unsubListings) {
-                unsubListings = null;
+        unsubListings();
+        unsubListings = null;
       }
       if (unsubCases) {
         unsubCases();

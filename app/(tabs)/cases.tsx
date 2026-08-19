@@ -158,7 +158,7 @@ export default function CasesScreen() {
       const lowerQuery = queryText.toLowerCase();
       result = result.filter(
         (c) =>
-          c.namaCase.toLowerCase().includes(lowerQuery) ||
+          (c.namaCase ?? "").toLowerCase().includes(lowerQuery) ||
           (c.vendorName ?? "").toLowerCase().includes(lowerQuery) ||
           (c.buyerName ?? "").toLowerCase().includes(lowerQuery) ||
           (c.clientName ?? "").toLowerCase().includes(lowerQuery)
