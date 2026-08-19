@@ -278,7 +278,7 @@ export default function LoginScreen() {
               borderTopRightRadius: 24,
               paddingHorizontal: 24,
               paddingTop: 20,
-              paddingBottom: Math.max(insets.bottom + 16, 28),
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
               borderTopWidth: 1,
               borderColor: themeColors.borderColor,
             }}

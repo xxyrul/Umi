@@ -199,7 +199,7 @@ export default function UpdatesScreen() {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) + 60 }]}>
         {/* Top Action Card: Update Available OR Up to Date */}
         {availableRelease ? (
           <Animated.View

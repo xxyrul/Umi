@@ -732,6 +732,7 @@ export default function ProfileScreen() {
               borderWidth: 1,
               borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : themeColors.borderColor,
               padding: SPACING.lg,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
               maxHeight: "85%",
               minHeight: "45%",
             }}

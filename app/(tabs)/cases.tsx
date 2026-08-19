@@ -700,7 +700,7 @@ export default function CasesScreen() {
               borderTopRightRadius: 24,
               paddingHorizontal: 18,
               paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 24) + 16,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
             }}
           >
             <View
@@ -786,7 +786,7 @@ export default function CasesScreen() {
               borderTopRightRadius: 24,
               paddingHorizontal: 18,
               paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 24) + 16,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
             }}
           >
             <View
@@ -1049,7 +1049,7 @@ export default function CasesScreen() {
                 borderTopWidth: 1,
                 borderTopColor: themeColors.borderColor,
                 paddingTop: 12,
-                paddingBottom: insets.bottom + 12,
+                paddingBottom: Math.max(insets.bottom, 28) + 20,
                 backgroundColor: themeColors.cardBackground,
               }}
             >

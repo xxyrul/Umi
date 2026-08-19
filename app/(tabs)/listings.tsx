@@ -174,6 +174,8 @@ export default function MasterListingScreen() {
   const [isSharingImage, setIsSharingImage] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [categoryFilter, setCategoryFilter] = useState("Semua");
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
 
   // Buyer criteria filters
   const [showCriteria, setShowCriteria] = useState(false);
@@ -360,23 +362,26 @@ export default function MasterListingScreen() {
   );
   const allListingsCount = listings.length;
 
-  const activeCriteriaSummary: string[] = [];
-  if (criteriaLocation.trim()) activeCriteriaSummary.push(criteriaLocation.trim());
-  const criteriaPriceParts = [criteriaMinPrice.trim(), criteriaMaxPrice.trim()].filter(Boolean);
-  if (criteriaPriceParts.length) activeCriteriaSummary.push(`RM ${criteriaPriceParts.join(" - ")}`);
-  if (criteriaPropertyType !== "Any") activeCriteriaSummary.push(criteriaPropertyType);
-  if (criteriaTenure !== "Any") activeCriteriaSummary.push(criteriaTenure);
-  if (criteriaLotStatus !== "Any") activeCriteriaSummary.push(criteriaLotStatus);
+  // Compute active filter count for badge
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (activeFilter !== "Semua") count++;
+    if (categoryFilter !== "Semua") count++;
+    if (criteriaLocation.trim()) count++;
+    if (criteriaMinPrice.trim() || criteriaMaxPrice.trim()) count++;
+    if (criteriaPropertyType !== "Any") count++;
+    if (criteriaTenure !== "Any") count++;
+    if (criteriaLotStatus !== "Any") count++;
+    return count;
+  }, [activeFilter, categoryFilter, criteriaLocation, criteriaMinPrice, criteriaMaxPrice, criteriaPropertyType, criteriaTenure, criteriaLotStatus]);
 
-  const buyerCriteriaCount = activeCriteriaSummary.length;
-  const hasBuyerCriteriaActive = buyerCriteriaCount > 0;
-  const hasAnyFilterActive =
-    hasBuyerCriteriaActive || searchQuery.trim().length > 0 || activeFilter !== "Semua";
+  const hasAnyFilterActive = activeFilterCount > 0 || searchQuery.trim().length > 0;
 
   const clearAllFilters = () => {
     resetCriteria();
     setSearchQuery("");
-    handleFilterPress("Semua");
+    setActiveFilter("Semua");
+    setCategoryFilter("Semua");
   };
 
   // Segment + Filter + Search Logic (Memoized for max performance)
@@ -1006,229 +1011,73 @@ export default function MasterListingScreen() {
             },
           ]}
         >
+        {/* Row 1: Compact Header with search toggle + filter icon */}
         <View style={styles.headerTopRow}>
           <Text style={[styles.headerTitle, { color: themeColors.maroonPrimary, flex: 1 }]}>
             {t("masterListing")}
           </Text>
 
-          <TouchableOpacity style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}>
-            <MaterialCommunityIcons name="magnify" size={24} color={themeColors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Search Input Below TopAppBar */}
-        <View style={styles.searchBarContainer}>
-          <View style={[styles.searchBar, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}>
-            <MaterialCommunityIcons name="magnify" size={20} color={themeColors.textMuted} />
-            <TextInput
-              style={[styles.searchInput, { color: themeColors.textPrimary }]}
-              placeholder={t("searchPlaceholder")}
-              placeholderTextColor={themeColors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery("")}>
-                <MaterialCommunityIcons name="close-circle" size={18} color={themeColors.textMuted} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          <View style={styles.criteriaActionRow}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <TouchableOpacity
-              activeOpacity={0.8}
-              onPress={() => setShowCriteria((prev) => !prev)}
-              accessibilityLabel={
-                hasBuyerCriteriaActive
-                  ? `Buyer criteria, ${buyerCriteriaCount} applied`
-                  : "Buyer criteria filters"
-              }
-              style={[
-                styles.criteriaToggleBtn,
-                {
-                  borderColor: hasBuyerCriteriaActive ? themeColors.maroonPrimary : themeColors.borderColor,
-                  backgroundColor:
-                    showCriteria || hasBuyerCriteriaActive ? themeColors.maroonLight : themeColors.surfaceContainer,
-                },
-              ]}
+              activeOpacity={0.75}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setIsSearchExpanded((prev) => !prev);
+              }}
+              style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}
             >
               <MaterialCommunityIcons
-                name={hasBuyerCriteriaActive ? "filter-check-outline" : "tune-variant"}
-                size={16}
-                color={themeColors.maroonPrimary}
+                name={isSearchExpanded ? "close" : "magnify"}
+                size={22}
+                color={themeColors.textPrimary}
               />
-              <Text style={[styles.criteriaToggleText, { color: themeColors.maroonPrimary }]}>Buyer Criteria</Text>
-              {hasBuyerCriteriaActive ? (
-                <View style={[styles.criteriaCountBadge, { backgroundColor: themeColors.maroonPrimary }]}>
-                  <Text style={[styles.criteriaCountText, { color: themeColors.cardBackground }]}>
-                    {buyerCriteriaCount}
-                  </Text>
-                </View>
-              ) : null}
             </TouchableOpacity>
 
-            {hasBuyerCriteriaActive ? (
-              <TouchableOpacity onPress={resetCriteria} style={styles.criteriaClearBtn}>
-                <Text style={[styles.criteriaClearText, { color: themeColors.textSecondary }]}>Reset</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-
-          {hasBuyerCriteriaActive && !showCriteria ? (
-            <Text style={[styles.criteriaSummaryText, { color: themeColors.textMuted }]} numberOfLines={1}>
-              {activeCriteriaSummary.join(" · ")}
-            </Text>
-          ) : null}
-
-          {showCriteria ? (
-            <View style={[styles.criteriaPanel, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}> 
-              <TextInput
-                style={[styles.criteriaInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                placeholder="Location"
-                placeholderTextColor={themeColors.textMuted}
-                value={criteriaLocation}
-                onChangeText={setCriteriaLocation}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                setIsFilterModalVisible(true);
+              }}
+              style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer, position: "relative" }]}
+            >
+              <MaterialCommunityIcons
+                name="tune-variant"
+                size={22}
+                color={themeColors.textPrimary}
               />
-
-              <View style={styles.criteriaPriceRow}>
-                <TextInput
-                  style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                  placeholder="Min RM"
-                  placeholderTextColor={themeColors.textMuted}
-                  keyboardType="numeric"
-                  value={criteriaMinPrice}
-                  onChangeText={setCriteriaMinPrice}
-                />
-                <TextInput
-                  style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                  placeholder="Max RM"
-                  placeholderTextColor={themeColors.textMuted}
-                  keyboardType="numeric"
-                  value={criteriaMaxPrice}
-                  onChangeText={setCriteriaMaxPrice}
-                />
-              </View>
-
-              <View style={styles.criteriaCategoryBlock}>
-                <Text style={[styles.criteriaCategoryLabel, { color: themeColors.textPrimary }]}>Property Type</Text>
-                <ScrollView
-                  ref={propertyTypeRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setPropertyTypeRowWidth(e.nativeEvent.layout.width)}
-                >
-                  {propertyTypeOptions.map((option) => {
-                    const active = criteriaPropertyType === option;
-                    return (
-                      <View
-                        key={`ptype-${option}`}
-                        onLayout={(e) => {
-                          propertyTypeLayouts.current[option] = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                          };
-                        }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handlePropertyTypeSelect(option)}
-                          style={[
-                            styles.criteriaPill,
-                            {
-                              borderColor: active ? "#FF5F87" : themeColors.borderColor,
-                              backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.criteriaCategoryBlock}>
-                <Text style={[styles.criteriaCategoryLabel, { color: themeColors.textPrimary }]}>Tenure Type</Text>
-                <ScrollView
-                  ref={tenureRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setTenureRowWidth(e.nativeEvent.layout.width)}
-                >
-                  {tenureOptions.map((option) => {
-                    const active = criteriaTenure === option;
-                    return (
-                      <View
-                        key={`tenure-${option}`}
-                        onLayout={(e) => {
-                          tenureLayouts.current[option] = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                          };
-                        }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handleTenureSelect(option)}
-                          style={[
-                            styles.criteriaPill,
-                            {
-                              borderColor: active ? "#FF5F87" : themeColors.borderColor,
-                              backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              <View style={styles.criteriaCategoryBlock}>
-                <Text style={[styles.criteriaCategoryLabel, { color: themeColors.textPrimary }]}>Lot Status</Text>
-                <ScrollView
-                  ref={lotStatusRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setLotStatusRowWidth(e.nativeEvent.layout.width)}
-                >
-                  {lotStatusOptions.map((option) => {
-                    const active = criteriaLotStatus === option;
-                    return (
-                      <View
-                        key={`lot-${option}`}
-                        onLayout={(e) => {
-                          lotStatusLayouts.current[option] = {
-                            x: e.nativeEvent.layout.x,
-                            width: e.nativeEvent.layout.width,
-                          };
-                        }}
-                      >
-                        <TouchableOpacity
-                          onPress={() => handleLotStatusSelect(option)}
-                          style={[
-                            styles.criteriaPill,
-                            {
-                              borderColor: active ? "#FF5F87" : themeColors.borderColor,
-                              backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer,
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </View>
-          ) : null}
+              {activeFilterCount > 0 && (
+                <View style={styles.filterBadgeDot}>
+                  <Text style={styles.filterBadgeDotText}>{activeFilterCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
+        {/* Collapsible Search Bar */}
+        {isSearchExpanded && (
+          <View style={styles.searchBarContainer}>
+            <View style={[styles.searchBar, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}>
+              <MaterialCommunityIcons name="magnify" size={20} color={themeColors.textMuted} />
+              <TextInput
+                style={[styles.searchInput, { color: themeColors.textPrimary }]}
+                placeholder={t("searchPlaceholder")}
+                placeholderTextColor={themeColors.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery("")}>
+                  <MaterialCommunityIcons name="close-circle" size={18} color={themeColors.textMuted} />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        )}
+
+        {/* Row 2: Segment Toggle */}
         <View
           style={[styles.segmentWrap, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
           onLayout={(e) => setSegmentBarWidth(e.nativeEvent.layout.width)}
@@ -1262,114 +1111,37 @@ export default function MasterListingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Filter Chips ScrollView */}
-        <ScrollView
-          ref={scrollViewRef}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScrollView}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8 }}
-          onLayout={(e) => setScrollViewWidth(e.nativeEvent.layout.width)}
-        >
-          {filterChips.map((chip) => {
-            const active = activeFilter === chip.id;
-            return (
-              <View
-                key={chip.id}
-                style={{ marginRight: 8 }}
-                onLayout={(e) => {
-                  chipLayouts.current[chip.id] = {
-                    x: e.nativeEvent.layout.x,
-                    width: e.nativeEvent.layout.width,
-                  };
-                }}
-              >
-                <TouchableOpacity
-                  activeOpacity={0.7}
-                  onPress={() => handleFilterPress(chip.id)}
-                  style={[
-                    styles.filterChip,
-                    {
-                      backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                      borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      { color: active ? "#FFFFFF" : themeColors.textSecondary },
-                    ]}
-                  >
-                    {chip.label}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })}
-        </ScrollView>
+        {/* Active filter summary strip (only when filters are active) */}
+        {activeFilterCount > 0 && (
+          <View style={[styles.activeFilterStrip, { backgroundColor: `${themeColors.maroonPrimary}12` }]}>
+            <MaterialCommunityIcons name="filter-check-outline" size={14} color={themeColors.maroonPrimary} />
+            <Text style={[styles.activeFilterStripText, { color: themeColors.maroonPrimary }]} numberOfLines={1}>
+              {[
+                activeFilter !== "Semua" ? activeFilter : null,
+                categoryFilter !== "Semua" ? categoryFilter : null,
+                criteriaLocation.trim() || null,
+                criteriaPropertyType !== "Any" ? criteriaPropertyType : null,
+                criteriaTenure !== "Any" ? criteriaTenure : null,
+                criteriaLotStatus !== "Any" ? criteriaLotStatus : null,
+                (criteriaMinPrice.trim() || criteriaMaxPrice.trim()) ? `RM ${[criteriaMinPrice.trim(), criteriaMaxPrice.trim()].filter(Boolean).join(" – ")}` : null,
+              ].filter(Boolean).join(" · ")}
+            </Text>
+            <TouchableOpacity
+              onPress={clearAllFilters}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MaterialCommunityIcons name="close-circle" size={16} color={themeColors.maroonPrimary} />
+            </TouchableOpacity>
+          </View>
+        )}
 
-        {/* Category Filter Chips Bar */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ marginBottom: 6 }}
-          contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}
-        >
-          {[
-            { id: "Semua", label: language === "BM" ? "Semua Jenis" : "All Types", icon: "view-grid" },
-            { id: "Landed", label: "Landed / Teres", icon: "home" },
-            { id: "High-Rise", label: "High-Rise / Kondo", icon: "office-building" },
-            { id: "Commercial", label: "Komersial / Kedai", icon: "store" },
-            { id: "Tanah", label: "Tanah / Land", icon: "terrain" },
-            { id: "Industri", label: "Industri / Kilang", icon: "factory" },
-            { id: "Sewa", label: "Sewa / Rental", icon: "key-variant" },
-          ].map((cat) => {
-            const active = categoryFilter === cat.id;
-            return (
-              <TouchableOpacity
-                key={cat.id}
-                activeOpacity={0.7}
-                onPress={() => {
-                  Haptics.selectionAsync().catch(() => {});
-                  setCategoryFilter(cat.id);
-                }}
-                style={[
-                  styles.categoryChip,
-                  {
-                    backgroundColor: active ? `${themeColors.maroonPrimary}18` : themeColors.surfaceContainer,
-                    borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                  },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={cat.icon as any}
-                  size={13}
-                  color={active ? themeColors.maroonPrimary : themeColors.textMuted}
-                />
-                <Text
-                  style={[
-                    styles.categoryChipText,
-                    {
-                      color: active ? themeColors.maroonPrimary : themeColors.textSecondary,
-                      fontWeight: active ? "700" : "500",
-                    },
-                  ]}
-                >
-                  {cat.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-
+        {/* Row 3: Toolbar */}
         <View style={styles.toolbarRow}>
           <Text style={[styles.resultCountText, { color: themeColors.textPrimary }]}>
             {filteredListings.length} {filteredListings.length === 1 ? "listing" : "listings"}
           </Text>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            {/* View Mode Switcher (1-Col vs 2-Col Grid) */}
             <TouchableOpacity
               activeOpacity={0.75}
               onPress={() => {
@@ -1488,7 +1260,7 @@ export default function MasterListingScreen() {
           onPress={() => setIsSortModalVisible(false)}
           style={styles.sortModalOverlay}
         >
-          <View style={[styles.sortModalSheet, { backgroundColor: themeColors.cardBackground }]}>
+          <View style={[styles.sortModalSheet, { backgroundColor: themeColors.cardBackground, paddingBottom: Math.max(insets.bottom, 28) + 20 }]}>
             <View style={[styles.sortModalHandle, { backgroundColor: themeColors.borderColor }]} />
             <Text style={[styles.sortModalTitle, { color: themeColors.textPrimary }]}>Sort listings</Text>
             {LISTING_SORT_OPTIONS.map((option) => {
@@ -1520,6 +1292,287 @@ export default function MasterListingScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* ========== Unified Filter Bottom Sheet Modal ========== */}
+      <Modal
+        visible={isFilterModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setIsFilterModalVisible(false)}
+          style={styles.sortModalOverlay}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingHorizontal: 18,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
+              maxHeight: "85%",
+            }}
+          >
+            <View style={[styles.sortModalHandle, { backgroundColor: themeColors.borderColor }]} />
+            <Text style={[styles.sortModalTitle, { color: themeColors.textPrimary }]}>
+              {language === "BM" ? "Tapis Listing" : "Filter Listings"}
+            </Text>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* Status Filter */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Status" : "Status"}
+                </Text>
+                <View style={styles.filterModalPillRow}>
+                  {filterChips.map((chip) => {
+                    const active = activeFilter === chip.id;
+                    return (
+                      <TouchableOpacity
+                        key={chip.id}
+                        activeOpacity={0.7}
+                        onPress={() => setActiveFilter(chip.id)}
+                        style={[
+                          styles.filterModalPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
+                          {chip.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Category Filter */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Jenis Hartanah" : "Property Category"}
+                </Text>
+                <View style={styles.filterModalPillRow}>
+                  {[
+                    { id: "Semua", label: language === "BM" ? "Semua" : "All", icon: "view-grid" as const },
+                    { id: "Landed", label: "Landed", icon: "home" as const },
+                    { id: "High-Rise", label: "High-Rise", icon: "office-building" as const },
+                    { id: "Commercial", label: "Komersial", icon: "store" as const },
+                    { id: "Tanah", label: "Tanah", icon: "terrain" as const },
+                    { id: "Industri", label: "Industri", icon: "factory" as const },
+                    { id: "Sewa", label: "Sewa", icon: "key-variant" as const },
+                  ].map((cat) => {
+                    const active = categoryFilter === cat.id;
+                    return (
+                      <TouchableOpacity
+                        key={cat.id}
+                        activeOpacity={0.7}
+                        onPress={() => setCategoryFilter(cat.id)}
+                        style={[
+                          styles.filterModalPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
+                      >
+                        <MaterialCommunityIcons name={cat.icon} size={13} color={active ? "#FFF" : themeColors.textMuted} />
+                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
+                          {cat.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Location */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Lokasi" : "Location"}
+                </Text>
+                <TextInput
+                  style={[styles.criteriaInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
+                  placeholder={language === "BM" ? "Cari lokasi..." : "Search location..."}
+                  placeholderTextColor={themeColors.textMuted}
+                  value={criteriaLocation}
+                  onChangeText={setCriteriaLocation}
+                />
+              </View>
+
+              {/* Price Range */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Julat Harga" : "Price Range"}
+                </Text>
+                <View style={styles.criteriaPriceRow}>
+                  <TextInput
+                    style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
+                    placeholder="Min RM"
+                    placeholderTextColor={themeColors.textMuted}
+                    keyboardType="numeric"
+                    value={criteriaMinPrice}
+                    onChangeText={setCriteriaMinPrice}
+                  />
+                  <TextInput
+                    style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
+                    placeholder="Max RM"
+                    placeholderTextColor={themeColors.textMuted}
+                    keyboardType="numeric"
+                    value={criteriaMaxPrice}
+                    onChangeText={setCriteriaMaxPrice}
+                  />
+                </View>
+              </View>
+
+              {/* Property Type */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Jenis Kediaman" : "Property Type"}
+                </Text>
+                <ScrollView
+                  ref={propertyTypeRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.criteriaRowContent}
+                  onLayout={(e) => setPropertyTypeRowWidth(e.nativeEvent.layout.width)}
+                >
+                  {propertyTypeOptions.map((option) => {
+                    const active = criteriaPropertyType === option;
+                    return (
+                      <View
+                        key={`ptype-${option}`}
+                        onLayout={(e) => {
+                          propertyTypeLayouts.current[option] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+                        }}
+                      >
+                        <TouchableOpacity
+                          onPress={() => handlePropertyTypeSelect(option)}
+                          style={[styles.criteriaPill, { borderColor: active ? "#FF5F87" : themeColors.borderColor, backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer }]}
+                        >
+                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Tenure */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Jenis Pegangan" : "Tenure Type"}
+                </Text>
+                <ScrollView
+                  ref={tenureRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.criteriaRowContent}
+                  onLayout={(e) => setTenureRowWidth(e.nativeEvent.layout.width)}
+                >
+                  {tenureOptions.map((option) => {
+                    const active = criteriaTenure === option;
+                    return (
+                      <View
+                        key={`tenure-${option}`}
+                        onLayout={(e) => {
+                          tenureLayouts.current[option] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+                        }}
+                      >
+                        <TouchableOpacity
+                          onPress={() => handleTenureSelect(option)}
+                          style={[styles.criteriaPill, { borderColor: active ? "#FF5F87" : themeColors.borderColor, backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer }]}
+                        >
+                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
+              {/* Lot Status */}
+              <View style={styles.filterModalSection}>
+                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
+                  {language === "BM" ? "Status Lot" : "Lot Status"}
+                </Text>
+                <ScrollView
+                  ref={lotStatusRef}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.criteriaRowContent}
+                  onLayout={(e) => setLotStatusRowWidth(e.nativeEvent.layout.width)}
+                >
+                  {lotStatusOptions.map((option) => {
+                    const active = criteriaLotStatus === option;
+                    return (
+                      <View
+                        key={`lot-${option}`}
+                        onLayout={(e) => {
+                          lotStatusLayouts.current[option] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
+                        }}
+                      >
+                        <TouchableOpacity
+                          onPress={() => handleLotStatusSelect(option)}
+                          style={[styles.criteriaPill, { borderColor: active ? "#FF5F87" : themeColors.borderColor, backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer }]}
+                        >
+                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </ScrollView>
+
+            {/* Bottom Action Bar */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, gap: 12 }}>
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => {
+                  clearAllFilters();
+                }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textSecondary }}>
+                  {language === "BM" ? "Reset Semua" : "Reset All"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={() => setIsFilterModalVisible(false)}
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 12,
+                  backgroundColor: themeColors.maroonPrimary,
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "700", color: "#FFFFFF" }}>
+                  {activeFilterCount > 0
+                    ? `${language === "BM" ? "Tapis" : "Apply"} (${activeFilterCount})`
+                    : language === "BM" ? "Tutup" : "Done"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Quick Status Update Bottom Sheet Modal */}
       <Modal
         visible={!!statusModalListing}
@@ -1546,7 +1599,7 @@ export default function MasterListingScreen() {
               borderColor: themeColors.borderColor,
               paddingHorizontal: 20,
               paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 24) + 16,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
             }}
           >
             {/* Drag handle */}
@@ -1725,7 +1778,7 @@ export default function MasterListingScreen() {
               borderColor: themeColors.borderColor,
               paddingHorizontal: 20,
               paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 16) + 12,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
             }}
           >
             {/* Drag handle */}
@@ -2451,6 +2504,64 @@ const styles = StyleSheet.create({
   },
   gridShareBtnText: {
     fontSize: 11,
+    fontWeight: "700",
+  },
+  filterBadgeDot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#FF3B5C",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+  },
+  filterBadgeDotText: {
+    color: "#FFF",
+    fontSize: 9,
+    fontWeight: "800",
+  },
+  activeFilterStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginHorizontal: 16,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  activeFilterStripText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  filterModalSection: {
+    marginBottom: 16,
+  },
+  filterModalLabel: {
+    fontSize: 13,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  filterModalPillRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterModalPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  filterModalPillText: {
+    fontSize: 13,
     fontWeight: "700",
   },
 });

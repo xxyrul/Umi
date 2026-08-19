@@ -1247,7 +1247,7 @@ export default function PropertyDetailScreen() {
               borderColor: themeColors.borderColor,
               paddingHorizontal: 20,
               paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 16) + 12,
+              paddingBottom: Math.max(insets.bottom, 28) + 20,
             }}
           >
             {/* Drag handle */}
