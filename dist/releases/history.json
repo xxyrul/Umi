@@ -1,0 +1,54 @@
+[
+  {
+    "versionName": "1.2.1",
+    "versionCode": 45,
+    "date": "2026-08-19",
+    "releaseNotes": [
+      "Fixed navigation bar overlap on 3-button navigation devices.",
+      "Improved Firestore realtime listener stability and memory efficiency.",
+      "Search filter null-safety and stability improvements."
+    ]
+  },
+  {
+    "versionName": "1.2.0",
+    "versionCode": 44,
+    "date": "2026-08-19",
+    "releaseNotes": [
+      "Bug fixes and stability improvements.",
+      "Fixed navigation bar theming and layout.",
+      "Improved Loan Calculator and Listing creation flows."
+    ]
+  },
+  {
+    "versionName": "1.1.37",
+    "versionCode": 43,
+    "date": "2026-08-15",
+    "releaseNotes": [
+      "Refined Multi-Photo WhatsApp Sharing: Enhanced photo gallery preparation and formatted caption attachment.",
+      "Adaptive Light & Dark Mode Navigation Dock: Dynamic background and active highlight switching.",
+      "Android 3-Button Navigation Bar Clearance: Bottom sheet modals now have full clearance above Back/Home/Recents buttons.",
+      "Seamless In-App APK Updater with automatic storage cache cleanup."
+    ]
+  },
+  {
+    "versionName": "1.1.36",
+    "versionCode": 42,
+    "date": "2026-08-10",
+    "releaseNotes": [
+      "Bug fixes and stability improvements",
+      "Minor UI enhancements"
+    ]
+  },
+  {
+    "versionName": "1.1.35",
+    "versionCode": 41,
+    "date": "2026-08-01",
+    "releaseNotes": [
+      "Rebranded to Artha (Master Listing CRM)",
+      "In-app APK updater with live download bar",
+      "Zero-clutter automatic storage cleanup",
+      "High-speed 60FPS virtualized photo gallery",
+      "Automated password reset email sheet"
+    ]
+  }
+]

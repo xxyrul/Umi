@@ -1,0 +1,12 @@
+{
+  "packageName": "com.umi.caseflow",
+  "versionName": "1.2.1",
+  "versionCode": 45,
+  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.2.1.apk",
+  "mandatory": false,
+  "releaseNotes": [
+    "Fixed navigation bar overlap on 3-button navigation devices.",
+    "Improved Firestore realtime listener stability and memory efficiency.",
+    "Search filter null-safety and stability improvements."
+  ]
+}
