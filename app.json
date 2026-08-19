@@ -42,7 +42,12 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.SYSTEM_ALERT_WINDOW"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBjWosdtEPIJz6IpqUjZtPQ-62ed8ly7iE"
+        }
+      }
     },
     "web": {
       "bundler": "metro",

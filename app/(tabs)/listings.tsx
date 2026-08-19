@@ -30,11 +30,62 @@ import * as Clipboard from "expo-clipboard";
 import * as IntentLauncher from "expo-intent-launcher";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { firestore, auth } from "@/services/firebase";
 import { useRouter } from "expo-router";
 import type { PropertyListing } from "@/types/listing";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
+
+const STATE_COORDINATES: Record<string, { latitude: number; longitude: number }> = {
+  "kuala lumpur": { latitude: 3.139, longitude: 101.6869 },
+  "selangor": { latitude: 3.0738, longitude: 101.5183 },
+  "putrajaya": { latitude: 2.9264, longitude: 101.6964 },
+  "perak": { latitude: 4.5921, longitude: 101.0901 },
+  "penang": { latitude: 5.4164, longitude: 100.3327 },
+  "pulau pinang": { latitude: 5.4164, longitude: 100.3327 },
+  "johor": { latitude: 1.4927, longitude: 103.7414 },
+  "kedah": { latitude: 6.1184, longitude: 100.3685 },
+  "kelantan": { latitude: 6.1254, longitude: 102.2381 },
+  "melaka": { latitude: 2.1896, longitude: 102.2501 },
+  "malacca": { latitude: 2.1896, longitude: 102.2501 },
+  "negeri sembilan": { latitude: 2.7258, longitude: 101.9424 },
+  "pahang": { latitude: 3.8126, longitude: 103.3256 },
+  "perlis": { latitude: 6.4449, longitude: 100.1986 },
+  "sabah": { latitude: 5.9804, longitude: 116.0735 },
+  "sarawak": { latitude: 1.5533, longitude: 110.3592 },
+  "terengganu": { latitude: 5.3117, longitude: 103.1324 },
+  "labuan": { latitude: 5.2831, longitude: 115.2308 },
+};
+
+function getListingCoordinates(item: PropertyListing, index: number): { latitude: number; longitude: number } {
+  if (item.location && typeof item.location.latitude === "number" && typeof item.location.longitude === "number" && item.location.latitude !== 0) {
+    return { latitude: item.location.latitude, longitude: item.location.longitude };
+  }
+  const negeri = (item.negeri || "").toLowerCase().trim();
+  const base = STATE_COORDINATES[negeri] || { latitude: 3.139, longitude: 101.6869 };
+  const offsetLat = ((index % 7) - 3) * 0.015 + ((item.id.charCodeAt(0) || 0) % 5) * 0.002;
+  const offsetLng = (((index * 3) % 7) - 3) * 0.015 + ((item.id.charCodeAt(item.id.length - 1) || 0) % 5) * 0.002;
+  return {
+    latitude: base.latitude + offsetLat,
+    longitude: base.longitude + offsetLng,
+  };
+}
+
+function formatCompactPrice(value: string | number | undefined): string {
+  const parsed = parsePriceNumber(value);
+  if (parsed === null) return "RM --";
+  if (parsed >= 1000000) {
+    const val = (parsed / 1000000).toFixed(1).replace(/\.0$/, "");
+    return `RM ${val}M`;
+  }
+  if (parsed >= 1000) {
+    const val = (parsed / 1000).toFixed(0);
+    return `RM ${val}k`;
+  }
+  return `RM ${parsed}`;
+}
 
 const SEGMENTS = ["mine", "all"] as const;
 type ListingSegment = typeof SEGMENTS[number];
@@ -172,7 +223,9 @@ export default function MasterListingScreen() {
   const [statusModalListing, setStatusModalListing] = useState<{ id: string; currentStatus: string; tajuk: string } | null>(null);
   const [shareModalListing, setShareModalListing] = useState<PropertyListing | null>(null);
   const [isSharingImage, setIsSharingImage] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid" | "map">("list");
+  const [selectedMapListing, setSelectedMapListing] = useState<PropertyListing | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
@@ -216,6 +269,42 @@ export default function MasterListingScreen() {
       useNativeDriver: true,
     }).start();
   };
+
+  const loadRecentSearches = async () => {
+    try {
+      const stored = await AsyncStorage.getItem("@umi_recent_searches");
+      if (stored) {
+        setRecentSearches(JSON.parse(stored));
+      }
+    } catch {}
+  };
+
+  const saveRecentSearch = async (query: string) => {
+    const clean = query.trim();
+    if (!clean || clean.length < 2) return;
+    try {
+      const updated = [clean, ...recentSearches.filter((s) => s.toLowerCase() !== clean.toLowerCase())].slice(0, 8);
+      setRecentSearches(updated);
+      await AsyncStorage.setItem("@umi_recent_searches", JSON.stringify(updated));
+    } catch {}
+  };
+
+  const clearRecentSearches = async () => {
+    try {
+      setRecentSearches([]);
+      await AsyncStorage.removeItem("@umi_recent_searches");
+    } catch {}
+  };
+
+  useEffect(() => {
+    loadRecentSearches();
+  }, []);
+
+  useEffect(() => {
+    if (debouncedSearch && debouncedSearch.trim().length >= 2) {
+      saveRecentSearch(debouncedSearch);
+    }
+  }, [debouncedSearch]);
 
   const resetCriteria = () => {
     setCriteriaLocation("");
@@ -826,9 +915,15 @@ export default function MasterListingScreen() {
               {sizeLabel ? (
                 <View style={styles.specItem}>
                   <MaterialCommunityIcons name="vector-square" size={14} color={themeColors.textMuted} />
-                  <Text style={[styles.specText, { color: themeColors.textMuted }]} numberOfLines={1}>
+                  <Text style={[styles.specText, { color: themeColors.textMuted }] } numberOfLines={1}>
                     {sizeLabel}
                   </Text>
+                </View>
+              ) : null}
+
+              {item.pegangan ? (
+                <View style={[styles.specBadge, { backgroundColor: `${themeColors.maroonPrimary}14`, borderColor: `${themeColors.maroonPrimary}30` }]}>
+                  <Text style={[styles.specBadgeText, { color: themeColors.maroonPrimary }]}>{item.pegangan}</Text>
                 </View>
               ) : null}
             </View>
@@ -1055,7 +1150,7 @@ export default function MasterListingScreen() {
           </View>
         </View>
 
-        {/* Collapsible Search Bar */}
+        {/* Collapsible Search Bar with Recent Searches & Discovery Tags */}
         {isSearchExpanded && (
           <View style={styles.searchBarContainer}>
             <View style={[styles.searchBar, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}>
@@ -1066,6 +1161,7 @@ export default function MasterListingScreen() {
                 placeholderTextColor={themeColors.textMuted}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
+                onSubmitEditing={() => saveRecentSearch(searchQuery)}
                 autoFocus
               />
               {searchQuery ? (
@@ -1073,6 +1169,81 @@ export default function MasterListingScreen() {
                   <MaterialCommunityIcons name="close-circle" size={18} color={themeColors.textMuted} />
                 </TouchableOpacity>
               ) : null}
+            </View>
+
+            {/* Recent Searches Row */}
+            {recentSearches.length > 0 && (
+              <View style={{ marginTop: 8 }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textMuted }}>
+                    {language === "BM" ? "Carian Terkini" : "Recent Searches"}
+                  </Text>
+                  <TouchableOpacity onPress={clearRecentSearches}>
+                    <Text style={{ fontSize: 11, color: themeColors.maroonPrimary, fontWeight: "600" }}>
+                      {language === "BM" ? "Padam" : "Clear"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                  {recentSearches.map((term, i) => (
+                    <TouchableOpacity
+                      key={`recent-${i}`}
+                      onPress={() => {
+                        Haptics.selectionAsync().catch(() => {});
+                        setSearchQuery(term);
+                      }}
+                      style={[
+                        styles.recentSearchChip,
+                        {
+                          backgroundColor: themeColors.surfaceContainer,
+                          borderColor: themeColors.borderColor,
+                        },
+                      ]}
+                    >
+                      <MaterialCommunityIcons name="history" size={12} color={themeColors.textMuted} />
+                      <Text style={[styles.recentSearchChipText, { color: themeColors.textSecondary }]}>
+                        {term}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Smart Discovery Tag Chips */}
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textMuted, marginBottom: 4 }}>
+                {language === "BM" ? "Tag Popular" : "Popular Tags"}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+                {[
+                  { label: "⭐ Freehold", action: () => setCriteriaTenure("Freehold") },
+                  { label: "🌿 Bumi Lot", action: () => setCriteriaLotStatus("Bumi Lot") },
+                  { label: "💰 < RM300k", action: () => setCriteriaMaxPrice("300000") },
+                  { label: "🏡 Landed", action: () => setCategoryFilter("Landed") },
+                  { label: "🏢 High-Rise", action: () => setCategoryFilter("High-Rise") },
+                  { label: "🔑 Sewa", action: () => setCategoryFilter("Sewa") },
+                ].map((tag, i) => (
+                  <TouchableOpacity
+                    key={`tag-${i}`}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      tag.action();
+                    }}
+                    style={[
+                      styles.discoveryTagChip,
+                      {
+                        backgroundColor: `${themeColors.maroonPrimary}14`,
+                        borderColor: `${themeColors.maroonPrimary}35`,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.discoveryTagChipText, { color: themeColors.maroonPrimary }]}>
+                      {tag.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
             </View>
           </View>
         )}
@@ -1142,26 +1313,70 @@ export default function MasterListingScreen() {
           </Text>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                setViewMode((prev) => (prev === "list" ? "grid" : "list"));
-              }}
+            {/* 3-Way View Switcher (List / Grid / Map) */}
+            <View
               style={[
-                styles.viewModeToggleBtn,
+                styles.viewSwitcherGroup,
                 {
                   backgroundColor: themeColors.surfaceContainer,
                   borderColor: themeColors.borderColor,
                 },
               ]}
             >
-              <MaterialCommunityIcons
-                name={viewMode === "list" ? "view-grid-outline" : "view-agenda-outline"}
-                size={18}
-                color={themeColors.maroonPrimary}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setViewMode("list");
+                }}
+                style={[
+                  styles.viewSwitcherBtn,
+                  viewMode === "list" && { backgroundColor: themeColors.maroonPrimary },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="view-agenda-outline"
+                  size={15}
+                  color={viewMode === "list" ? "#FFF" : themeColors.textMuted}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setViewMode("grid");
+                }}
+                style={[
+                  styles.viewSwitcherBtn,
+                  viewMode === "grid" && { backgroundColor: themeColors.maroonPrimary },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="view-grid-outline"
+                  size={15}
+                  color={viewMode === "grid" ? "#FFF" : themeColors.textMuted}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setViewMode("map");
+                }}
+                style={[
+                  styles.viewSwitcherBtn,
+                  viewMode === "map" && { backgroundColor: themeColors.maroonPrimary },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="map-outline"
+                  size={15}
+                  color={viewMode === "map" ? "#FFF" : themeColors.textMuted}
+                />
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               activeOpacity={0.8}
@@ -1180,8 +1395,116 @@ export default function MasterListingScreen() {
         </View>
       </View>
 
-      {/* Main Property FlashList */}
-      {isLoading ? (
+      {/* Main Content Area: Map View OR FlashList */}
+      {viewMode === "map" ? (
+        <View style={{ flex: 1, width: "100%", position: "relative" }}>
+          <MapView
+            style={{ flex: 1, width: "100%" }}
+            provider={PROVIDER_GOOGLE}
+            initialRegion={{
+              latitude: 3.8,
+              longitude: 101.9,
+              latitudeDelta: 4.5,
+              longitudeDelta: 4.5,
+            }}
+          >
+            {sortedListings.map((item, idx) => {
+              const coords = getListingCoordinates(item, idx);
+              const isSelected = selectedMapListing?.id === item.id;
+              return (
+                <Marker
+                  key={`map-pin-${item.id}`}
+                  coordinate={coords}
+                  onPress={() => {
+                    Haptics.selectionAsync().catch(() => {});
+                    setSelectedMapListing(item);
+                  }}
+                  tracksViewChanges={false}
+                >
+                  <View
+                    style={[
+                      styles.mapPriceMarker,
+                      {
+                        backgroundColor: isSelected ? "#FF3B5C" : themeColors.maroonPrimary,
+                        borderColor: "#FFF",
+                        transform: [{ scale: isSelected ? 1.15 : 1 }],
+                      },
+                    ]}
+                  >
+                    <Text style={styles.mapPriceMarkerText}>
+                      {formatCompactPrice(item.harga)}
+                    </Text>
+                  </View>
+                </Marker>
+              );
+            })}
+          </MapView>
+
+          {/* Floating Selected Listing Bottom Preview Card */}
+          {selectedMapListing && (
+            <View
+              style={[
+                styles.mapBottomCardWrap,
+                {
+                  bottom: Math.max(insets.bottom, 24) + 64,
+                  backgroundColor: themeColors.cardBackground,
+                  borderColor: themeColors.borderColor,
+                },
+              ]}
+            >
+              <TouchableOpacity
+                activeOpacity={0.92}
+                onPress={() => {
+                  if (!selectedMapListing?.id) return;
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  router.push(`/listing/${selectedMapListing.id}` as any);
+                }}
+                style={styles.mapCardInner}
+              >
+                {/* Thumbnail */}
+                {getListingImageUri(selectedMapListing) ? (
+                  <ExpoImage
+                    source={{ uri: getListingImageUri(selectedMapListing)! }}
+                    style={styles.mapCardThumb}
+                    contentFit="cover"
+                    transition={150}
+                  />
+                ) : (
+                  <View style={[styles.mapCardThumbPlaceholder, { backgroundColor: themeColors.maroonLight }]}>
+                    <MaterialCommunityIcons name="home-city" size={24} color={themeColors.maroonPrimary} />
+                  </View>
+                )}
+
+                <View style={styles.mapCardDetails}>
+                  <Text style={[styles.mapCardPrice, { color: themeColors.maroonPrimary }]} numberOfLines={1}>
+                    {formatPriceLabel(selectedMapListing.harga)}
+                  </Text>
+                  <Text style={[styles.mapCardTitle, { color: themeColors.textPrimary }]} numberOfLines={1}>
+                    {selectedMapListing.tajuk}
+                  </Text>
+                  <Text style={[styles.mapCardLocation, { color: themeColors.textMuted }]} numberOfLines={1}>
+                    📍 {selectedMapListing.negeri || selectedMapListing.alamat || "Malaysia"}
+                  </Text>
+                  {(selectedMapListing.bilikTidur || selectedMapListing.bilikAir) ? (
+                    <Text style={[styles.mapCardSpecs, { color: themeColors.textSecondary }]}>
+                      🛏️ {selectedMapListing.bilikTidur || 0}  🚿 {selectedMapListing.bilikAir || 0}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Close Button */}
+                <TouchableOpacity
+                  onPress={() => setSelectedMapListing(null)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  style={styles.mapCardCloseBtn}
+                >
+                  <MaterialCommunityIcons name="close" size={18} color={themeColors.textMuted} />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      ) : isLoading ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
           <Text style={[styles.loadingText, { color: themeColors.textMuted }]}>{t("masterListing")}...</Text>
@@ -2562,6 +2885,128 @@ const styles = StyleSheet.create({
   },
   filterModalPillText: {
     fontSize: 13,
+    fontWeight: "700",
+  },
+  viewSwitcherGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 2,
+    gap: 2,
+  },
+  viewSwitcherBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 7,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recentSearchChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  recentSearchChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  discoveryTagChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  discoveryTagChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  mapPriceMarker: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 4,
+  },
+  mapPriceMarkerText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  mapBottomCardWrap: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    overflow: "hidden",
+  },
+  mapCardInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 12,
+  },
+  mapCardThumb: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+  },
+  mapCardThumbPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapCardDetails: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  mapCardPrice: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  mapCardTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  mapCardLocation: {
+    fontSize: 11,
+    marginTop: 3,
+  },
+  mapCardSpecs: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  mapCardCloseBtn: {
+    alignSelf: "flex-start",
+    padding: 4,
+  },
+  specBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginLeft: 4,
+  },
+  specBadgeText: {
+    fontSize: 10,
     fontWeight: "700",
   },
 });
