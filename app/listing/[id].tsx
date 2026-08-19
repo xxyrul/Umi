@@ -20,19 +20,16 @@ import {
   NativeModules,
 } from "react-native";
 import { Image as ExpoImage } from "expo-image";
-import ImageViewing from "react-native-image-viewing";
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { firestore, auth } from "@/services/firebase";
 import type { PropertyListing } from "@/types/listing";
-import { THEME } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
-import * as IntentLauncher from "expo-intent-launcher";
 import { addEventToNativeCalendar } from "@/services/calendar";
 
 function getListingImagesList(listing: any): string[] {
@@ -149,12 +146,50 @@ function formatPropertyType(jenis?: string, lang?: string) {
     .replace(/Pangsapuri/gi, "Apartment");
 }
 
+
+function DocumentVaultItem({ hasDoc, onPress, title, iconHas, iconNone, themeColors, t }: any) {
+  return (
+    <TouchableOpacity
+      activeOpacity={hasDoc ? 0.8 : 1}
+      onPress={onPress}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: themeColors.cardBackground,
+        borderWidth: 1,
+        borderColor: themeColors.borderColor,
+        borderRadius: 12,
+        padding: 14,
+      }}
+    >
+      <MaterialCommunityIcons
+        name={hasDoc ? iconHas : iconNone}
+        size={24}
+        color={hasDoc ? themeColors.maroonPrimary : '#A0A0A0'}
+      />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 16, fontWeight: '700', color: themeColors.textPrimary }}>
+          {title}
+        </Text>
+        <Text style={{ fontSize: 13, color: hasDoc ? themeColors.textSecondary : '#A0A0A0', marginTop: 2 }}>
+          {hasDoc ? t('docAvailable') : t('docNotUploaded')}
+        </Text>
+      </View>
+      {hasDoc && (
+        <MaterialCommunityIcons name='open-in-new' size={18} color={themeColors.maroonPrimary} />
+      )}
+    </TouchableOpacity>
+  );
+}
+
 export default function PropertyDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { themeColors, t, language } = useAppSettings();
+  const styles = useStyles(themeColors);
 
   const [listing, setListing] = useState<PropertyListing | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1018,158 +1053,47 @@ export default function PropertyDetailScreen() {
                 </Text>
               </View>
             ) : (
+              
               <View style={[styles.vaultGrid, { marginTop: 12 }]}>
-                {/* Geran */}
-                {(() => {
-                  const hasGeran = Boolean(listing.geran);
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={hasGeran ? 0.8 : 1}
-                      onPress={() => handleOpenDocument(listing.geran, t("geranCopy"))}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 12,
-                        backgroundColor: themeColors.cardBackground,
-                        borderWidth: 1,
-                        borderColor: themeColors.borderColor,
-                        borderRadius: 12,
-                        padding: 14,
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={hasGeran ? "file-document-outline" : "file-outline"}
-                        size={24}
-                        color={hasGeran ? themeColors.maroonPrimary : "#A0A0A0"}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: themeColors.textPrimary }}>
-                          {t("geranCopy")}
-                        </Text>
-                        <Text style={{ fontSize: 13, color: hasGeran ? themeColors.textSecondary : "#A0A0A0", marginTop: 2 }}>
-                          {hasGeran ? t("docAvailable") : t("docNotUploaded")}
-                        </Text>
-                      </View>
-                      {hasGeran && (
-                        <MaterialCommunityIcons name="open-in-new" size={18} color={themeColors.maroonPrimary} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })()}
+                <DocumentVaultItem
+                  hasDoc={Boolean(listing.geran)}
+                  onPress={() => handleOpenDocument(listing.geran, t("geranCopy"))}
+                  title={t("geranCopy")}
+                  iconHas="file-document-outline"
+                  iconNone="file-outline"
+                  themeColors={themeColors}
+                  t={t}
+                />
+                
+                <DocumentVaultItem
+                  hasDoc={Boolean(listing.spa)}
+                  onPress={() => handleOpenDocument(listing.spa, t("spaCopy"))}
+                  title={t("spaCopy")}
+                  iconHas="file-sign"
+                  iconNone="file-outline"
+                  themeColors={themeColors}
+                  t={t}
+                />
 
-                {/* SPA */}
-                {(() => {
-                  const hasSpa = Boolean(listing.spa);
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={hasSpa ? 0.8 : 1}
-                      onPress={() => handleOpenDocument(listing.spa, t("spaCopy"))}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 12,
-                        backgroundColor: themeColors.cardBackground,
-                        borderWidth: 1,
-                        borderColor: themeColors.borderColor,
-                        borderRadius: 12,
-                        padding: 14,
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={hasSpa ? "file-sign" : "file-outline"}
-                        size={24}
-                        color={hasSpa ? themeColors.maroonPrimary : "#A0A0A0"}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: themeColors.textPrimary }}>
-                          {t("spaCopy")}
-                        </Text>
-                        <Text style={{ fontSize: 13, color: hasSpa ? themeColors.textSecondary : "#A0A0A0", marginTop: 2 }}>
-                          {hasSpa ? t("docAvailable") : t("docNotUploaded")}
-                        </Text>
-                      </View>
-                      {hasSpa && (
-                        <MaterialCommunityIcons name="open-in-new" size={18} color={themeColors.maroonPrimary} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })()}
+                <DocumentVaultItem
+                  hasDoc={Boolean(listing.icOwner)}
+                  onPress={() => handleOpenDocument(listing.icOwner, t("ownerIcCopyFull"))}
+                  title={t("ownerIcCopyFull")}
+                  iconHas="card-account-details-outline"
+                  iconNone="card-outline"
+                  themeColors={themeColors}
+                  t={t}
+                />
 
-                {/* IC Owner */}
-                {(() => {
-                  const hasIc = Boolean(listing.icOwner);
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={hasIc ? 0.8 : 1}
-                      onPress={() => handleOpenDocument(listing.icOwner, t("ownerIcCopyFull"))}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 12,
-                        backgroundColor: themeColors.cardBackground,
-                        borderWidth: 1,
-                        borderColor: themeColors.borderColor,
-                        borderRadius: 12,
-                        padding: 14,
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={hasIc ? "card-account-details-outline" : "card-outline"}
-                        size={24}
-                        color={hasIc ? themeColors.maroonPrimary : "#A0A0A0"}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: themeColors.textPrimary }}>
-                          {t("ownerIcCopyFull")}
-                        </Text>
-                        <Text style={{ fontSize: 13, color: hasIc ? themeColors.textSecondary : "#A0A0A0", marginTop: 2 }}>
-                          {hasIc ? t("docAvailable") : t("docNotUploaded")}
-                        </Text>
-                      </View>
-                      {hasIc && (
-                        <MaterialCommunityIcons name="open-in-new" size={18} color={themeColors.maroonPrimary} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })()}
-
-                {/* Bil Utility */}
-                {(() => {
-                  const hasUtility = Boolean(listing.bilUtility);
-                  return (
-                    <TouchableOpacity
-                      activeOpacity={hasUtility ? 0.8 : 1}
-                      onPress={() => handleOpenDocument(listing.bilUtility, t("utilityBill"))}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 12,
-                        backgroundColor: themeColors.cardBackground,
-                        borderWidth: 1,
-                        borderColor: themeColors.borderColor,
-                        borderRadius: 12,
-                        padding: 14,
-                      }}
-                    >
-                      <MaterialCommunityIcons
-                        name={hasUtility ? "receipt" : "receipt-outline"}
-                        size={24}
-                        color={hasUtility ? themeColors.maroonPrimary : "#A0A0A0"}
-                      />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "700", color: themeColors.textPrimary }}>
-                          {t("utilityBill")}
-                        </Text>
-                        <Text style={{ fontSize: 13, color: hasUtility ? themeColors.textSecondary : "#A0A0A0", marginTop: 2 }}>
-                          {hasUtility ? t("docAvailable") : t("docNotUploaded")}
-                        </Text>
-                      </View>
-                      {hasUtility && (
-                        <MaterialCommunityIcons name="open-in-new" size={18} color={themeColors.maroonPrimary} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })()}
+                <DocumentVaultItem
+                  hasDoc={Boolean(listing.bilUtility)}
+                  onPress={() => handleOpenDocument(listing.bilUtility, t("utilityBill"))}
+                  title={t("utilityBill")}
+                  iconHas="receipt"
+                  iconNone="receipt-outline"
+                  themeColors={themeColors}
+                  t={t}
+                />
               </View>
             )}
           </View>
@@ -1495,10 +1419,10 @@ export default function PropertyDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = (themeColors: any) => StyleSheet.create({
   centerContainer: {
     flex: 1,
-    backgroundColor: THEME.canvasBackground,
+    backgroundColor: themeColors.canvasBackground,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
@@ -1506,18 +1430,18 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: THEME.textMuted,
+    color: themeColors.textMuted,
     fontWeight: "500",
   },
   notFoundTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: THEME.textPrimary,
+    color: themeColors.textPrimary,
     marginTop: 12,
   },
   notFoundSub: {
     fontSize: 13,
-    color: THEME.textMuted,
+    color: themeColors.textMuted,
     marginTop: 4,
   },
   backBtn: {
@@ -1525,7 +1449,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: THEME.maroonPrimary,
+    backgroundColor: themeColors.maroonPrimary,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 8,
@@ -1539,7 +1463,7 @@ const styles = StyleSheet.create({
     position: "relative",
     width: "100%",
     height: 240,
-    backgroundColor: THEME.maroonLight,
+    backgroundColor: themeColors.maroonLight,
   },
   heroImage: {
     width: "100%",
@@ -1568,12 +1492,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderBottomWidth: 1,
-    borderBottomColor: THEME.maroonBorder,
+    borderBottomColor: themeColors.maroonBorder,
   },
   heroPlaceholderText: {
     marginTop: 8,
     fontSize: 13,
-    color: THEME.maroonPrimary,
+    color: themeColors.maroonPrimary,
     fontWeight: "600",
   },
   floatingBackButton: {
@@ -1627,7 +1551,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   galleryThumbActive: {
-    borderColor: THEME.maroonPrimary,
+    borderColor: themeColors.maroonPrimary,
   },
   galleryThumb: {
     width: "100%",
@@ -1639,11 +1563,11 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   card: {
-    backgroundColor: THEME.cardBackground,
+    backgroundColor: themeColors.cardBackground,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: THEME.borderColor,
+    borderColor: themeColors.borderColor,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
@@ -1657,7 +1581,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   statusBadge: {
-    backgroundColor: THEME.maroonPrimary,
+    backgroundColor: themeColors.maroonPrimary,
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
@@ -1676,19 +1600,19 @@ const styles = StyleSheet.create({
   jenisText: {
     fontSize: 11,
     fontWeight: "600",
-    color: THEME.textSecondary,
+    color: themeColors.textSecondary,
   },
   title: {
     fontSize: 20,
     fontWeight: "700",
-    color: THEME.textPrimary,
+    color: themeColors.textPrimary,
     lineHeight: 26,
     marginBottom: 6,
   },
   price: {
     fontSize: 22,
     fontWeight: "800",
-    color: THEME.maroonPrimary,
+    color: themeColors.maroonPrimary,
     marginBottom: 8,
   },
   locationRow: {
@@ -1698,13 +1622,13 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 13,
-    color: THEME.textMuted,
+    color: themeColors.textMuted,
     flex: 1,
   },
   cardSectionTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: THEME.maroonPrimary,
+    color: themeColors.maroonPrimary,
     marginBottom: 12,
   },
   specsGrid: {
@@ -1714,23 +1638,23 @@ const styles = StyleSheet.create({
   },
   specBox: {
     width: "48%",
-    backgroundColor: THEME.maroonLight,
+    backgroundColor: themeColors.maroonLight,
     borderWidth: 1,
-    borderColor: THEME.maroonBorder,
+    borderColor: themeColors.maroonBorder,
     borderRadius: 12,
     padding: 12,
     alignItems: "center",
   },
   specBoxLabel: {
     fontSize: 11,
-    color: THEME.textSecondary,
+    color: themeColors.textSecondary,
     marginTop: 4,
     fontWeight: "500",
   },
   specBoxValue: {
     fontSize: 14,
     fontWeight: "700",
-    color: THEME.maroonDark,
+    color: themeColors.maroonDark,
     marginTop: 2,
   },
   ownerInfoRow: {
@@ -1743,20 +1667,20 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: THEME.maroonLight,
+    backgroundColor: themeColors.maroonLight,
     borderWidth: 1,
-    borderColor: THEME.maroonBorder,
+    borderColor: themeColors.maroonBorder,
     justifyContent: "center",
     alignItems: "center",
   },
   ownerName: {
     fontSize: 16,
     fontWeight: "700",
-    color: THEME.textPrimary,
+    color: themeColors.textPrimary,
   },
   ownerPhone: {
     fontSize: 13,
-    color: THEME.textMuted,
+    color: themeColors.textMuted,
     marginTop: 2,
   },
   contactActionRow: {
@@ -1769,7 +1693,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: THEME.maroonPrimary,
+    backgroundColor: themeColors.maroonPrimary,
     borderRadius: 10,
     paddingVertical: 12,
   },
@@ -1784,7 +1708,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: THEME.accentWhatsApp,
+    backgroundColor: themeColors.accentWhatsApp,
     borderRadius: 10,
     paddingVertical: 12,
   },
@@ -1806,27 +1730,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: THEME.maroonLight,
+    backgroundColor: themeColors.maroonLight,
     borderWidth: 1,
-    borderColor: THEME.maroonBorder,
+    borderColor: themeColors.maroonBorder,
     borderRadius: 12,
     padding: 12,
   },
   vaultItemDisabled: {
-    backgroundColor: THEME.disabledBg,
-    borderColor: THEME.borderColor,
+    backgroundColor: themeColors.disabledBg,
+    borderColor: themeColors.borderColor,
   },
   vaultItemTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: THEME.maroonDark,
+    color: themeColors.maroonDark,
   },
   vaultItemTextDisabled: {
-    color: THEME.disabledText,
+    color: themeColors.disabledText,
   },
   vaultItemStatus: {
     fontSize: 11,
-    color: THEME.textMuted,
+    color: themeColors.textMuted,
     marginTop: 2,
   },
   fullScreenModal: {

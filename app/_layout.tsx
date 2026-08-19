@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import * as Sentry from '@sentry/react-native';
 import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, StatusBar, Button, BackHandler, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Slot, useSegments, useRouter } from "expo-router";
+import { Slot, Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { onAuthStateChanged, firebaseAuth, User } from "@/services/firebase";
@@ -170,26 +170,16 @@ function RootLayoutInner({
   }, [language]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (firebaseUser) => {
-      setUser(firebaseUser);
-      setAuthLoaded(true);
+    // Auth state is now managed globally by RootLayout to avoid duplicate listeners.
+    if (authLoaded && user) {
       SplashScreen.hideAsync().catch(() => {});
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
+    }
+  }, [authLoaded, user]);
 
   useEffect(() => {
     const backSubscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      const rootSegment = segments[0];
-      if (rootSegment === "listing") {
-        router.navigate("/(tabs)/listings");
-        return true;
-      }
-      if (rootSegment === "case") {
-        router.navigate("/(tabs)/cases");
+      if (router.canGoBack()) {
+        router.back();
         return true;
       }
       return false;
@@ -198,7 +188,7 @@ function RootLayoutInner({
     return () => {
       backSubscription.remove();
     };
-  }, [router, segments]);
+  }, [router]);
 
   return (
     <SafeAreaProvider>
@@ -211,17 +201,12 @@ function RootLayoutInner({
 
       <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
         <AuthGuard user={user} authLoaded={authLoaded} />
-        <Slot />
+        <Stack screenOptions={{ headerShown: false, animation: "slide_from_bottom" }} />
         <InAppUpdateModal
           visible={isUpdateModalVisible}
           release={availableRelease}
           onClose={() => setIsUpdateModalVisible(false)}
         />
-        {__DEV__ && Platform.OS !== "web" && (
-          <View style={{ position: "absolute", bottom: 20, right: 20 }}>
-            <Button title="Try Sentry" onPress={() => { Sentry.captureException(new Error("First error")); }} />
-          </View>
-        )}
       </View>
     </SafeAreaProvider>
   );

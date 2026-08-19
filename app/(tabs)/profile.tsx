@@ -37,7 +37,6 @@ import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 
 import { Image as ExpoImage } from "expo-image";
-import * as Haptics from "expo-haptics";
 import type { UserProfile, PropertyCase } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 
@@ -276,7 +275,7 @@ export default function ProfileScreen() {
         .get();
 
       // Fetch all listings but filter by user ownership
-      const listingsSnap = await firestore().collection("publicListings").get();
+      const listingsSnap = await firestore().collection("publicListings").where("userId", "==", user.uid).get();
 
       const allListings = listingsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PropertyListing);
       const cases = casesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as PropertyCase);
@@ -680,8 +679,8 @@ export default function ProfileScreen() {
           {renderOptionRow(
             "information-outline",
             t("appVersion"),
-            `v${Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "—"} · ${t("checkForUpdates")}`,
-            handleCheckForUpdates
+            `v${Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "?"} · ${t("checkForUpdates")}`,
+            () => router.push("/(tabs)/updates")
           )}
           {renderOptionRow("help-circle-outline", t("helpFeedback"), t("helpSubtitle"), () => setActiveSection("Help"))}
         </View>
@@ -956,11 +955,7 @@ export default function ProfileScreen() {
       />
 
       {/* In-App Update Modal */}
-      <InAppUpdateModal
-        visible={isProfileUpdateModalVisible}
-        release={profileRelease}
-        onClose={() => setIsProfileUpdateModalVisible(false)}
-      />
+      
     </View>
   );
 }

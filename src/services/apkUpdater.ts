@@ -9,7 +9,7 @@ const RELEASE_HOSTNAME = "umiren-d6a66.web.app";
 const PACKAGE_NAME = "com.umi.caseflow";
 const LAST_DISMISSED_UPDATE_KEY = "artha_last_dismissed_update_timestamp";
 const NUDGE_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 Days
-const UPDATE_CACHE_DIR = `${FileSystem.cacheDirectory}updates/`;
+export const UPDATE_CACHE_DIR = `${FileSystem.cacheDirectory}updates/`;
 
 export type NativeAppRelease = {
   versionName: string;
@@ -18,6 +18,7 @@ export type NativeAppRelease = {
   packageName?: string;
   mandatory?: boolean;
   releaseNotes?: string[];
+  releaseDate?: string;
 };
 
 export type DownloadProgressCallback = (progress: {
@@ -173,6 +174,34 @@ export function cancelActiveDownload(): void {
       activeDownloadResumable.cancelAsync().catch(() => {});
     } catch {}
     activeDownloadResumable = null;
+  }
+}
+
+export const getUpdateCacheSize = async (): Promise<number> => {
+  try {
+    const dirInfo = await FileSystem.getInfoAsync(UPDATE_CACHE_DIR, { md5: false, size: true } as any);
+    return (dirInfo.exists && (dirInfo as any).size) ? (dirInfo as any).size : 0;
+  } catch {
+    return 0;
+  }
+};
+
+export async function fetchReleaseHistory(): Promise<NativeAppRelease[]> {
+  try {
+    const response = await fetch("https://umiren-d6a66.web.app/releases/history.json", {
+      headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
+    });
+    if (response.ok) {
+      return (await response.json()) as NativeAppRelease[];
+    }
+  } catch (err) {
+    console.warn("Failed to fetch history.json from remote", err);
+  }
+  
+  try {
+    return require("../../../dist/releases/history.json");
+  } catch {
+    return [];
   }
 }
 

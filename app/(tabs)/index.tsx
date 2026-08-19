@@ -25,11 +25,12 @@ import type { PropertyCase, UserProfile } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 import { useAppSettings } from "@/context/AppSettingsContext";
 
-const AVAILABLE_YEARS = ["2024", "2025", "2026"];
+const currentYear = new Date().getFullYear();
+const AVAILABLE_YEARS = [String(currentYear - 2), String(currentYear - 1), String(currentYear), String(currentYear + 1)];
 
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
-  const { themeColors, t } = useAppSettings();
+  const { themeColors, t, language } = useAppSettings();
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [listings, setListings] = useState<PropertyListing[]>([]);
@@ -71,8 +72,7 @@ export default function DashboardScreen() {
     let unsubCases: (() => void) | null = null;
 
     const attachDashboardListeners = () => {
-      if (unsubListings) unsubListings();
-      if (unsubCases) unsubCases();
+      if (unsubListings)       if (unsubCases) unsubCases();
 
       // Realtime Listener for Listings
       unsubListings = firestore()
@@ -128,8 +128,7 @@ export default function DashboardScreen() {
 
     const detachDashboardListeners = () => {
       if (unsubListings) {
-        unsubListings();
-        unsubListings = null;
+                unsubListings = null;
       }
       if (unsubCases) {
         unsubCases();
@@ -499,7 +498,7 @@ export default function DashboardScreen() {
               </Svg>
 
               <View style={styles.chartMonthLabels}>
-                {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(
+                {language === "BM" ? ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ogo", "Sep", "Okt", "Nov", "Dis"] : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(
                   (m) => (
                     <Text key={m} style={[styles.chartMonthText, { color: themeColors.textMuted }]}>
                       {m}

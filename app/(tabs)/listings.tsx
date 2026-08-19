@@ -33,6 +33,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { firestore, auth } from "@/services/firebase";
 import { useRouter } from "expo-router";
 import type { PropertyListing } from "@/types/listing";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
 
 const SEGMENTS = ["mine", "all"] as const;
@@ -163,6 +164,7 @@ export default function MasterListingScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 250);
   const [activeFilter, setActiveFilter] = useState("Semua");
   const [activeSegment, setActiveSegment] = useState<ListingSegment>("all");
   const [sortOption, setSortOption] = useState<ListingSortOption>("newest");
@@ -1178,7 +1180,6 @@ export default function MasterListingScreen() {
           data={sortedListings}
           keyExtractor={(item) => item.id}
           renderItem={renderListingCard}
-          estimatedItemSize={210}
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
             paddingHorizontal: 16,

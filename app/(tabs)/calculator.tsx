@@ -9,6 +9,8 @@ import {
   Platform,
   StyleSheet,
   StatusBar,
+  Alert,
+  Linking,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -123,6 +125,22 @@ export default function CalculatorScreen() {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(val);
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = `*Kelayakan Pinjaman (DSR)*\n\n` +
+      `Pendapatan: ${formatCurrency(averageIncome)}\n` +
+      `Komitmen: ${formatCurrency(totalCommitments)}\n` +
+      `DSR Semasa: ${currentDsr.toFixed(1)}%\n` +
+      `Maksimum DSR: ${averageIncome >= 3000 ? 70 : 60}%\n\n` +
+      `*Baki Pinjaman Dibenarkan*\n` +
+      `Ansuran Bulanan: ${formatCurrency(loanEligibility.maxInstallment)}\n` +
+      `Harga Rumah: ${formatCurrency(loanEligibility.maxPrice)}`;
+    
+    const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Error", "WhatsApp is not installed on your device.");
+    });
   };
 
   return (
@@ -549,6 +567,15 @@ export default function CalculatorScreen() {
             </Text>
           </View>
         </View>
+      
+        <TouchableOpacity
+          onPress={handleShareWhatsApp}
+          style={[styles.resetBtn, { backgroundColor: "#25D366", borderColor: "#25D366", marginTop: 16 }]}
+        >
+          <MaterialCommunityIcons name="whatsapp" size={20} color="#FFF" />
+          <Text style={[styles.resetText, { color: "#FFF" }]}>Share Assessment</Text>
+        </TouchableOpacity>
+
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -683,5 +710,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: 4,
     marginBottom: 8,
+  },
+  resetBtn: {
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 24,
+    gap: 8,
+  },
+  resetText: {
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

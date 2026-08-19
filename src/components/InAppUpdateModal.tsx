@@ -10,6 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, SlideInUp } from "react-native-reanimated";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { SPACING } from "@/constants/theme";
 import {
@@ -44,6 +45,16 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
   if (!release) return null;
 
   const isMalay = language === "BM";
+
+  const progressWidth = useSharedValue(0);
+  useEffect(() => {
+    progressWidth.value = withTiming(downloadProgress, { duration: 300 });
+  }, [downloadProgress]);
+
+  const animatedProgressStyle = useAnimatedStyle(() => ({
+    width: `${progressWidth.value}%`
+  }));
+
 
   const handleStartUpdate = async () => {
     try {
@@ -96,7 +107,8 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss}>
       <View style={styles.overlay}>
-        <View
+        <Animated.View
+          entering={SlideInUp.springify().damping(20).mass(0.9)}
           style={[
             styles.card,
             {
@@ -271,7 +283,7 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
               </Text>
             </TouchableOpacity>
           )}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );

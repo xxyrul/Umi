@@ -21,6 +21,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SPACING } from "@/constants/theme";
+import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { CaseCard } from "@/components";
 import { deleteCase, updateCase } from "@/services/storage";
@@ -99,6 +100,7 @@ export default function CasesScreen() {
   const [cases, setCases] = useState<PropertyCase[]>([]);
   const [filteredCases, setFilteredCases] = useState<PropertyCase[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearch = useDebounce(searchQuery, 250);
   const [selectedStatus, setSelectedStatus] = useState<CaseStatus | "All" | "Active">("All");
   const [sortOption, setSortOption] = useState<CaseSortOption>("newest");
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
@@ -271,7 +273,7 @@ export default function CasesScreen() {
 
   useEffect(() => {
     applyFilters(cases, searchQuery, selectedStatus, sortOption);
-  }, [searchQuery, selectedStatus, sortOption, cases]);
+  }, [debouncedSearch, selectedStatus, sortOption, cases]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -585,7 +587,6 @@ export default function CasesScreen() {
         <FlashList
           data={filteredCases}
           keyExtractor={(item) => item.id}
-          estimatedItemSize={190}
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
             paddingHorizontal: SPACING.lg,

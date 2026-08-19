@@ -1,197 +1,107 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, useColorScheme } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import Animated, { 
+  useAnimatedStyle, 
+  withSpring, 
+} from "react-native-reanimated";
+import { ScrollAwareBarProvider, useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 
-// Explicitly define the 4 main tabs that belong in the bottom bar
-const MAIN_TABS = ["index", "cases", "listings", "profile"] as const;
+const { width } = Dimensions.get("window");
 
-type FloatingTabBarProps = {
-  state: any;
-  descriptors: any;
-  navigation: any;
-};
+const TABS = [
+  { name: "index", label: "Dashboard", icon: "view-dashboard" },
+  { name: "cases", label: "Cases", icon: "folder-home" },
+  { name: "listings", label: "Listings", icon: "view-list" },
+  { name: "profile", label: "Profile", icon: "account" },
+];
 
-function CustomFloatingTabBar({ state, descriptors, navigation }: FloatingTabBarProps) {
-  const insets = useSafeAreaInsets();
-  const { t, themeColors, isDark } = useAppSettings();
+function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
+  const { themeColors, isDark } = useAppSettings();
+  const { barTranslateY } = useScrollAwareBar();
 
-  // Dynamic bottom offset adapting cleanly to 3-button navigation bar (insets.bottom ~ 48px) and gesture bar (insets.bottom ~ 16-24px)
-  const bottomOffset = insets.bottom > 0 ? insets.bottom + 12 : 16;
+  // The bar container slides down (hides) when scrolling down, based on context
+  const animatedBarStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: withSpring(barTranslateY.value, { damping: 20, stiffness: 150 }) }],
+    };
+  });
 
   const currentRouteName = state.routes[state.index]?.name;
-  // If active screen is a full-screen form/sub-screen (e.g. tambah, calculator), hide the floating pill
-  if (currentRouteName && !(MAIN_TABS as readonly string[]).includes(currentRouteName)) {
+  const mainTabNames = TABS.map(t => t.name);
+  if (currentRouteName && !mainTabNames.includes(currentRouteName)) {
     return null;
   }
 
-  const mainRoutes = state.routes.filter((route: any) =>
-    (MAIN_TABS as readonly string[]).includes(route.name)
-  );
-
   return (
-    <View
-      style={[
-        styles.floatingContainer,
-        {
-          bottom: bottomOffset,
-          backgroundColor: isDark ? "#1E1E1E" : "#FFFFFF",
-          borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : themeColors.borderColor,
-          shadowOpacity: isDark ? 0.35 : 0.12,
-        },
-      ]}
-    >
-      {mainRoutes.map((route) => {
-        const index = state.routes.findIndex((r) => r.key === route.key);
-        const { options } = descriptors[route.key];
-        const isFocused = state.index === index;
-
-        const onPress = () => {
-          const event = navigation.emit({
-            type: "tabPress",
-            target: route.key,
-            canPreventDefault: true,
-          });
-
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name, route.params);
+    <Animated.View style={[styles.floatingContainer, animatedBarStyle]}>
+      <View 
+        style={[
+          styles.glassBar,
+          { 
+            backgroundColor: isDark ? "rgba(30, 30, 30, 0.92)" : "rgba(255, 255, 255, 0.92)",
+            borderColor: themeColors.borderColor 
           }
-        };
+        ]}
+      >
+        {TABS.map((tab, index) => {
+          const routeIndex = state.routes.findIndex((r: any) => r.name === tab.name);
+          const isFocused = state.index === routeIndex;
 
-        const onLongPress = () => {
-          navigation.emit({
-            type: "tabLongPress",
-            target: route.key,
-          });
-        };
+          const onPress = () => {
+            if (!isFocused && routeIndex !== -1) {
+              navigation.navigate(tab.name);
+            }
+          };
 
-        // Determine icon & label based on route
-        let iconName: keyof typeof MaterialCommunityIcons.glyphMap = "home-outline";
-        let label = options.title !== undefined ? options.title : route.name;
+          const activeColor = isDark ? "#FFB2B8" : themeColors.maroonPrimary;
+          const inactiveColor = isDark ? "#71717A" : "#6B7280";
+          const tintColor = isFocused ? activeColor : inactiveColor;
 
-        if (route.name === "index") {
-          iconName = isFocused ? "home" : "home-outline";
-          label = t("dashboard");
-        } else if (route.name === "cases") {
-          iconName = isFocused ? "briefcase" : "briefcase-outline";
-          label = t("casesTab");
-        } else if (route.name === "listings") {
-          iconName = isFocused ? "home-city" : "home-city-outline";
-          label = t("listingsTab");
-        } else if (route.name === "profile") {
-          iconName = isFocused ? "account" : "account-outline";
-          label = t("profile");
-        }
-
-        const activeColor = isDark ? "#FFB2B8" : themeColors.maroonPrimary;
-        const inactiveColor = isDark ? "#71717A" : "#6B7280";
-        const tintColor = isFocused ? activeColor : inactiveColor;
-
-        return (
-          <TouchableOpacity
-            key={route.key}
-            accessibilityRole="button"
-            accessibilityState={isFocused ? { selected: true } : {}}
-            accessibilityLabel={options.tabBarAccessibilityLabel}
-            testID={options.tabBarButtonTestID}
-            onPress={onPress}
-            onLongPress={onLongPress}
-            activeOpacity={0.7}
-            style={styles.tabItem}
-          >
-            <MaterialCommunityIcons
-              name={iconName}
-              size={20}
-              color={tintColor}
-            />
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.tabLabel,
-                { color: tintColor, fontWeight: isFocused ? "700" : "600" },
-              ]}
-            >
-              {label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
-    </View>
+          return (
+            <TouchableOpacity key={tab.name} onPress={onPress} style={styles.tabItem}>
+              <MaterialCommunityIcons
+                name={tab.icon as any}
+                size={20}
+                color={tintColor}
+              />
+              <Text 
+                style={[
+                  styles.tabLabel, 
+                  { color: tintColor, fontWeight: isFocused ? "700" : "600" }
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </Animated.View>
   );
 }
 
 export default function TabsLayout() {
   return (
-    <Tabs
-      tabBar={(props) => <CustomFloatingTabBar {...props} />}
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          position: "absolute",
-          backgroundColor: "transparent",
-          borderTopWidth: 0,
-          elevation: 0,
-        },
-      }}
-    >
-      {/* 1. Dashboard */}
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "Dashboard",
+    <ScrollAwareBarProvider>
+      <Tabs
+        tabBar={(props) => <CustomFloatingTabBar {...props} />}
+        screenOptions={{
+          headerShown: false,
         }}
-      />
-
-      {/* 2. Cases */}
-      <Tabs.Screen
-        name="cases"
-        options={{
-          title: "Cases",
-        }}
-      />
-
-      {/* 3. Listings */}
-      <Tabs.Screen
-        name="listings"
-        options={{
-          title: "Listings",
-        }}
-      />
-
-      {/* 4. Profile */}
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: "Profile",
-        }}
-      />
-
-      {/* Hidden route: tambah (Add Listing Form) */}
-      <Tabs.Screen
-        name="tambah"
-        options={{
-          href: null,
-        }}
-      />
-
-      {/* Hidden route: calculator */}
-      <Tabs.Screen
-        name="calculator"
-        options={{
-          href: null,
-        }}
-      />
-
-      {/* Hidden route: tasks */}
-      <Tabs.Screen
-        name="tasks"
-        options={{
-          href: null,
-        }}
-      />
-    </Tabs>
+      >
+        <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
+        <Tabs.Screen name="cases" options={{ title: "Cases" }} />
+        <Tabs.Screen name="listings" options={{ title: "Listings" }} />
+        <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+        <Tabs.Screen name="tambah" options={{ href: null }} />
+        <Tabs.Screen name="calculator" options={{ href: null }} />
+        <Tabs.Screen name="updates" options={{ href: null }} />
+        <Tabs.Screen name="tasks" options={{ href: null }} />
+      </Tabs>
+    </ScrollAwareBarProvider>
   );
 }
 
@@ -200,30 +110,36 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 28,
     right: 28,
+    bottom: 24,
     height: 54,
-    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "space-around",
-    backgroundColor: "#1E1E1E",
+  },
+  glassBar: {
+    flexDirection: "row",
+    height: 54,
     borderRadius: 27,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-    elevation: 8,
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+    // iOS Shadow
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    paddingHorizontal: 8,
+    // Android Shadow
+    elevation: 8,
   },
   tabItem: {
-    flex: 1,
-    height: "100%",
     alignItems: "center",
     justifyContent: "center",
+    flex: 1,
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: "600",
     marginTop: 2,
+    fontWeight: "600",
   },
 });
