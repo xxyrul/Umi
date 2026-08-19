@@ -34,6 +34,8 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
   const [totalMb, setTotalMb] = useState("0");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const progressWidth = useSharedValue(0);
+
   useEffect(() => {
     if (!visible) {
       setIsDownloading(false);
@@ -42,19 +44,17 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
     }
   }, [visible]);
 
-  if (!release) return null;
-
-  const isMalay = language === "BM";
-
-  const progressWidth = useSharedValue(0);
   useEffect(() => {
     progressWidth.value = withTiming(downloadProgress, { duration: 300 });
   }, [downloadProgress]);
 
   const animatedProgressStyle = useAnimatedStyle(() => ({
-    width: `${progressWidth.value}%`
+    width: `${progressWidth.value}%`,
   }));
 
+  if (!release) return null;
+
+  const isMalay = language === "BM";
 
   const handleStartUpdate = async () => {
     try {
