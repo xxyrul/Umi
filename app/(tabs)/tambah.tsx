@@ -21,6 +21,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
+import * as Haptics from "expo-haptics";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { firestore, auth } from "@/services/firebase";
 import Animated, {
@@ -319,6 +320,31 @@ export default function TambahScreen() {
     setGambar((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleSetCoverImage = (index: number) => {
+    if (index === 0) return;
+    Haptics.selectionAsync().catch(() => {});
+    setHasEditedImages(true);
+    setGambar((prev) => {
+      const next = [...prev];
+      const [chosen] = next.splice(index, 1);
+      return [chosen, ...next];
+    });
+  };
+
+  const handleMoveImage = (index: number, direction: "left" | "right") => {
+    const targetIndex = direction === "left" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= gambar.length) return;
+    Haptics.selectionAsync().catch(() => {});
+    setHasEditedImages(true);
+    setGambar((prev) => {
+      const next = [...prev];
+      const temp = next[index];
+      next[index] = next[targetIndex];
+      next[targetIndex] = temp;
+      return next;
+    });
+  };
+
   const handlePickDocument = async (docType: "geran" | "spa" | "icOwner") => {
     try {
       const res = await DocumentPicker.getDocumentAsync({
@@ -500,13 +526,41 @@ export default function TambahScreen() {
         {gambar.map((uri, idx) => (
           <Animated.View entering={FadeInDown} key={idx} style={styles.imageWrapper}>
             <Image source={{ uri }} style={styles.gridImage} />
+            {idx === 0 ? (
+              <View style={styles.coverBadge}>
+                <MaterialCommunityIcons name="star" size={10} color="#FFF" />
+                <Text style={styles.coverBadgeText}>Cover</Text>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => handleSetCoverImage(idx)}
+                style={styles.setCoverBtn}
+              >
+                <Text style={styles.setCoverBtnText}>Set Cover</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity onPress={() => handleRemoveImage(idx)} style={styles.removeGridBtn}>
               <MaterialCommunityIcons name="close" size={14} color="#FFF" />
             </TouchableOpacity>
+            {gambar.length > 1 && (
+              <View style={styles.reorderControls}>
+                {idx > 0 && (
+                  <TouchableOpacity onPress={() => handleMoveImage(idx, "left")} style={styles.reorderBtn}>
+                    <MaterialCommunityIcons name="chevron-left" size={14} color="#FFF" />
+                  </TouchableOpacity>
+                )}
+                {idx < gambar.length - 1 && (
+                  <TouchableOpacity onPress={() => handleMoveImage(idx, "right")} style={[styles.reorderBtn, { marginLeft: "auto" }]}>
+                    <MaterialCommunityIcons name="chevron-right" size={14} color="#FFF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </Animated.View>
         ))}
         <TouchableOpacity onPress={handlePickImages} style={[styles.imageWrapper, styles.uploadGridBtn, { borderColor: themeColors.borderColor }]}>
           <MaterialCommunityIcons name="camera-plus-outline" size={26} color={themeColors.textMuted} />
+          <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 4 }}>+ Foto</Text>
         </TouchableOpacity>
       </View>
 
@@ -599,7 +653,13 @@ const styles = StyleSheet.create({
   imageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: SPACING.md },
   imageWrapper: { width: IMAGE_SIZE, height: IMAGE_SIZE, borderRadius: 8, overflow: "hidden" },
   gridImage: { width: "100%", height: "100%" },
-  removeGridBtn: { position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.6)", alignItems: "center", justifyContent: "center" },
+  removeGridBtn: { position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", zIndex: 10 },
+  coverBadge: { position: "absolute", top: 4, left: 4, flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: "#D97706", zIndex: 5 },
+  coverBadgeText: { color: "#FFF", fontSize: 10, fontWeight: "700" },
+  setCoverBtn: { position: "absolute", top: 4, left: 4, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: "rgba(0,0,0,0.6)", zIndex: 5 },
+  setCoverBtnText: { color: "#FFF", fontSize: 9, fontWeight: "600" },
+  reorderControls: { position: "absolute", bottom: 4, left: 4, right: 4, flexDirection: "row", justifyContent: "space-between", zIndex: 5 },
+  reorderBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center" },
   uploadGridBtn: { borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
   docBtn: { flexDirection: "row", alignItems: "center", gap: 12, height: 52, borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACING.md },
   docBtnText: { flex: 1, fontSize: 15, fontWeight: "600" },

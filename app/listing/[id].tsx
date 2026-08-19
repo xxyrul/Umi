@@ -748,8 +748,8 @@ export default function PropertyDetailScreen() {
 
               {allImages.length > 1 && (
                 <View style={styles.slideHintWrap}>
-                  <MaterialCommunityIcons name="gesture-swipe-horizontal" size={15} color="#FFFFFF" />
-                  <Text style={styles.slideHintText}>Swipe photos ({activeImageIndex + 1}/{allImages.length})</Text>
+                  <MaterialCommunityIcons name="camera" size={13} color="#FFFFFF" />
+                  <Text style={styles.slideHintText}>{activeImageIndex + 1} / {allImages.length}</Text>
                 </View>
               )}
             </>

@@ -172,6 +172,8 @@ export default function MasterListingScreen() {
   const [statusModalListing, setStatusModalListing] = useState<{ id: string; currentStatus: string; tajuk: string } | null>(null);
   const [shareModalListing, setShareModalListing] = useState<PropertyListing | null>(null);
   const [isSharingImage, setIsSharingImage] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [categoryFilter, setCategoryFilter] = useState("Semua");
 
   // Buyer criteria filters
   const [showCriteria, setShowCriteria] = useState(false);
@@ -394,6 +396,17 @@ export default function MasterListingScreen() {
         if (activeFilter === "Draft" && status !== "draft") return false;
       }
 
+      if (categoryFilter !== "Semua") {
+        const jenis = (item.jenis || "").toLowerCase();
+        const tajuk = (item.tajuk || "").toLowerCase();
+        if (categoryFilter === "Landed" && !jenis.includes("teres") && !jenis.includes("semi") && !jenis.includes("banglo") && !jenis.includes("townhouse") && !jenis.includes("landed") && !tajuk.includes("teres")) return false;
+        if (categoryFilter === "High-Rise" && !jenis.includes("kondo") && !jenis.includes("condo") && !jenis.includes("apartment") && !jenis.includes("flat") && !jenis.includes("serviced") && !tajuk.includes("kondo")) return false;
+        if (categoryFilter === "Commercial" && !jenis.includes("kedai") && !jenis.includes("shop") && !jenis.includes("office") && !jenis.includes("pejabat") && !jenis.includes("commercial") && !tajuk.includes("kedai")) return false;
+        if (categoryFilter === "Tanah" && !jenis.includes("tanah") && !jenis.includes("land") && !tajuk.includes("tanah") && !tajuk.includes("lot")) return false;
+        if (categoryFilter === "Industri" && !jenis.includes("kilang") && !jenis.includes("factory") && !jenis.includes("warehouse") && !jenis.includes("industri") && !tajuk.includes("kilang")) return false;
+        if (categoryFilter === "Sewa" && !jenis.includes("sewa") && !jenis.includes("rent") && !tajuk.includes("sewa") && !tajuk.includes("rent")) return false;
+      }
+
       if (criteriaLocation.trim()) {
         const locationQuery = criteriaLocation.toLowerCase().trim();
         const alamat = (item.alamat || "").toLowerCase();
@@ -443,6 +456,7 @@ export default function MasterListingScreen() {
     activeSegment,
     currentUserId,
     activeFilter,
+    categoryFilter,
     criteriaLocation,
     criteriaPropertyType,
     criteriaTenure,
@@ -733,6 +747,7 @@ export default function MasterListingScreen() {
 
   const renderListingCard = ({ item }: { item: PropertyListing }) => {
     const imageUri = getListingImageUri(item);
+    const allImages = getListingImagesList(item);
     const locationLabel =
       [item.alamat, item.negeri].map((part) => (part || "").trim()).filter(Boolean).join(", ") ||
       "Lokasi tiada";
@@ -749,24 +764,32 @@ export default function MasterListingScreen() {
         style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
       >
         <View style={styles.cardMainRow}>
-          {imageUri ? (
-            <ExpoImage
-              source={{ uri: imageUri }}
-              style={styles.thumbnail}
-              contentFit="cover"
-              transition={200}
-              cachePolicy="memory-disk"
-              recyclingKey={imageUri}
-            />
-          ) : (
-            <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
-              <MaterialCommunityIcons
-                name="home-city-outline"
-                size={34}
-                color={themeColors.maroonPrimary}
+          <View style={{ position: "relative" }}>
+            {imageUri ? (
+              <ExpoImage
+                source={{ uri: imageUri }}
+                style={styles.thumbnail}
+                contentFit="cover"
+                transition={200}
+                cachePolicy="memory-disk"
+                recyclingKey={imageUri}
               />
-            </View>
-          )}
+            ) : (
+              <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
+                <MaterialCommunityIcons
+                  name="home-city-outline"
+                  size={34}
+                  color={themeColors.maroonPrimary}
+                />
+              </View>
+            )}
+            {allImages.length > 1 && (
+              <View style={styles.cardPhotoCountBadge}>
+                <MaterialCommunityIcons name="camera" size={10} color="#FFF" />
+                <Text style={styles.cardPhotoCountText}>{allImages.length}</Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.cardContent}>
             <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]} numberOfLines={2}>
@@ -819,6 +842,142 @@ export default function MasterListingScreen() {
           >
             <MaterialCommunityIcons name="share-variant" size={15} color={themeColors.maroonPrimary} />
             <Text style={[styles.shareButtonText, { color: themeColors.maroonPrimary }]}>{t("shareBtn")}</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderGridCard = ({ item }: { item: PropertyListing }) => {
+    const imageUri = getListingImageUri(item);
+    const allImages = getListingImagesList(item);
+    const isOwner = isListingOwnedByUser(item, currentUserId);
+    const locationLabel = item.negeri || item.alamat || "Malaysia";
+    const sizeLabel = formatSizeLabel(item.keluasan);
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.92}
+        onPress={() => {
+          if (!item?.id) return;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          router.push(`/listing/${item.id}` as any);
+        }}
+        style={[
+          styles.gridCard,
+          {
+            backgroundColor: themeColors.cardBackground,
+            borderColor: themeColors.borderColor,
+          },
+        ]}
+      >
+        {/* Thumbnail Hero with Floating Badges */}
+        <View style={styles.gridImageWrap}>
+          {imageUri ? (
+            <ExpoImage
+              source={{ uri: imageUri }}
+              style={styles.gridThumbnail}
+              contentFit="cover"
+              transition={150}
+              cachePolicy="memory-disk"
+              recyclingKey={imageUri}
+            />
+          ) : (
+            <View
+              style={[
+                styles.gridThumbnailPlaceholder,
+                { backgroundColor: themeColors.maroonLight },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="home-city-outline"
+                size={30}
+                color={themeColors.maroonPrimary}
+              />
+            </View>
+          )}
+
+          {/* Floating Status Badge */}
+          <View style={styles.gridFloatingStatus}>
+            {renderStatusBadge(item, isOwner)}
+          </View>
+
+          {/* Photo Counter Badge */}
+          {allImages.length > 1 && (
+            <View style={styles.gridPhotoCountBadge}>
+              <MaterialCommunityIcons name="camera" size={10} color="#FFF" />
+              <Text style={styles.gridPhotoCountText}>{allImages.length}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Card Body */}
+        <View style={styles.gridCardBody}>
+          <Text
+            style={[styles.gridCardPrice, { color: themeColors.maroonPrimary }]}
+            numberOfLines={1}
+          >
+            {formatPriceLabel(item.harga)}
+          </Text>
+
+          <Text
+            style={[styles.gridCardTitle, { color: themeColors.textPrimary }]}
+            numberOfLines={2}
+          >
+            {item.tajuk}
+          </Text>
+
+          <View style={styles.gridLocationRow}>
+            <MaterialCommunityIcons
+              name="map-marker-outline"
+              size={12}
+              color={themeColors.textMuted}
+            />
+            <Text
+              style={[styles.gridCardLocation, { color: themeColors.textSecondary }]}
+              numberOfLines={1}
+            >
+              {locationLabel}
+            </Text>
+          </View>
+
+          {/* Compact Specs Row */}
+          <View style={styles.gridSpecsRow}>
+            {(item.bilikTidur || item.bilikAir) ? (
+              <Text style={[styles.gridSpecText, { color: themeColors.textMuted }]}>
+                🛏️ {item.bilikTidur || 0}  🚿 {item.bilikAir || 0}
+              </Text>
+            ) : null}
+            {sizeLabel ? (
+              <Text
+                style={[styles.gridSpecText, { color: themeColors.textMuted, marginLeft: "auto" }]}
+                numberOfLines={1}
+              >
+                {sizeLabel}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Quick Share Footer */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleShare(item)}
+            style={[
+              styles.gridShareBtn,
+              {
+                backgroundColor: themeColors.surfaceContainer,
+                borderColor: themeColors.borderColor,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="share-variant-outline"
+              size={13}
+              color={themeColors.maroonPrimary}
+            />
+            <Text style={[styles.gridShareBtnText, { color: themeColors.maroonPrimary }]}>
+              {language === "BM" ? "Kongsi" : "Share"}
+            </Text>
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -1150,23 +1309,102 @@ export default function MasterListingScreen() {
           })}
         </ScrollView>
 
+        {/* Category Filter Chips Bar */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ marginBottom: 6 }}
+          contentContainerStyle={{ paddingHorizontal: 16, gap: 6 }}
+        >
+          {[
+            { id: "Semua", label: language === "BM" ? "Semua Jenis" : "All Types", icon: "view-grid" },
+            { id: "Landed", label: "Landed / Teres", icon: "home" },
+            { id: "High-Rise", label: "High-Rise / Kondo", icon: "office-building" },
+            { id: "Commercial", label: "Komersial / Kedai", icon: "store" },
+            { id: "Tanah", label: "Tanah / Land", icon: "terrain" },
+            { id: "Industri", label: "Industri / Kilang", icon: "factory" },
+            { id: "Sewa", label: "Sewa / Rental", icon: "key-variant" },
+          ].map((cat) => {
+            const active = categoryFilter === cat.id;
+            return (
+              <TouchableOpacity
+                key={cat.id}
+                activeOpacity={0.7}
+                onPress={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  setCategoryFilter(cat.id);
+                }}
+                style={[
+                  styles.categoryChip,
+                  {
+                    backgroundColor: active ? `${themeColors.maroonPrimary}18` : themeColors.surfaceContainer,
+                    borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                  },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={cat.icon as any}
+                  size={13}
+                  color={active ? themeColors.maroonPrimary : themeColors.textMuted}
+                />
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    {
+                      color: active ? themeColors.maroonPrimary : themeColors.textSecondary,
+                      fontWeight: active ? "700" : "500",
+                    },
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
         <View style={styles.toolbarRow}>
           <Text style={[styles.resultCountText, { color: themeColors.textPrimary }]}>
             {filteredListings.length} {filteredListings.length === 1 ? "listing" : "listings"}
           </Text>
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setIsSortModalVisible(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`Sort listings by ${LISTING_SORT_OPTIONS.find((option) => option.id === sortOption)?.label}`}
-            style={[styles.sortButton, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
-          >
-            <MaterialCommunityIcons name="sort-calendar-ascending" size={16} color={themeColors.textMuted} />
-            <Text style={[styles.sortButtonText, { color: themeColors.textSecondary }]}>
-              {LISTING_SORT_OPTIONS.find((option) => option.id === sortOption)?.label}
-            </Text>
-            <MaterialCommunityIcons name="chevron-down" size={16} color={themeColors.textMuted} />
-          </TouchableOpacity>
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {/* View Mode Switcher (1-Col vs 2-Col Grid) */}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setViewMode((prev) => (prev === "list" ? "grid" : "list"));
+              }}
+              style={[
+                styles.viewModeToggleBtn,
+                {
+                  backgroundColor: themeColors.surfaceContainer,
+                  borderColor: themeColors.borderColor,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={viewMode === "list" ? "view-grid-outline" : "view-agenda-outline"}
+                size={18}
+                color={themeColors.maroonPrimary}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setIsSortModalVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`Sort listings by ${LISTING_SORT_OPTIONS.find((option) => option.id === sortOption)?.label}`}
+              style={[styles.sortButton, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
+            >
+              <MaterialCommunityIcons name="sort-calendar-ascending" size={16} color={themeColors.textMuted} />
+              <Text style={[styles.sortButtonText, { color: themeColors.textSecondary }]}>
+                {LISTING_SORT_OPTIONS.find((option) => option.id === sortOption)?.label}
+              </Text>
+              <MaterialCommunityIcons name="chevron-down" size={16} color={themeColors.textMuted} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -1178,12 +1416,14 @@ export default function MasterListingScreen() {
         </View>
       ) : (
         <FlashList
+          key={viewMode}
           data={sortedListings}
+          numColumns={viewMode === "grid" ? 2 : 1}
           keyExtractor={(item) => item.id}
-          renderItem={renderListingCard}
+          renderItem={viewMode === "grid" ? renderGridCard : renderListingCard}
           style={{ flex: 1, width: "100%" }}
           contentContainerStyle={{
-            paddingHorizontal: 16,
+            paddingHorizontal: viewMode === "grid" ? 8 : 16,
             paddingTop: 12,
             paddingBottom: Math.max(insets.bottom, 24) + 132,
           }}
@@ -2080,5 +2320,137 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     textAlign: "center",
+  },
+  categoryChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  categoryChipText: {
+    fontSize: 12,
+  },
+  viewModeToggleBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardPhotoCountBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  cardPhotoCountText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  gridCard: {
+    flex: 1,
+    margin: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  gridImageWrap: {
+    width: "100%",
+    height: 130,
+    position: "relative",
+  },
+  gridThumbnail: {
+    width: "100%",
+    height: "100%",
+  },
+  gridThumbnailPlaceholder: {
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  gridFloatingStatus: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+  },
+  gridPhotoCountBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  gridPhotoCountText: {
+    color: "#FFF",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  gridCardBody: {
+    padding: 10,
+  },
+  gridCardPrice: {
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  gridCardTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  gridLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginTop: 4,
+  },
+  gridCardLocation: {
+    flex: 1,
+    fontSize: 11,
+  },
+  gridSpecsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  gridSpecText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  gridShareBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  gridShareBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 });
