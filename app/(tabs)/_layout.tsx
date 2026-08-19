@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import Animated, { 
   useAnimatedStyle, 
@@ -17,6 +18,7 @@ const TABS = [
 ];
 
 function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { themeColors, isDark, language } = useAppSettings();
   const { barTranslateY } = useScrollAwareBar();
 
@@ -33,8 +35,10 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
     return null;
   }
 
+  const bottomInset = Math.max(insets.bottom, 12) + 12;
+
   return (
-    <Animated.View style={[styles.floatingContainer, animatedBarStyle]}>
+    <Animated.View style={[styles.floatingContainer, { bottom: bottomInset }, animatedBarStyle]}>
       <View 
         style={[
           styles.glassBar,
