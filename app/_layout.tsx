@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import * as Sentry from '@sentry/react-native';
+import * as Notifications from 'expo-notifications';
 import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, StatusBar, Button, BackHandler, Platform } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Slot, Stack, useSegments, useRouter } from "expo-router";
@@ -14,11 +15,12 @@ import {
   cleanupUpdateCache,
   NativeAppRelease,
 } from "@/services/apkUpdater";
-import { InAppUpdateModal } from "@/components";
 import {
   configureUpdateNotificationHandlers,
   registerForUpdateNotifications,
 } from "@/services/updateNotifications";
+import { isUserRegistrationComplete } from "@/services/auth";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -71,25 +73,64 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
   useEffect(() => {
     if (!authLoaded || !isOnboardingChecked) return;
 
-    const rootSegment = segments[0];
+    let isMounted = true;
+    const activeUser = firebaseAuth.currentUser;
+    const rootSegment = segments[0] || "";
     const inOnboarding = rootSegment === "onboarding";
-    const inTabs = rootSegment === "(tabs)";
-    const inCaseRoute = rootSegment === "case";
-    const inListingRoute = rootSegment === "listing";
-    const inProtectedRoute = inTabs || inCaseRoute || inListingRoute;
     const inLogin = rootSegment === "login";
 
     if (!hasCompletedOnboarding) {
+      if (firebaseAuth.currentUser) {
+        firebaseAuth.signOut().catch(() => {});
+        if (Platform.OS !== "web") {
+          GoogleSignin.signOut().catch(() => {});
+        }
+      }
       if (!inOnboarding) {
         router.replace("/onboarding" as any);
       }
-    } else {
-      if (!user && inProtectedRoute) {
-        router.replace("/login");
-      } else if (user && inLogin) {
-        router.replace("/(tabs)");
-      }
+      return;
     }
+
+    if (!activeUser) {
+      if (!inLogin) {
+        router.replace("/login");
+      }
+    } else {
+      // Enforce Invite Code Gate & Suspension check before entering (tabs)
+      isUserRegistrationComplete(activeUser.uid)
+        .then(({ isRegistered, isSuspended }) => {
+          if (!isMounted) return;
+          if (!firebaseAuth.currentUser) {
+            if (!inLogin) router.replace("/login");
+            return;
+          }
+          if (isSuspended) {
+            firebaseAuth.signOut().catch(() => {});
+            if (!inLogin) router.replace("/login");
+            return;
+          }
+          if (isRegistered) {
+            if (inLogin || inOnboarding) {
+              router.replace("/(tabs)");
+            }
+          } else {
+            if (!inLogin) {
+              router.replace("/login");
+            }
+          }
+        })
+        .catch(() => {
+          if (!isMounted) return;
+          if (!inLogin) {
+            router.replace("/login");
+          }
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, [user, authLoaded, segments, isOnboardingChecked, hasCompletedOnboarding]);
 
   return null;
@@ -118,9 +159,6 @@ function RootLayoutInner({
     userRef.current = user;
   }, [user]);
 
-  const [availableRelease, setAvailableRelease] = useState<NativeAppRelease | null>(null);
-  const [isUpdateModalVisible, setIsUpdateModalVisible] = useState(false);
-
   // Self-cleaning storage: purge cached update installers on app startup
   useEffect(() => {
     if (Platform.OS === "android") {
@@ -128,46 +166,31 @@ function RootLayoutInner({
     }
   }, []);
 
-  const triggerUpdateCheck = async (force: boolean = false) => {
-    if (Platform.OS !== "android") return;
-    try {
-      const release = await fetchReleaseManifest();
-      if (release) {
-        const shouldShow = await shouldShowUpdatePrompt(release, force);
-        if (shouldShow) {
-          setAvailableRelease(release);
-          setIsUpdateModalVisible(true);
-        }
-      }
-    } catch (e) {
-      console.warn("[_layout] Update check failed:", e);
-    }
-  };
-
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-
-    const timer = setTimeout(() => {
-      void triggerUpdateCheck(false);
-    }, 2500);
-
-    return () => clearTimeout(timer);
-  }, [language]);
-
   useEffect(() => {
     if (!user) return;
 
-    void registerForUpdateNotifications({ uid: user.uid, language });
+    void registerForUpdateNotifications({ uid: user.uid, language }, true);
   }, [user?.uid, language]);
 
   useEffect(() => {
     return configureUpdateNotificationHandlers(
       () => (userRef.current ? { uid: userRef.current.uid, language } : null),
       () => {
-        void triggerUpdateCheck(true);
+        router.push("/updates" as any);
       }
     );
   }, [language]);
+
+  // Handle taps on broadcast announcement push notifications
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as { kind?: string } | undefined;
+      if (data?.kind === "broadcast-announcement") {
+        router.push("/(tabs)");
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     // Auth state is now managed globally by RootLayout to avoid duplicate listeners.
@@ -192,6 +215,7 @@ function RootLayoutInner({
 
   return (
     <SafeAreaProvider>
+      <AuthGuard user={user} authLoaded={authLoaded} />
       {/* Universal status bar — adapts to theme, prevents white flash */}
       <StatusBar
         barStyle={isDark ? "light-content" : "dark-content"}
@@ -200,13 +224,23 @@ function RootLayoutInner({
       />
 
       <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
-        <AuthGuard user={user} authLoaded={authLoaded} />
-        <Stack screenOptions={{ headerShown: false, animation: "slide_from_bottom" }} />
-        <InAppUpdateModal
-          visible={isUpdateModalVisible}
-          release={availableRelease}
-          onClose={() => setIsUpdateModalVisible(false)}
-        />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "slide_from_right",
+            contentStyle: { backgroundColor: themeColors.canvasBackground },
+          }}
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
+          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+          <Stack.Screen name="tambah" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+          <Stack.Screen name="updates" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="notifications" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="listing/[id]" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="case/[id]" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="case/form" options={{ animation: "slide_from_right" }} />
+        </Stack>
       </View>
     </SafeAreaProvider>
   );

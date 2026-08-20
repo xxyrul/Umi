@@ -115,6 +115,25 @@ function extractSearchQueryFromUrl(url: string): string | null {
   return null;
 }
 
+function formatFullListingDate(dateStr?: string, lang: string = "EN"): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const formattedDate = d.toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" });
+    
+    if (diffDays === 0) return `${formattedDate} (${lang === "BM" ? "Hari ini" : "Today"})`;
+    if (diffDays === 1) return `${formattedDate} (${lang === "BM" ? "Semalam" : "Yesterday"})`;
+    if (diffDays < 7) return `${formattedDate} (${diffDays} ${lang === "BM" ? "hari lalu" : "days ago"})`;
+    return formattedDate;
+  } catch {
+    return "";
+  }
+}
+
 function formatListingStatus(status?: string, lang?: string) {
   const norm = (status || "Aktif").toLowerCase();
   const isBM = lang === "BM";
@@ -202,7 +221,11 @@ export default function PropertyDetailScreen() {
   const fullScreenGalleryRef = useRef<FlatList<string>>(null);
 
   const handleBackToListings = () => {
-    router.navigate("/(tabs)/listings");
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.navigate("/(tabs)/listings");
+    }
   };
 
   const goToImage = (index: number, allImages: string[], animated: boolean = true) => {
@@ -698,7 +721,7 @@ export default function PropertyDetailScreen() {
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 24) + 40 }}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 28) + 60 }}
       >
         {/* HERO IMAGE CONTAINER */}
         <View style={[styles.heroContainer, { backgroundColor: themeColors.maroonLight }]}>
@@ -882,6 +905,15 @@ export default function PropertyDetailScreen() {
                 <MaterialCommunityIcons name="account-outline" size={16} color={themeColors.maroonPrimary} />
                 <Text style={{ fontSize: 13, color: themeColors.textSecondary, marginLeft: 4 }}>
                   {t("uploadedBy")}: <Text style={{ fontWeight: "700", color: themeColors.textPrimary }}>{listing.authorName}</Text>
+                </Text>
+              </View>
+            ) : null}
+
+            {(listing.createdAt || listing.updatedAt) && formatFullListingDate(listing.createdAt || listing.updatedAt, language) ? (
+              <View style={[styles.locationRow, { marginTop: listing.authorName ? 6 : 8, borderTopWidth: listing.authorName ? 0 : 1, borderTopColor: themeColors.borderColor, paddingTop: listing.authorName ? 0 : 8 }]}>
+                <MaterialCommunityIcons name="calendar-clock" size={16} color={themeColors.maroonPrimary} />
+                <Text style={{ fontSize: 13, color: themeColors.textSecondary, marginLeft: 4 }}>
+                  {language === "BM" ? "Tarikh Disiarkan" : "Posted on"}: <Text style={{ fontWeight: "700", color: themeColors.textPrimary }}>{formatFullListingDate(listing.createdAt || listing.updatedAt, language)}</Text>
                 </Text>
               </View>
             ) : null}

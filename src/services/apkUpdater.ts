@@ -168,11 +168,30 @@ export async function downloadAndInstallUpdate(
     // 3. Obtain secure content URI from FileProvider
     const contentUri = await FileSystem.getContentUriAsync(downloadResult.uri);
 
-    // 4. Launch Android Native Package Installer
-    await IntentLauncher.startActivityAsync("android.intent.action.INSTALL_PACKAGE", {
-      data: contentUri,
-      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-    });
+    // 4. Launch Android Native Package Installer using action.VIEW with package-archive MIME type
+    try {
+      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+        data: contentUri,
+        type: "application/vnd.android.package-archive",
+        flags: 1 | 268435456, // FLAG_GRANT_READ_URI_PERMISSION (1) | FLAG_ACTIVITY_NEW_TASK (0x10000000 = 268435456)
+      });
+    } catch (viewError: any) {
+      console.warn("[apkUpdater] action.VIEW failed, trying fallback intent:", viewError);
+      try {
+        await IntentLauncher.startActivityAsync("android.intent.action.INSTALL_PACKAGE", {
+          data: contentUri,
+          flags: 1 | 268435456,
+        });
+      } catch (installErr: any) {
+        console.warn("[apkUpdater] Installer blocked, attempting settings redirect:", installErr);
+        try {
+          await IntentLauncher.startActivityAsync("android.settings.MANAGE_UNKNOWN_APP_SOURCES", {
+            data: "package:" + PACKAGE_NAME,
+          });
+        } catch {}
+        throw installErr;
+      }
+    }
   } catch (error: any) {
     activeDownloadResumable = null;
     console.error("[apkUpdater] downloadAndInstallUpdate error:", error);

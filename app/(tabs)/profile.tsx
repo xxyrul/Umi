@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { router } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
 import { fetchReleaseManifest, NativeAppRelease } from "@/services/apkUpdater";
@@ -29,7 +30,7 @@ import {
 import { SPACING } from "@/constants/theme";
 import { Button, InAppUpdateModal } from "@/components";
 import { FeedbackForm } from "@/components/FeedbackForm";
-import { getCurrentUserProfile, signOut, getUserInitials } from "@/services/auth";
+import { getCurrentUserProfile, signOut, getUserInitials, getUserRole } from "@/services/auth";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { firestore } from "@/services/firebase";
 import Constants from "expo-constants";
@@ -63,6 +64,7 @@ export default function ProfileScreen() {
   // Interactive Account Settings State
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [isSavingAccount, setIsSavingAccount] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     try {
@@ -70,6 +72,9 @@ export default function ProfileScreen() {
       setProfile(user);
       if (user?.displayName) {
         setDisplayNameInput(user.displayName);
+      }
+      if (user?.uid) {
+        getUserRole(user.uid).then((r) => setIsAdmin(r === "admin")).catch(() => {});
       }
       getUpdateNotificationsEnabled()
         .then(setUpdateAlertsEnabled)
@@ -176,7 +181,6 @@ export default function ProfileScreen() {
         onPress: async () => {
           try {
             await signOut();
-            router.replace("/login");
           } catch (error) {
             Alert.alert(t("errorTitle"), t("failLogout"));
           }
@@ -460,8 +464,20 @@ export default function ProfileScreen() {
         scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Avatar / Initials */}
-        <View style={{ marginBottom: SPACING.lg, alignItems: "center" }}>
+        {/* Profile Info Card */}
+        <Animated.View
+          entering={FadeInDown.duration(180)}
+          style={{
+            alignItems: "center",
+            width: "100%",
+            backgroundColor: themeColors.cardBackground,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: themeColors.borderColor,
+            padding: SPACING.xl,
+            marginBottom: SPACING.lg,
+          }}
+        >
           {profile?.photoURL ? (
             <ExpoImage
               source={{ uri: profile.photoURL }}
@@ -517,10 +533,11 @@ export default function ProfileScreen() {
           <Text style={{ fontSize: 14, color: themeColors.textMuted }}>
             {profile?.email || "ejen@drtmasterlisting.com"}
           </Text>
-        </View>
+        </Animated.View>
 
         {/* Quick App Preferences Card (Theme & Language Switchers) */}
-        <View
+        <Animated.View
+          entering={FadeInDown.duration(200)}
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
@@ -658,7 +675,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Detailed Settings Card */}
         <View
@@ -674,13 +691,20 @@ export default function ProfileScreen() {
           }}
         >
           {renderOptionRow("account-outline", t("accountSettings"), t("accountSubtitle"), () => setActiveSection("Account"))}
+          {isAdmin &&
+            renderOptionRow(
+              "shield-crown-outline",
+              t("adminPortalTitle"),
+              t("adminPortalSub"),
+              () => Linking.openURL("https://umiren-d6a66.web.app/admin").catch(() => {})
+            )}
           {renderOptionRow("file-export-outline", t("exportReport"), t("exportSubtitle"), handleExportReport)}
           {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
           {renderOptionRow(
             "information-outline",
             t("appVersion"),
             `v${Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "?"} · ${t("checkForUpdates")}`,
-            () => router.push("/(tabs)/updates")
+            () => router.push("/updates" as any)
           )}
           {renderOptionRow("help-circle-outline", t("helpFeedback"), t("helpSubtitle"), () => setActiveSection("Help"))}
         </View>
@@ -873,6 +897,31 @@ export default function ProfileScreen() {
                     </View>
                     <Switch value={false} disabled={true} trackColor={{ false: "#4B5563", true: themeColors.maroonPrimary }} thumbColor="#9CA3AF" />
                   </View>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      setActiveSection(null);
+                      router.push("/notifications" as any);
+                    }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      backgroundColor: themeColors.surfaceContainer,
+                      paddingVertical: 12,
+                      borderRadius: 10,
+                      marginTop: SPACING.sm,
+                      borderWidth: 1,
+                      borderColor: themeColors.borderColor,
+                    }}
+                  >
+                    <MaterialCommunityIcons name="history" size={18} color={themeColors.maroonPrimary} />
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
+                      {language === "BM" ? "Buka Peti Notifikasi" : "Open Notifications Inbox"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
 

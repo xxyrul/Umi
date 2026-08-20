@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,10 +8,11 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import Animated, { FadeInDown, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import {
@@ -32,6 +33,26 @@ export default function UpdatesScreen() {
   const insets = useSafeAreaInsets();
   const { themeColors, t, language } = useAppSettings();
   const isMalay = language === "BM";
+
+  const handleGoBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)/profile");
+    }
+  }, [router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        handleGoBack();
+        return true;
+      };
+
+      const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+      return () => subscription.remove();
+    }, [handleGoBack])
+  );
 
   const currentVersion = Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "1.0.0";
   const currentVersionCode = getCurrentVersionCode();
@@ -174,6 +195,15 @@ export default function UpdatesScreen() {
     setDownloadProgress(0);
   };
 
+  const [expandedVersions, setExpandedVersions] = useState<Record<string, boolean>>({});
+
+  const toggleVersionExpand = (versionName: string) => {
+    setExpandedVersions((prev) => ({
+      ...prev,
+      [versionName]: !prev[versionName],
+    }));
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
       {/* Header with Back button */}
@@ -188,19 +218,19 @@ export default function UpdatesScreen() {
         ]}
       >
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleGoBack}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.backBtn}
         >
           <MaterialCommunityIcons name="arrow-left" size={24} color={themeColors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.title, { color: themeColors.textPrimary }]}>
-          {isMalay ? "Kemas Kini Aplikasi" : "App Updates"}
+          {t("appVersion")}
         </Text>
       </View>
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 24) + 60 }]}>
-        {/* Top Action Card: Update Available OR Up to Date */}
+        {/* 1. Unified Hero Status Card */}
         {availableRelease ? (
           <Animated.View
             entering={FadeInDown.delay(50)}
@@ -218,18 +248,18 @@ export default function UpdatesScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]}>
-                  {isMalay ? "Kemas Kini Baru Tersedia!" : "New Update Available!"}
+                  {t("updateAvailableStatus")}
                 </Text>
                 <Text style={[styles.newVersionBadge, { color: themeColors.maroonPrimary }]}>
-                  v{availableRelease.versionName} (Build {availableRelease.versionCode})
+                  v{availableRelease.versionName} ({t("buildLabel")} {availableRelease.versionCode})
                 </Text>
               </View>
             </View>
 
             {/* Release notes summary */}
-            {availableRelease.releaseNotes && availableRelease.releaseNotes.length > 0 && (
+            {availableRelease.releaseNotes && (
               <View style={[styles.notesContainer, { backgroundColor: themeColors.surfaceContainer }]}>
-                {availableRelease.releaseNotes.map((note, idx) => (
+                {(Array.isArray(availableRelease.releaseNotes) ? availableRelease.releaseNotes : [availableRelease.releaseNotes]).map((note, idx) => (
                   <View key={idx} style={styles.noteRow}>
                     <MaterialCommunityIcons
                       name="check-circle-outline"
@@ -332,18 +362,19 @@ export default function UpdatesScreen() {
             ]}
           >
             <View style={styles.cardHeader}>
-              <View style={[styles.iconCircle, { backgroundColor: "#34A85322" }]}>
-                <MaterialCommunityIcons name="check-decagram" size={24} color="#34A853" />
+              <View style={[styles.iconCircle, { backgroundColor: "#10B98122" }]}>
+                <MaterialCommunityIcons name="check-decagram" size={26} color="#10B981" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]}>
-                  {isMalay ? "Versi Terkini" : "Up to Date"}
+                  {t("upToDateStatus")}
                 </Text>
                 <Text style={[styles.versionSub, { color: themeColors.textMuted }]}>
-                  Artha v{currentVersion}
+                  Artha v{currentVersion} ({t("buildLabel")} {currentVersionCode}) · {t("productionChannel")}
                 </Text>
               </View>
             </View>
+
             <TouchableOpacity
               activeOpacity={0.8}
               onPress={() => checkForUpdates(true)}
@@ -362,7 +393,7 @@ export default function UpdatesScreen() {
                 <>
                   <MaterialCommunityIcons name="refresh" size={18} color={themeColors.textPrimary} />
                   <Text style={[styles.checkUpdateBtnText, { color: themeColors.textPrimary }]}>
-                    {isMalay ? "Semak Kemas Kini" : "Check for Updates"}
+                    {t("checkForUpdates")}
                   </Text>
                 </>
               )}
@@ -370,90 +401,126 @@ export default function UpdatesScreen() {
           </Animated.View>
         )}
 
-        {/* Current Version Card */}
+        {/* 2. Android Installation Permission Tip Banner */}
         <Animated.View
           entering={FadeInDown.delay(100)}
           style={[
-            styles.card,
-            { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor },
+            styles.tipCard,
+            {
+              backgroundColor: themeColors.surfaceContainer,
+              borderColor: themeColors.borderColor,
+            },
           ]}
         >
-          <View style={styles.cardHeader}>
-            <MaterialCommunityIcons name="cellphone-arrow-down" size={24} color={themeColors.maroonPrimary} />
-            <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]}>
-              {isMalay ? "Versi Semasa" : "Current Version"}
-            </Text>
-          </View>
-          <Text style={[styles.versionText, { color: themeColors.textPrimary }]}>
-            v{currentVersion}
-          </Text>
-        </Animated.View>
-
-        {/* Storage Cache Card */}
-        <Animated.View
-          entering={FadeInDown.delay(200)}
-          style={[
-            styles.card,
-            { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor },
-          ]}
-        >
-          <View style={styles.cardHeader}>
-            <MaterialCommunityIcons name="database-outline" size={24} color={themeColors.maroonPrimary} />
-            <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]}>
-              {isMalay ? "Cache Storan APK" : "Storage Cache"}
-            </Text>
-          </View>
-          <View style={styles.cacheRow}>
-            <Text style={[styles.cacheSize, { color: themeColors.textSecondary }]}>{cacheSizeMb} MB</Text>
-            <TouchableOpacity
-              onPress={clearCache}
-              style={[
-                styles.clearBtn,
-                { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder },
-              ]}
-            >
-              <Text style={{ color: themeColors.maroonPrimary, fontWeight: "600" }}>
-                {isMalay ? "Kosongkan Cache" : "Clear Cache"}
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+            <View style={[styles.tipIconWrap, { backgroundColor: "rgba(225, 29, 72, 0.12)" }]}>
+              <MaterialCommunityIcons name="lightbulb-outline" size={20} color={themeColors.maroonPrimary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.tipTitle, { color: themeColors.textPrimary }]}>
+                {t("androidInstallTipTitle")}
               </Text>
-            </TouchableOpacity>
+              <Text style={[styles.tipDesc, { color: themeColors.textMuted }]}>
+                {t("androidInstallTipDesc")}
+              </Text>
+            </View>
           </View>
         </Animated.View>
 
-        {/* Release History */}
-        <Animated.Text
-          entering={FadeInDown.delay(300)}
-          style={[styles.sectionTitle, { color: themeColors.textPrimary }]}
-        >
-          {isMalay ? "Sejarah Versi" : "Release History"}
-        </Animated.Text>
+        {/* 3. Collapsible Release History */}
+        {(() => {
+          // Deduplicate history entries and exclude the available release if it's already shown in hero
+          const displayedHistory = history
+            .filter((rel, idx, arr) => arr.findIndex((r) => r.versionName === rel.versionName) === idx)
+            .filter((rel) => !availableRelease || rel.versionCode < (availableRelease.versionCode || 0));
 
-        {isLoadingHistory ? (
-          <ActivityIndicator color={themeColors.maroonPrimary} style={{ marginTop: 20 }} />
-        ) : (
-          history.map((rel, idx) => (
-            <Animated.View
-              key={idx}
-              entering={FadeInDown.delay(400 + idx * 100)}
-              style={[
-                styles.card,
-                { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor },
-              ]}
-            >
-              <View style={styles.historyHeader}>
-                <Text style={[styles.historyVersion, { color: themeColors.maroonPrimary }]}>
-                  v{rel.versionName}
-                </Text>
-                <Text style={[styles.historyDate, { color: themeColors.textMuted }]}>{rel.releaseDate || (rel as any).date}</Text>
-              </View>
-              {rel.releaseNotes?.map((note, nIdx) => (
-                <View key={nIdx} style={styles.noteRow}>
-                  <Text style={[styles.bullet, { color: themeColors.textMuted }]}>•</Text>
-                  <Text style={[styles.noteText, { color: themeColors.textSecondary }]}>{note}</Text>
-                </View>
-              ))}
-            </Animated.View>
-          ))
-        )}
+          if (isLoadingHistory) {
+            return <ActivityIndicator color={themeColors.maroonPrimary} style={{ marginTop: 20 }} />;
+          }
+
+          if (displayedHistory.length === 0) return null;
+
+          return (
+            <>
+              <Animated.Text
+                entering={FadeInDown.delay(150)}
+                style={[styles.sectionTitle, { color: themeColors.textPrimary }]}
+              >
+                {availableRelease
+                  ? (isMalay ? "Versi Terdahulu" : "Previous Versions")
+                  : (isMalay ? "Sejarah Versi & Log Perubahan" : "Release History & Changelogs")}
+              </Animated.Text>
+
+              {displayedHistory.map((rel, idx) => {
+                const isLatest = !availableRelease && idx === 0;
+                const isExpanded = expandedVersions[rel.versionName] ?? isLatest;
+                const notes = Array.isArray(rel.releaseNotes) ? rel.releaseNotes : [rel.releaseNotes].filter(Boolean);
+
+                return (
+                  <Animated.View
+                    key={rel.versionName + "_" + idx}
+                    entering={FadeInDown.delay(200 + idx * 60)}
+                    style={[
+                      styles.card,
+                      {
+                        backgroundColor: themeColors.cardBackground,
+                        borderColor: isLatest ? themeColors.maroonPrimary : themeColors.borderColor,
+                      },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      activeOpacity={0.7}
+                      onPress={() => toggleVersionExpand(rel.versionName)}
+                      style={styles.historyHeader}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <Text style={[styles.historyVersion, { color: isLatest ? themeColors.maroonPrimary : themeColors.textPrimary }]}>
+                          v{rel.versionName}
+                        </Text>
+                        {rel.versionCode && (
+                          <View style={[styles.buildBadge, { backgroundColor: themeColors.surfaceContainer }]}>
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textMuted }}>
+                              {t("buildLabel")} {rel.versionCode}
+                            </Text>
+                          </View>
+                        )}
+                        {isLatest && (
+                          <View style={[styles.latestBadge, { backgroundColor: themeColors.maroonLight }]}>
+                            <Text style={{ fontSize: 10, fontWeight: "800", color: themeColors.maroonPrimary }}>
+                              CURRENT
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.historyDate, { color: themeColors.textMuted }]}>
+                          {rel.releaseDate || (rel as any).date || ""}
+                        </Text>
+                        <MaterialCommunityIcons
+                          name={isExpanded ? "chevron-up" : "chevron-down"}
+                          size={20}
+                          color={themeColors.textMuted}
+                        />
+                      </View>
+                    </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={{ marginTop: 8, paddingTop: 10, borderTopWidth: 1, borderTopColor: themeColors.borderColor }}>
+                        {notes.map((note, nIdx) => (
+                          <View key={nIdx} style={styles.noteRow}>
+                            <Text style={[styles.bullet, { color: themeColors.maroonPrimary }]}>•</Text>
+                            <Text style={[styles.noteText, { color: themeColors.textSecondary }]}>{note}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </Animated.View>
+                );
+              })}
+            </>
+          );
+        })()}
       </ScrollView>
     </View>
   );
@@ -471,10 +538,10 @@ const styles = StyleSheet.create({
   backBtn: {
     padding: 4,
   },
-  title: { fontSize: 22, fontWeight: "700" },
-  content: { padding: 20, gap: 16, paddingBottom: 100 },
-  card: { padding: 18, borderRadius: 16, borderWidth: 1 },
-  actionCard: { padding: 18, borderRadius: 16, borderWidth: 2 },
+  title: { fontSize: 20, fontWeight: "700" },
+  content: { padding: 18, gap: 14, paddingBottom: 100 },
+  card: { padding: 16, borderRadius: 16, borderWidth: 1 },
+  actionCard: { padding: 16, borderRadius: 16, borderWidth: 2 },
   cardHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   iconCircle: {
     width: 44,
@@ -484,16 +551,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardTitle: { fontSize: 17, fontWeight: "700" },
-  newVersionBadge: { fontSize: 14, fontWeight: "700", marginTop: 2 },
-  versionSub: { fontSize: 13, marginTop: 2 },
-  versionText: { fontSize: 22, fontWeight: "700", marginLeft: 36 },
-  cacheRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginLeft: 36 },
-  cacheSize: { fontSize: 17, fontWeight: "600" },
-  clearBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, borderWidth: 1 },
-  sectionTitle: { fontSize: 19, fontWeight: "700", marginTop: 8 },
-  historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
-  historyVersion: { fontSize: 17, fontWeight: "700" },
-  historyDate: { fontSize: 13, fontWeight: "600" },
+  newVersionBadge: { fontSize: 13, fontWeight: "700", marginTop: 2 },
+  versionSub: { fontSize: 13, marginTop: 3 },
+  sectionTitle: { fontSize: 17, fontWeight: "700", marginTop: 10, marginBottom: 2 },
+  historyHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  historyVersion: { fontSize: 16, fontWeight: "800" },
+  historyDate: { fontSize: 12, fontWeight: "600" },
+  buildBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  latestBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  tipCard: {
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  tipIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tipTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 3,
+  },
+  tipDesc: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
   notesContainer: {
     borderRadius: 12,
     padding: 12,
@@ -502,7 +588,7 @@ const styles = StyleSheet.create({
   },
   noteRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 4 },
   bullet: { fontSize: 18, lineHeight: 20, fontWeight: "700" },
-  noteText: { fontSize: 14, flex: 1, lineHeight: 20 },
+  noteText: { fontSize: 13, flex: 1, lineHeight: 19 },
   checkUpdateBtn: {
     flexDirection: "row",
     justifyContent: "center",
@@ -532,10 +618,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   secondaryBtn: {
-    flex: 1,
+    paddingHorizontal: 20,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
   },
@@ -545,7 +630,6 @@ const styles = StyleSheet.create({
   },
   downloadContainer: {
     marginBottom: 12,
-    marginTop: 6,
   },
   progressHeader: {
     flexDirection: "row",
@@ -558,36 +642,32 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   progressPercent: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
   },
   progressTrack: {
-    height: 8,
-    borderRadius: 4,
+    height: 6,
+    borderRadius: 3,
     overflow: "hidden",
+    marginBottom: 4,
   },
   progressFill: {
     height: "100%",
-    borderRadius: 4,
+    borderRadius: 3,
   },
   mbCounter: {
     fontSize: 11,
     textAlign: "right",
-    marginTop: 4,
   },
   errorContainer: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    backgroundColor: "#EA433515",
-    padding: 10,
-    borderRadius: 8,
+    gap: 6,
     marginBottom: 10,
   },
   errorText: {
     color: "#EA4335",
     fontSize: 12,
     flex: 1,
-    lineHeight: 16,
   },
 });

@@ -2,6 +2,7 @@ import { auth, firestore } from "@/services/firebase";
 import storage from "@react-native-firebase/storage";
 import type { PropertyCase, CaseMetrics } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
+import { compressImage } from "@/utils/imageUtils";
 import { Alert, Platform } from "react-native";
 
 const CASES_COLLECTION = "cases";
@@ -482,9 +483,10 @@ export async function createPropertyListing(
       for (let i = 0; i < files.gambar.length; i++) {
         const uri = files.gambar[i];
         if (uri) {
-          const ext = uri.split(".").pop()?.split("?")[0] || "jpg";
+          const compressedUri = await compressImage(uri);
+          const ext = compressedUri.split(".").pop()?.split("?")[0] || "webp";
           const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
-          const url = await uploadFileToStorage(uri, path);
+          const url = await uploadFileToStorage(compressedUri, path);
           if (url) uploadedGambarUrls.push(url);
         }
       }
@@ -594,9 +596,10 @@ export async function updatePropertyListing(
           if (uri.startsWith("http://") || uri.startsWith("https://")) {
             uploadedGambarUrls.push(uri);
           } else {
-            const ext = uri.split(".").pop()?.split("?")[0] || "jpg";
+            const compressedUri = await compressImage(uri);
+            const ext = compressedUri.split(".").pop()?.split("?")[0] || "webp";
             const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
-            const url = await uploadFileToStorage(uri, path);
+            const url = await uploadFileToStorage(compressedUri, path);
             if (url) uploadedGambarUrls.push(url);
           }
         }

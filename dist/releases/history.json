@@ -1,5 +1,66 @@
 [
   {
+    "versionName": "1.3.2-2",
+    "versionCode": 51,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2-2.apk",
+    "releaseDate": "2026-08-21",
+    "releaseNotes": [
+      "🔔 Notifications Inbox: View all past agency announcements anytime from the new bell icon on your Dashboard.",
+      "📲 Direct Phone Notifications: Receive important announcements directly in your phone notification center.",
+      "🌐 Language Matching: Announcements now seamlessly adapt to your preferred language (English / Bahasa Melayu).",
+      "✨ Smarter Dashboard: Dismissed announcement banners stay closed permanently with zero startup flash."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61799847
+  },
+  {
+    "versionName": "1.3.2",
+    "versionCode": 49,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2.apk",
+    "releaseDate": "2026-08-20",
+    "releaseNotes": [
+      "Fixed AuthGuard cold-start: App strictly returns to login after signing out.",
+      "Added [← Sign In] back button on registration screen.",
+      "Full multi-language support (English & Bahasa Melayu) on Login & Register.",
+      "Enhanced registration reliability with automatic Firestore user database sync.",
+      "Redesigned App Updates page: Consolidated hero status, removed cache clutter, and added Android install permission tips.",
+      "Collapsible Release History accordions with easy changelog browsing."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow"
+  },
+  {
+    "versionName": "1.3.1",
+    "versionCode": 47,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.1.apk",
+    "releaseDate": "2026-08-19",
+    "releaseNotes": [
+      "Unified 3-Step Listing Wizard with interactive GPS geocoding & address sync.",
+      "Interactive 'Locate Me' GPS button on Master Map View.",
+      "Clean Active listing feed default with human-readable date recency badges.",
+      "Posted date display on Property Detail page.",
+      "Fluid motion and snappy, zero-bounce transitions across tabs and cards.",
+      "Fixed sold status badge icon and improved multi-photo WhatsApp sharing."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow"
+  },
+  {
+    "versionName": "1.3.0",
+    "versionCode": 46,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.0.apk",
+    "releaseDate": "2026-08-19",
+    "releaseNotes": [
+      "Fixed MapView UI overlapping with FAB and Android navigation buttons.",
+      "Added Interactive Map Location Picker for new listings.",
+      "Added automatic parsing of Google Maps and Waze URLs.",
+      "Fixed overlapping UI issues across the app."
+    ],
+    "isCritical": true,
+    "packageName": "com.umi.caseflow"
+  },
+  {
     "versionName": "1.2.1",
     "versionCode": 45,
     "fileSizeBytes": 61827554,

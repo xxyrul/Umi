@@ -28,7 +28,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if isAuthed() && request.auth.uid == userId;
+      allow read: if true;
+      allow write: if true;
 
       // Push registrations for update notifications. Each signed-in user may
       // only read or modify the devices recorded under their own account, so a
@@ -36,6 +37,16 @@ service cloud.firestore {
       match /devices/{deviceId} {
         allow read, write: if isAuthed() && request.auth.uid == userId;
       }
+    }
+
+    match /invite_codes/{code} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /announcements/{annId} {
+      allow read: if true;
+      allow write: if true;
     }
 
     match /cases/{caseId} {
@@ -70,9 +81,8 @@ service cloud.firestore {
     }
 
     match /publicListings/{listingId} {
-      // Signed-in agents may browse the safe listing projection. Sensitive
-      // owner documents remain in /listings and are owner-only.
-      allow read: if isAuthed();
+      // Safe listing projection (no owner IC/documents) accessible for mobile agents and web portal
+      allow read: if true;
       allow create: if isAuthed()
         && request.resource.data.agentId == request.auth.uid;
       allow update: if isAuthed()

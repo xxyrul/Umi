@@ -31,12 +31,14 @@ import * as IntentLauncher from "expo-intent-launcher";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { firestore, auth } from "@/services/firebase";
 import { useRouter } from "expo-router";
 import type { PropertyListing } from "@/types/listing";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import { ListingSkeleton } from "@/components/ListingSkeleton";
 
 const STATE_COORDINATES: Record<string, { latitude: number; longitude: number }> = {
   "kuala lumpur": { latitude: 3.139, longitude: 101.6869 },
@@ -163,6 +165,23 @@ function formatSizeLabel(value: string | number | undefined): string {
   return raw.toLowerCase().includes("sq") ? raw : `${raw} sqft`;
 }
 
+function formatListingDate(dateStr?: string, lang: string = "EN"): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return lang === "BM" ? "Hari ini" : "Today";
+    if (diffDays === 1) return lang === "BM" ? "Semalam" : "Yesterday";
+    if (diffDays < 7) return lang === "BM" ? `${diffDays} hari lalu` : `${diffDays}d ago`;
+    return d.toLocaleDateString("en-MY", { day: "numeric", month: "short" });
+  } catch {
+    return "";
+  }
+}
+
 function getListingImagesList(listing: any): string[] {
   if (!listing) return [];
   const list: string[] = [];
@@ -216,7 +235,7 @@ export default function MasterListingScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebounce(searchQuery, 250);
-  const [activeFilter, setActiveFilter] = useState("Semua");
+  const [activeFilter, setActiveFilter] = useState("Aktif");
   const [activeSegment, setActiveSegment] = useState<ListingSegment>("all");
   const [sortOption, setSortOption] = useState<ListingSortOption>("newest");
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
@@ -229,6 +248,116 @@ export default function MasterListingScreen() {
   const [categoryFilter, setCategoryFilter] = useState("Semua");
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [renderFilterContent, setRenderFilterContent] = useState(false);
+  const [listingLimit, setListingLimit] = useState(20);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
+  const masterMapRef = useRef<MapView>(null);
+  const [isLocatingUser, setIsLocatingUser] = useState(false);
+
+  // Smart Auto-Hide FAB on Scroll
+  const fabAnim = useRef(new Animated.Value(0)).current; // 0 = visible, 1 = hidden
+  const lastScrollY = useRef(0);
+  const isFabHidden = useRef(false);
+
+  const showFab = () => {
+    if (isFabHidden.current) {
+      isFabHidden.current = false;
+      Animated.spring(fabAnim, {
+        toValue: 0,
+        friction: 7,
+        tension: 50,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const hideFab = () => {
+    if (!isFabHidden.current) {
+      isFabHidden.current = true;
+      Animated.timing(fabAnim, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  const handleListScroll = (event: any) => {
+    const currentY = event.nativeEvent.contentOffset.y;
+    const diff = currentY - lastScrollY.current;
+
+    if (currentY <= 20) {
+      showFab();
+    } else if (diff > 10) {
+      hideFab();
+    } else if (diff < -10) {
+      showFab();
+    }
+    lastScrollY.current = currentY;
+  };
+
+  const handleLocateMeOnMasterMap = async () => {
+    try {
+      setIsLocatingUser(true);
+      Haptics.selectionAsync().catch(() => {});
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          language === "BM" ? "Kebenaran Ditolak" : "Permission Denied",
+          language === "BM" ? "Sila benarkan akses lokasi dalam tetapan peranti anda." : "Please grant location access in device settings."
+        );
+        setIsLocatingUser(false);
+        return;
+      }
+
+      let userCoords: { latitude: number; longitude: number } | null = null;
+      const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
+      if (lastKnown) {
+        userCoords = { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
+        if (masterMapRef.current) {
+          masterMapRef.current.animateToRegion(
+            {
+              ...userCoords,
+              latitudeDelta: 0.05,
+              longitudeDelta: 0.05,
+            },
+            500
+          );
+        }
+      }
+
+      const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (freshLoc && masterMapRef.current) {
+        masterMapRef.current.animateToRegion(
+          {
+            latitude: freshLoc.coords.latitude,
+            longitude: freshLoc.coords.longitude,
+            latitudeDelta: 0.04,
+            longitudeDelta: 0.04,
+          },
+          600
+        );
+      }
+    } catch (err: any) {
+      console.warn("Locate me error:", err);
+      Alert.alert(
+        language === "BM" ? "Ralat Lokasi" : "Location Error",
+        language === "BM" ? "Gagal mengesan lokasi semasa anda." : "Could not determine your current GPS location."
+      );
+    } finally {
+      setIsLocatingUser(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isFilterModalVisible) {
+      const timer = setTimeout(() => setRenderFilterContent(true), 200);
+      return () => clearTimeout(timer);
+    } else {
+      setRenderFilterContent(false);
+    }
+  }, [isFilterModalVisible]);
 
   // Buyer criteria filters
   const [showCriteria, setShowCriteria] = useState(false);
@@ -263,9 +392,14 @@ export default function MasterListingScreen() {
 
   const switchSegment = (segment: ListingSegment) => {
     setActiveSegment(segment);
+    if (viewMode === "map") {
+      setViewMode("list");
+      setSelectedMapListing(null);
+    }
+    Haptics.selectionAsync().catch(() => {});
     Animated.timing(segmentAnim, {
       toValue: segment === "mine" ? 0 : 1,
-      duration: 180,
+      duration: 140,
       useNativeDriver: true,
     }).start();
   };
@@ -376,6 +510,8 @@ export default function MasterListingScreen() {
 
       unsubscribeSnapshot = firestore()
         .collection("publicListings")
+        .orderBy("createdAt", "desc")
+        .limit(listingLimit)
         .onSnapshot(
           (snapshot) => {
             if (snapshot) {
@@ -384,19 +520,17 @@ export default function MasterListingScreen() {
                 ...doc.data(),
               })) as PropertyListing[];
 
-              data.sort((a, b) =>
-                (b.createdAt || "").localeCompare(a.createdAt || "")
-              );
-
               setListings(data);
             }
             setIsLoading(false);
             setIsRefreshing(false);
+            setIsLoadingMore(false);
           },
           (error) => {
             console.error("Realtime listings error:", error);
             setIsLoading(false);
             setIsRefreshing(false);
+            setIsLoadingMore(false);
           }
         );
     };
@@ -424,7 +558,7 @@ export default function MasterListingScreen() {
       detachListener();
       subscription.remove();
     };
-  }, []);
+  }, [listingLimit]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -451,10 +585,10 @@ export default function MasterListingScreen() {
   );
   const allListingsCount = listings.length;
 
-  // Compute active filter count for badge
+  // Compute active filter count for badge (Aktif is the natural default, so count is 0)
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (activeFilter !== "Semua") count++;
+    if (activeFilter !== "Aktif") count++;
     if (categoryFilter !== "Semua") count++;
     if (criteriaLocation.trim()) count++;
     if (criteriaMinPrice.trim() || criteriaMaxPrice.trim()) count++;
@@ -469,7 +603,7 @@ export default function MasterListingScreen() {
   const clearAllFilters = () => {
     resetCriteria();
     setSearchQuery("");
-    setActiveFilter("Semua");
+    setActiveFilter("Aktif");
     setCategoryFilter("Semua");
   };
 
@@ -933,6 +1067,15 @@ export default function MasterListingScreen() {
         <View style={[styles.cardActionRow, { borderTopColor: themeColors.borderColor }]}>
           {renderStatusBadge(item, isListingOwnedByUser(item, currentUserId))}
 
+          {formatListingDate(item.createdAt || item.updatedAt, language) ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
+              <MaterialCommunityIcons name="clock-outline" size={13} color={themeColors.textMuted} />
+              <Text style={{ fontSize: 11, fontWeight: "600", color: themeColors.textMuted }}>
+                {formatListingDate(item.createdAt || item.updatedAt, language)}
+              </Text>
+            </View>
+          ) : null}
+
           <TouchableOpacity
             activeOpacity={0.8}
             onPress={() => handleShare(item)}
@@ -1009,6 +1152,15 @@ export default function MasterListingScreen() {
               <Text style={styles.gridPhotoCountText}>{allImages.length}</Text>
             </View>
           )}
+
+          {/* Date Recency Badge */}
+          {formatListingDate(item.createdAt || item.updatedAt, language) ? (
+            <View style={styles.gridDateBadge}>
+              <Text style={styles.gridDateBadgeText}>
+                {formatListingDate(item.createdAt || item.updatedAt, language)}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Card Body */}
@@ -1288,7 +1440,7 @@ export default function MasterListingScreen() {
             <MaterialCommunityIcons name="filter-check-outline" size={14} color={themeColors.maroonPrimary} />
             <Text style={[styles.activeFilterStripText, { color: themeColors.maroonPrimary }]} numberOfLines={1}>
               {[
-                activeFilter !== "Semua" ? activeFilter : null,
+                activeFilter !== "Aktif" ? (activeFilter === "Semua" ? (language === "BM" ? "Semua Status" : "All Statuses") : activeFilter) : null,
                 categoryFilter !== "Semua" ? categoryFilter : null,
                 criteriaLocation.trim() || null,
                 criteriaPropertyType !== "Any" ? criteriaPropertyType : null,
@@ -1399,8 +1551,13 @@ export default function MasterListingScreen() {
       {viewMode === "map" ? (
         <View style={{ flex: 1, width: "100%", position: "relative" }}>
           <MapView
+            ref={masterMapRef}
             style={{ flex: 1, width: "100%" }}
             provider={PROVIDER_GOOGLE}
+            toolbarEnabled={false}
+            showsUserLocation={true}
+            showsMyLocationButton={false}
+            mapPadding={{ bottom: Math.max(insets.bottom, 24) + 140, top: 0, right: 0, left: 0 }}
             initialRegion={{
               latitude: 3.8,
               longitude: 101.9,
@@ -1440,13 +1597,37 @@ export default function MasterListingScreen() {
             })}
           </MapView>
 
+          {/* Floating Locate Me GPS Button */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleLocateMeOnMasterMap}
+            disabled={isLocatingUser}
+            style={[
+              styles.locateMeFab,
+              {
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                top: 14,
+                right: 16,
+              },
+            ]}
+          >
+            {isLocatingUser ? (
+              <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
+            ) : (
+              <MaterialCommunityIcons name="crosshairs-gps" size={22} color={themeColors.maroonPrimary} />
+            )}
+          </TouchableOpacity>
+
           {/* Floating Selected Listing Bottom Preview Card */}
           {selectedMapListing && (
             <View
               style={[
                 styles.mapBottomCardWrap,
                 {
-                  bottom: Math.max(insets.bottom, 24) + 64,
+                  bottom: Math.max(insets.bottom, 28) + 88,
+                  zIndex: 999,
+                  elevation: 10,
                   backgroundColor: themeColors.cardBackground,
                   borderColor: themeColors.borderColor,
                 },
@@ -1505,10 +1686,12 @@ export default function MasterListingScreen() {
           )}
         </View>
       ) : isLoading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
-          <Text style={[styles.loadingText, { color: themeColors.textMuted }]}>{t("masterListing")}...</Text>
-        </View>
+        <ScrollView style={{ flex: 1, width: "100%", paddingHorizontal: viewMode === "grid" ? 8 : 16, paddingTop: 12 }}>
+          <ListingSkeleton />
+          <ListingSkeleton />
+          <ListingSkeleton />
+          <ListingSkeleton />
+        </ScrollView>
       ) : (
         <FlashList
           key={viewMode}
@@ -1517,6 +1700,8 @@ export default function MasterListingScreen() {
           keyExtractor={(item) => item.id}
           renderItem={viewMode === "grid" ? renderGridCard : renderListingCard}
           style={{ flex: 1, width: "100%" }}
+          onScroll={handleListScroll}
+          scrollEventThrottle={16}
           contentContainerStyle={{
             paddingHorizontal: viewMode === "grid" ? 8 : 16,
             paddingTop: 12,
@@ -1529,6 +1714,20 @@ export default function MasterListingScreen() {
               onRefresh={handleRefresh}
               colors={[themeColors.maroonPrimary]}
             />
+          }
+          onEndReached={() => {
+            if (!isLoadingMore && listings.length >= listingLimit) {
+              setIsLoadingMore(true);
+              setListingLimit((prev) => prev + 20);
+            }
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isLoadingMore ? (
+              <View style={{ paddingVertical: 20 }}>
+                <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
+              </View>
+            ) : null
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
@@ -1644,7 +1843,12 @@ export default function MasterListingScreen() {
               {language === "BM" ? "Tapis Listing" : "Filter Listings"}
             </Text>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            {renderFilterContent ? (
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled={true}
+              >
               {/* Status Filter */}
               <View style={styles.filterModalSection}>
                 <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
@@ -1758,32 +1962,29 @@ export default function MasterListingScreen() {
                 <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
                   {language === "BM" ? "Jenis Kediaman" : "Property Type"}
                 </Text>
-                <ScrollView
-                  ref={propertyTypeRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setPropertyTypeRowWidth(e.nativeEvent.layout.width)}
-                >
+                <View style={styles.filterModalPillRow}>
                   {propertyTypeOptions.map((option) => {
                     const active = criteriaPropertyType === option;
                     return (
-                      <View
+                      <TouchableOpacity
                         key={`ptype-${option}`}
-                        onLayout={(e) => {
-                          propertyTypeLayouts.current[option] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
-                        }}
+                        activeOpacity={0.7}
+                        onPress={() => handlePropertyTypeSelect(option)}
+                        style={[
+                          styles.filterModalPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
                       >
-                        <TouchableOpacity
-                          onPress={() => handlePropertyTypeSelect(option)}
-                          style={[styles.criteriaPill, { borderColor: active ? "#FF5F87" : themeColors.borderColor, backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer }]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
+                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
 
               {/* Tenure */}
@@ -1791,32 +1992,29 @@ export default function MasterListingScreen() {
                 <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
                   {language === "BM" ? "Jenis Pegangan" : "Tenure Type"}
                 </Text>
-                <ScrollView
-                  ref={tenureRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setTenureRowWidth(e.nativeEvent.layout.width)}
-                >
+                <View style={styles.filterModalPillRow}>
                   {tenureOptions.map((option) => {
                     const active = criteriaTenure === option;
                     return (
-                      <View
+                      <TouchableOpacity
                         key={`tenure-${option}`}
-                        onLayout={(e) => {
-                          tenureLayouts.current[option] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
-                        }}
+                        activeOpacity={0.7}
+                        onPress={() => handleTenureSelect(option)}
+                        style={[
+                          styles.filterModalPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
                       >
-                        <TouchableOpacity
-                          onPress={() => handleTenureSelect(option)}
-                          style={[styles.criteriaPill, { borderColor: active ? "#FF5F87" : themeColors.borderColor, backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer }]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
+                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                </View>
               </View>
 
               {/* Lot Status */}
@@ -1824,34 +2022,36 @@ export default function MasterListingScreen() {
                 <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
                   {language === "BM" ? "Status Lot" : "Lot Status"}
                 </Text>
-                <ScrollView
-                  ref={lotStatusRef}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.criteriaRowContent}
-                  onLayout={(e) => setLotStatusRowWidth(e.nativeEvent.layout.width)}
-                >
+                <View style={styles.filterModalPillRow}>
                   {lotStatusOptions.map((option) => {
                     const active = criteriaLotStatus === option;
                     return (
-                      <View
+                      <TouchableOpacity
                         key={`lot-${option}`}
-                        onLayout={(e) => {
-                          lotStatusLayouts.current[option] = { x: e.nativeEvent.layout.x, width: e.nativeEvent.layout.width };
-                        }}
+                        activeOpacity={0.7}
+                        onPress={() => handleLotStatusSelect(option)}
+                        style={[
+                          styles.filterModalPill,
+                          {
+                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
+                          },
+                        ]}
                       >
-                        <TouchableOpacity
-                          onPress={() => handleLotStatusSelect(option)}
-                          style={[styles.criteriaPill, { borderColor: active ? "#FF5F87" : themeColors.borderColor, backgroundColor: active ? "#FF5F87" : themeColors.surfaceContainer }]}
-                        >
-                          <Text style={[styles.criteriaPillText, { color: active ? "#FFFFFF" : themeColors.textMuted }]}>{option}</Text>
-                        </TouchableOpacity>
-                      </View>
+                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
                     );
                   })}
-                </ScrollView>
+                  </View>
+                </View>
+              </ScrollView>
+            ) : (
+              <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
               </View>
-            </ScrollView>
+            )}
 
             {/* Bottom Action Bar */}
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, gap: 12 }}>
@@ -1996,7 +2196,7 @@ export default function MasterListingScreen() {
                   value: "Sold",
                   label: language === "BM" ? "Terjual (Sold)" : "Sold",
                   desc: language === "BM" ? "Urusniaga selesai atau hartanah terjual" : "Transaction completed or property sold",
-                  icon: "home-check",
+                  icon: "tag-check",
                   color: "#3B82F6",
                 },
                 {
@@ -2285,31 +2485,51 @@ export default function MasterListingScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <TouchableOpacity
-        onPress={() => router.push("/(tabs)/tambah" as any)}
-        activeOpacity={0.9}
-        style={{
-          position: "absolute",
-          right: 20,
-          bottom: (insets.bottom > 0 ? insets.bottom + 12 : 16) + 68,
-          height: 52,
-          paddingHorizontal: 18,
-          borderRadius: 26,
-          backgroundColor: themeColors.maroonPrimary,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          elevation: 6,
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 3 },
-          shadowOpacity: 0.3,
-          shadowRadius: 4.5,
-          zIndex: 999,
-        }}
-      >
-        <MaterialCommunityIcons name="plus" size={22} color="#FFF" />
-        <Text style={styles.fabLabel}>{t("addListing")}</Text>
-      </TouchableOpacity>
+      {!(viewMode === "map" && selectedMapListing) && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            right: 20,
+            bottom: (insets.bottom > 0 ? insets.bottom + 12 : 16) + 68,
+            zIndex: 999,
+            transform: [
+              {
+                translateY: fabAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 90],
+                }),
+              },
+            ],
+            opacity: fabAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 0],
+            }),
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              router.push("/tambah" as any);
+            }}
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 28,
+              backgroundColor: themeColors.maroonPrimary,
+              alignItems: "center",
+              justifyContent: "center",
+              elevation: 6,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.3,
+              shadowRadius: 4.5,
+            }}
+          >
+            <MaterialCommunityIcons name="plus" size={28} color="#FFF" />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -3006,6 +3226,35 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   specBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  locateMeFab: {
+    position: "absolute",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 999,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+  },
+  gridDateBadge: {
+    position: "absolute",
+    bottom: 6,
+    left: 6,
+    backgroundColor: "rgba(0,0,0,0.68)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  gridDateBadgeText: {
+    color: "#FFFFFF",
     fontSize: 10,
     fontWeight: "700",
   },

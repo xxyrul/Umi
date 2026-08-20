@@ -217,6 +217,24 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
             </View>
           )}
 
+          {/* Android Installation Tip */}
+          <View
+            style={[
+              styles.tipBox,
+              {
+                backgroundColor: themeColors.surfaceContainer,
+                borderColor: themeColors.borderColor,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons name="lightbulb-outline" size={16} color={themeColors.maroonPrimary} style={{ marginTop: 1 }} />
+            <Text style={[styles.tipText, { color: themeColors.textMuted }]}>
+              {isMalay
+                ? "Tip: Jika Android meminta kebenaran pemasangan, buka Tetapan dan aktifkan 'Benarkan dari sumber ini'."
+                : "Tip: If Android prompts for install permission, tap Settings and toggle 'Allow from this source'."}
+            </Text>
+          </View>
+
           {/* Action Buttons */}
           <View style={styles.actionRow}>
             {!isDownloading && !release.mandatory && (
@@ -432,6 +450,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     gap: 8,
+  },
+  tipBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  tipText: {
+    fontSize: 11,
+    lineHeight: 16,
+    flex: 1,
   },
   btnPrimaryText: {
     color: "#FFFFFF",

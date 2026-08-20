@@ -27,8 +27,8 @@ export function PermissionExplanationModal({
           color: "#4F46E5",
           title: isBM ? "Akses Kalendar Diperlukan" : "Calendar Access Required",
           body: isBM
-            ? "Umi memerlukan akses Kalendar untuk menyelaraskan janji temu harta tanah pelanggan anda dan menghantar peringatan tepat pada masanya terus ke kalendar peranti anda."
-            : "Umi needs Calendar access to sync your client property viewings and send you timely reminders directly to your device calendar.",
+            ? "artha memerlukan akses Kalendar untuk menyelaraskan janji temu harta tanah pelanggan anda dan menghantar peringatan tepat pada masanya terus ke kalendar peranti anda."
+            : "artha needs Calendar access to sync your client property viewings and send you timely reminders directly to your device calendar.",
         };
       case "notifications":
         return {
@@ -36,8 +36,8 @@ export function PermissionExplanationModal({
           color: "#10B981",
           title: isBM ? "Akses Notifikasi Diperlukan" : "Notification Access Required",
           body: isBM
-            ? "Umi memerlukan akses Notifikasi untuk menghantar makluman segera mengenai janji temu harta tanah yang akan datang dan tarikh akhir tugasan kes."
-            : "Umi needs Notification access to send you instant alerts for upcoming property viewings and case milestone deadlines.",
+            ? "artha memerlukan akses Notifikasi untuk menghantar makluman segera mengenai janji temu harta tanah yang akan datang dan tarikh akhir tugasan kes."
+            : "artha needs Notification access to send you instant alerts for upcoming property viewings and case milestone deadlines.",
         };
       case "location":
         return {
@@ -45,8 +45,8 @@ export function PermissionExplanationModal({
           color: "#EF4444",
           title: isBM ? "Akses Lokasi Diperlukan" : "Location Access Required",
           body: isBM
-            ? "Umi memerlukan akses Lokasi untuk mengepin lokasi hartanah secara automatik pada peta dan mendapatkan alamat geokod secara langsung semasa menambah listing."
-            : "Umi needs Location access to automatically pin property locations on the map and calculate address information during creation.",
+            ? "artha memerlukan akses Lokasi untuk mengepin lokasi hartanah secara automatik pada peta dan mendapatkan alamat geokod secara langsung semasa menambah listing."
+            : "artha needs Location access to automatically pin property locations on the map and calculate address information during creation.",
         };
       case "mediaLibrary":
         return {
@@ -54,8 +54,8 @@ export function PermissionExplanationModal({
           color: "#F59E0B",
           title: isBM ? "Akses Galeri & Media Diperlukan" : "Gallery & Media Access Required",
           body: isBM
-            ? "Umi memerlukan akses Galeri untuk membolehkan anda memuat naik gambar hartanah dan dokumen penting ke dalam peti besi dokumen (Document Vault) transaksi kes."
-            : "Umi needs Media Library access to let you upload property listings photos and store case transaction documents inside the Document Vault.",
+            ? "artha memerlukan akses Galeri untuk membolehkan anda memuat naik gambar hartanah dan dokumen penting ke dalam peti besi dokumen (Document Vault) transaksi kes."
+            : "artha needs Media Library access to let you upload property listings photos and store case transaction documents inside the Document Vault.",
         };
     }
   };

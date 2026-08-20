@@ -109,12 +109,23 @@ function failRegistration(reason: UpdateNotificationFailure, error?: unknown) {
 async function saveRegistration(uid: string, language: "BM" | "EN", token: string) {
   const deviceId = await getDeviceId();
   const now = new Date().toISOString();
+  const constants: any = Platform.constants || {};
+  const deviceBrand = constants.Brand || constants.Manufacturer || "";
+  const deviceModel = constants.Model || "";
+  const osVersion = constants.Release ? `Android ${constants.Release}` : `Android ${Platform.Version || ""}`;
+  const deviceLabel = [deviceBrand, deviceModel].filter(Boolean).join(" ") || "Android Device";
+  const versionMeta = currentVersionMetadata();
+
   const registration = {
     token,
     enabled: true,
     platform: "android",
+    deviceBrand,
+    deviceModel,
+    deviceLabel,
+    osVersion,
     language,
-    ...currentVersionMetadata(),
+    ...versionMeta,
     tokenUpdatedAt: now,
     lastSeenAt: now,
   };
@@ -133,6 +144,24 @@ async function saveRegistration(uid: string, language: "BM" | "EN", token: strin
       .doc(uid)
       .set({ [userDeviceField(deviceId)]: registration }, { merge: true });
     await AsyncStorage.setItem(REGISTRATION_MODE_KEY, "user-document");
+  }
+
+  // Update user profile record with last active device info
+  try {
+    await firebaseDB.collection("users").doc(uid).set({
+      lastDevice: {
+        deviceLabel,
+        deviceBrand,
+        deviceModel,
+        osVersion,
+        appVersion: versionMeta.appVersion,
+        buildVersion: versionMeta.buildVersion,
+        lastActiveAt: now,
+      },
+      lastActiveAt: now,
+    }, { merge: true });
+  } catch (e) {
+    // Non-fatal if user doc update fails
   }
 
   await AsyncStorage.setItem(REGISTERED_USER_KEY, uid);

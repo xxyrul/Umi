@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -22,13 +23,17 @@ import {
   signUpWithEmail,
   initializeGoogleSignIn,
   sendPasswordReset,
+  completeGoogleRegistration,
+  isUserRegistrationComplete,
+  signOut,
 } from "@/services/auth";
+import { firebaseAuth } from "@/services/firebase";
 import { THEME } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { themeColors } = useAppSettings();
+  const { themeColors, t, language } = useAppSettings();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -37,35 +42,183 @@ export default function LoginScreen() {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
 
   const [isResetModalVisible, setIsResetModalVisible] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
 
+  // Google Sign-In Invite Code Gate State
+  const [isGoogleModalVisible, setIsGoogleModalVisible] = useState(false);
+  const [googleUserPending, setGoogleUserPending] = useState<{
+    uid: string;
+    email: string;
+    displayName: string;
+  } | null>(null);
+  const [googleInviteInput, setGoogleInviteInput] = useState("");
+  const [isActivatingGoogle, setIsActivatingGoogle] = useState(false);
+
+  // Android hardware back button and swipe back gesture handler
+  useEffect(() => {
+    const backAction = () => {
+      if (isGoogleModalVisible) {
+        handleCancelGoogleModal();
+        return true;
+      }
+      if (isResetModalVisible) {
+        setIsResetModalVisible(false);
+        return true;
+      }
+      if (isSigningUp) {
+        setIsSigningUp(false);
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", backAction);
+    return () => subscription.remove();
+  }, [isSigningUp, isResetModalVisible, isGoogleModalVisible, googleUserPending]);
+
   useEffect(() => {
     initializeGoogleSignIn();
+
+    // Check if the current user session is missing an invite code
+    const checkCurrentSession = async () => {
+      const curr = firebaseAuth.currentUser;
+      if (curr) {
+        const { isRegistered, isSuspended } = await isUserRegistrationComplete(curr.uid);
+        if (isSuspended) {
+          await signOut();
+          Alert.alert(
+            language === "BM" ? "Akaun Digantung" : "Account Suspended",
+            language === "BM"
+              ? "Akaun ejen anda telah digantung oleh pentadbir agensi."
+              : "Your agent account has been suspended by the agency administrator."
+          );
+          return;
+        }
+        if (!isRegistered) {
+          setGoogleUserPending({
+            uid: curr.uid,
+            email: curr.email || "",
+            displayName: curr.displayName || "Agent",
+          });
+          setIsGoogleModalVisible(true);
+        }
+      }
+    };
+    checkCurrentSession();
   }, []);
 
   const handleGoogleSignIn = async () => {
     try {
       setIsLoading(true);
-      await signInWithGoogle();
-      router.replace("/(tabs)");
+      const { userProfile, isRegistered } = await signInWithGoogle();
+      if (isRegistered) {
+        router.replace("/(tabs)");
+      } else {
+        // New Google user — prompt for Invite Code before granting entry
+        setGoogleUserPending(userProfile);
+        setGoogleInviteInput("");
+        setIsGoogleModalVisible(true);
+      }
     } catch (error: any) {
       console.error("Google Sign-In error:", error);
-      Alert.alert("Log Masuk Ralat", error?.message || "Gagal log masuk dengan Google");
+      Alert.alert(t("authErrorTitle"), error?.message || (language === "BM" ? "Gagal log masuk dengan Google" : "Failed to sign in with Google"));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEmailSignIn = async () => {
-    if (!identifier.trim()) {
-      Alert.alert("Maklumat Diperlukan", "Sila masukkan E-mel atau No. Telefon anda.");
+  const handleActivateGoogleAccount = async () => {
+    if (!googleUserPending) return;
+    if (!googleInviteInput.trim()) {
+      Alert.alert(t("reqInfoTitle"), t("inviteCodeHint"));
       return;
     }
+
+    try {
+      setIsActivatingGoogle(true);
+      await completeGoogleRegistration(
+        googleUserPending.uid,
+        googleUserPending.email,
+        googleUserPending.displayName,
+        googleInviteInput.trim()
+      );
+      setIsGoogleModalVisible(false);
+      setGoogleUserPending(null);
+      router.replace("/(tabs)");
+    } catch (error: any) {
+      console.error("Google registration error:", error);
+      const errMsg = error?.message || "";
+      let userFriendlyMsg = errMsg || t("authErrorSub");
+
+      if (errMsg.includes("EMPTY_CODE") || errMsg.includes("INVALID_CODE")) {
+        userFriendlyMsg = t("invalidInviteCodeAlert");
+      } else if (errMsg.includes("ALREADY_USED")) {
+        userFriendlyMsg = t("alreadyUsedInviteCodeAlert");
+      } else if (errMsg.includes("REVOKED_CODE")) {
+        userFriendlyMsg = t("revokedInviteCodeAlert");
+      }
+
+      Alert.alert(t("authErrorTitle"), userFriendlyMsg);
+    } finally {
+      setIsActivatingGoogle(false);
+    }
+  };
+
+  const handleCancelGoogleModal = async () => {
+    setIsGoogleModalVisible(false);
+    const userToCleanup = firebaseAuth.currentUser;
+    setGoogleUserPending(null);
+    setGoogleInviteInput("");
+    try {
+      if (userToCleanup) {
+        // Delete unactivated user from Firebase Auth so it doesn't linger or block future signups
+        await userToCleanup.delete().catch(() => {});
+      }
+      await signOut();
+    } catch {}
+  };
+
+  const handleEmailSignIn = async () => {
+    const cleanIdentifier = identifier.trim();
+    if (!cleanIdentifier) {
+      Alert.alert(t("reqInfoTitle"), isSigningUp ? t("invalidEmailSub") : t("reqInfoSub"));
+      return;
+    }
+
+    if (isSigningUp && (!cleanIdentifier.includes("@") || !cleanIdentifier.includes("."))) {
+      Alert.alert(
+        t("reqInfoTitle"),
+        language === "BM"
+          ? "Sila masukkan alamat e-mel yang sah (cth: ejen@gmail.com)."
+          : "Please enter a valid email address (e.g. agent@gmail.com)."
+      );
+      return;
+    }
+
     if (!password) {
-      Alert.alert("Maklumat Diperlukan", "Sila masukkan kata laluan anda.");
+      Alert.alert(t("reqInfoTitle"), t("reqPassSub"));
+      return;
+    }
+
+    if (isSigningUp && password.length < 6) {
+      Alert.alert(
+        t("reqInfoTitle"),
+        language === "BM"
+          ? "Kata laluan mestilah sekurang-kurangnya 6 aksara."
+          : "Password must be at least 6 characters long."
+      );
+      return;
+    }
+
+    if (isSigningUp && !inviteCode.trim()) {
+      Alert.alert(
+        t("reqInfoTitle"),
+        t("inviteCodeHint")
+      );
       return;
     }
 
@@ -73,18 +226,54 @@ export default function LoginScreen() {
       setIsLoading(true);
       if (isSigningUp) {
         if (!displayName.trim()) {
-          Alert.alert("Nama Diperlukan", "Sila masukkan nama penuh anda.");
+          Alert.alert(t("reqInfoTitle"), t("reqNameSub"));
           setIsLoading(false);
           return;
         }
-        await signUpWithEmail(identifier.trim(), password, displayName.trim());
+        await signUpWithEmail(cleanIdentifier, password, displayName.trim(), inviteCode.trim());
       } else {
-        await signInWithEmail(identifier.trim(), password);
+        await signInWithEmail(cleanIdentifier, password);
       }
       router.replace("/(tabs)");
     } catch (error: any) {
       console.error("Auth error:", error);
-      Alert.alert("Ralat Log Masuk", error?.message || "Gagal log masuk / mendaftar akaun.");
+      const code = error?.code || "";
+      const errMsg = error?.message || "";
+      let userFriendlyMsg = errMsg || t("authErrorSub");
+
+      if (errMsg.includes("EMPTY_CODE") || errMsg.includes("INVALID_CODE")) {
+        userFriendlyMsg = t("invalidInviteCodeAlert");
+      } else if (errMsg.includes("ALREADY_USED")) {
+        userFriendlyMsg = t("alreadyUsedInviteCodeAlert");
+      } else if (errMsg.includes("REVOKED_CODE")) {
+        userFriendlyMsg = t("revokedInviteCodeAlert");
+      } else if (code === "auth/email-already-in-use") {
+        userFriendlyMsg =
+          language === "BM"
+            ? "Alamat e-mel ini telah digunakan. Jika anda pernah mendaftar melalui Google, sila tekan butang 'Log Masuk dengan Google' di bawah."
+            : "This email address is already in use. If you signed in with Google, please tap 'Sign In with Google' below to activate with your invite code.";
+      } else if (code === "auth/invalid-email") {
+        userFriendlyMsg =
+          language === "BM"
+            ? "Format e-mel tidak sah. Sila periksa e-mel anda."
+            : "Invalid email format. Please check your email.";
+      } else if (code === "auth/weak-password") {
+        userFriendlyMsg =
+          language === "BM"
+            ? "Kata laluan terlalu lemah (min 6 aksara)."
+            : "Password is too weak (min 6 characters).";
+      } else if (
+        code === "auth/user-not-found" ||
+        code === "auth/wrong-password" ||
+        code === "auth/invalid-credential"
+      ) {
+        userFriendlyMsg =
+          language === "BM"
+            ? "E-mel atau kata laluan tidak tepat. Sila cuba lagi."
+            : "Incorrect email or password. Please try again.";
+      }
+
+      Alert.alert(t("authErrorTitle"), userFriendlyMsg);
     } finally {
       setIsLoading(false);
     }
@@ -93,7 +282,7 @@ export default function LoginScreen() {
   const handleSendPasswordReset = async () => {
     const targetEmail = resetEmail.trim() || identifier.trim();
     if (!targetEmail || !targetEmail.includes("@")) {
-      Alert.alert("Email Diperlukan", "Sila masukkan alamat email yang sah untuk penetapan semula kata laluan.");
+      Alert.alert(t("reqInfoTitle"), t("invalidEmailSub"));
       return;
     }
 
@@ -103,12 +292,12 @@ export default function LoginScreen() {
       setIsResetModalVisible(false);
       setResetEmail("");
       Alert.alert(
-        "Pautan Dihantar! ✉️",
-        `Pautan untuk menetapkan semula kata laluan telah dihantar ke ${targetEmail}. Sila semak peti masuk atau folder spam anda.`
+        t("resetLinkSentTitle"),
+        `${t("resetLinkSentSub")} ${targetEmail}. ${t("resetLinkCheckInbox")}`
       );
     } catch (error: any) {
       console.error("Reset password error:", error);
-      Alert.alert("Ralat Reset Kata Laluan", error?.message || "Gagal menghantar pautan reset kata laluan.");
+      Alert.alert(t("authErrorTitle"), error?.message || t("authErrorSub"));
     } finally {
       setIsResetting(false);
     }
@@ -133,24 +322,75 @@ export default function LoginScreen() {
           automaticallyAdjustKeyboardInsets={true}
         >
           <View style={styles.container}>
+            {/* Top Back Button when in Register mode */}
+            {isSigningUp && (
+              <TouchableOpacity
+                onPress={() => setIsSigningUp(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={{
+                  alignSelf: "flex-start",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                  marginBottom: 16,
+                  borderRadius: 10,
+                  backgroundColor: themeColors.surfaceContainer,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                }}
+              >
+                <MaterialCommunityIcons name="arrow-left" size={18} color={themeColors.textPrimary} />
+                <Text style={{ color: themeColors.textPrimary, fontSize: 13, fontWeight: "700" }}>
+                  {t("loginLink")}
+                </Text>
+              </TouchableOpacity>
+            )}
+
             <View style={styles.brandingSection}>
-              <View style={[styles.brandBadge, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
-                <MaterialCommunityIcons name="domain" size={32} color={themeColors.maroonPrimary} />
+              <View
+                style={{
+                  width: 58,
+                  height: 58,
+                  borderRadius: 16,
+                  backgroundColor: themeColors.maroonPrimary,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 14,
+                  shadowColor: themeColors.maroonPrimary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.35,
+                  shadowRadius: 8,
+                  elevation: 6,
+                }}
+              >
+                <MaterialCommunityIcons name="home-variant" size={32} color="#FFFFFF" />
               </View>
-              <Text style={[styles.brandTitle, { color: themeColors.maroonPrimary }]}>Artha</Text>
-              <Text style={[styles.brandCategory, { color: themeColors.textPrimary }]}>Master Listing CRM</Text>
+              <Text
+                style={{
+                  fontSize: 30,
+                  fontWeight: "800",
+                  color: themeColors.textPrimary,
+                  letterSpacing: -0.8,
+                  textTransform: "lowercase",
+                }}
+              >
+                artha
+              </Text>
+              <Text style={[styles.brandCategory, { color: themeColors.maroonPrimary }]}>Master Listing CRM</Text>
               <Text style={[styles.brandSubtitle, { color: themeColors.textMuted }]}>We build trust, you build future</Text>
             </View>
 
             <View style={styles.formContainer}>
               {isSigningUp && (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { color: themeColors.textPrimary }]}>Nama Penuh</Text>
+                  <Text style={[styles.label, { color: themeColors.textPrimary }]}>{t("fullNameLabel")}</Text>
                   <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
                     <MaterialCommunityIcons name="account-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                     <TextInput
                       style={[styles.textInput, { color: themeColors.textPrimary }]}
-                      placeholder="Masukkan nama penuh"
+                      placeholder={t("fullNamePlaceholder")}
                       placeholderTextColor={themeColors.textMuted}
                       value={displayName}
                       onChangeText={setDisplayName}
@@ -160,12 +400,14 @@ export default function LoginScreen() {
               )}
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: themeColors.textPrimary }]}>No. Telefon / Email</Text>
+                <Text style={[styles.label, { color: themeColors.textPrimary }]}>
+                  {isSigningUp ? t("emailAddressLabel") : t("identifierLabel")}
+                </Text>
                 <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-                  <MaterialCommunityIcons name="account-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
+                  <MaterialCommunityIcons name={isSigningUp ? "email-outline" : "account-outline"} size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                   <TextInput
                     style={[styles.textInput, { color: themeColors.textPrimary }]}
-                    placeholder="Masukkan ID / E-mel anda"
+                    placeholder={isSigningUp ? "nama@email.com" : t("identifierPlaceholder")}
                     placeholderTextColor={themeColors.textMuted}
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -176,12 +418,12 @@ export default function LoginScreen() {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.label, { color: themeColors.textPrimary }]}>Kata Laluan</Text>
+                <Text style={[styles.label, { color: themeColors.textPrimary }]}>{t("passwordLabel")}</Text>
                 <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
                   <MaterialCommunityIcons name="lock-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                   <TextInput
                     style={[styles.textInput, { color: themeColors.textPrimary }]}
-                    placeholder="Masukkan kata laluan"
+                    placeholder={t("passwordPlaceholder")}
                     placeholderTextColor={themeColors.textMuted}
                     secureTextEntry={!showPassword}
                     value={password}
@@ -193,6 +435,26 @@ export default function LoginScreen() {
                 </View>
               </View>
 
+              {isSigningUp && (
+                <View style={styles.inputGroup}>
+                  <Text style={[styles.label, { color: themeColors.textPrimary }]}>{t("inviteCodeLabel")}</Text>
+                  <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
+                    <MaterialCommunityIcons name="key-outline" size={20} color={themeColors.maroonPrimary} style={{ marginLeft: 12 }} />
+                    <TextInput
+                      style={[styles.textInput, { color: themeColors.textPrimary, textTransform: "uppercase", fontWeight: "700", letterSpacing: 1 }]}
+                      placeholder={t("inviteCodePlaceholder")}
+                      placeholderTextColor={themeColors.textMuted}
+                      autoCapitalize="characters"
+                      value={inviteCode}
+                      onChangeText={(text) => setInviteCode(text.toUpperCase())}
+                    />
+                  </View>
+                  <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 4, lineHeight: 16 }}>
+                    {t("inviteCodeHint")}
+                  </Text>
+                </View>
+              )}
+
               {!isSigningUp && (
                 <TouchableOpacity
                   style={styles.forgotPasswordContainer}
@@ -201,7 +463,7 @@ export default function LoginScreen() {
                     setIsResetModalVisible(true);
                   }}
                 >
-                  <Text style={[styles.forgotPasswordText, { color: themeColors.maroonPrimary }]}>Lupa kata laluan?</Text>
+                  <Text style={[styles.forgotPasswordText, { color: themeColors.maroonPrimary }]}>{t("forgotPasswordLink")}</Text>
                 </TouchableOpacity>
               )}
 
@@ -215,7 +477,7 @@ export default function LoginScreen() {
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
-                    {isSigningUp ? "Daftar Akaun" : "Log Masuk"}
+                    {isSigningUp ? t("createAccountBtn") : t("signInBtn")}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -223,7 +485,7 @@ export default function LoginScreen() {
               {/* Divider */}
               <View style={styles.dividerRow}>
                 <View style={[styles.dividerLine, { backgroundColor: themeColors.borderColor }]} />
-                <Text style={[styles.dividerText, { color: themeColors.textMuted }]}>Atau</Text>
+                <Text style={[styles.dividerText, { color: themeColors.textMuted }]}>{t("orDivider")}</Text>
                 <View style={[styles.dividerLine, { backgroundColor: themeColors.borderColor }]} />
               </View>
 
@@ -232,21 +494,21 @@ export default function LoginScreen() {
                 activeOpacity={0.8}
                 onPress={handleGoogleSignIn}
                 disabled={isLoading}
-                style={[styles.googleButton, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }] }
+                style={[styles.googleButton, { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor }]}
               >
                 <MaterialCommunityIcons name="google" size={20} color="#EA4335" />
-                <Text style={[styles.googleButtonText, { color: themeColors.textPrimary }] }>Log Masuk dengan Google</Text>
+                <Text style={[styles.googleButtonText, { color: themeColors.textPrimary }]}>{t("googleSignInBtn")}</Text>
               </TouchableOpacity>
             </View>
 
             {/* Footer Sign Up Switch */}
             <View style={styles.footerContainer}>
               <Text style={[styles.footerText, { color: themeColors.textMuted }]}>
-                {isSigningUp ? "Sudah mempunyai akaun?" : "Belum mempunyai akaun?"}{" "}
+                {isSigningUp ? t("haveAccountPrompt") : t("noAccountPrompt")}{" "}
               </Text>
               <TouchableOpacity onPress={() => setIsSigningUp(!isSigningUp)}>
-                <Text style={[styles.footerLink, { color: "#FFB4B4" }]}>
-                  {isSigningUp ? "Log Masuk Akaun" : "Daftar Akaun Baru"}
+                <Text style={[styles.footerLink, { color: themeColors.maroonPrimary }]}>
+                  {isSigningUp ? t("loginLink") : t("registerLink")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -286,9 +548,9 @@ export default function LoginScreen() {
             {/* Header */}
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <View>
-                <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>Lupa Kata Laluan</Text>
+                <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>{t("forgotPasswordModalTitle")}</Text>
                 <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                  Masukkan e-mel anda untuk menerima pautan penetapan semula.
+                  {t("forgotPasswordModalSub")}
                 </Text>
               </View>
               <TouchableOpacity
@@ -301,7 +563,7 @@ export default function LoginScreen() {
 
             {/* Email input */}
             <View style={{ marginBottom: 16 }}>
-              <Text style={[styles.label, { color: themeColors.textPrimary, marginBottom: 6 }]}>Alamat E-mel</Text>
+              <Text style={[styles.label, { color: themeColors.textPrimary, marginBottom: 6 }]}>{t("emailAddressLabel")}</Text>
               <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
                 <MaterialCommunityIcons name="email-outline" size={20} color={themeColors.textMuted} style={{ marginLeft: 12 }} />
                 <TextInput
@@ -328,9 +590,178 @@ export default function LoginScreen() {
               ) : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                   <MaterialCommunityIcons name="send" size={18} color="#FFFFFF" />
-                  <Text style={styles.primaryButtonText}>Hantar Pautan Reset</Text>
+                  <Text style={styles.primaryButtonText}>{t("sendResetLinkBtn")}</Text>
                 </View>
               )}
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Google Sign-In Invite Code Gate Modal */}
+      <Modal
+        visible={isGoogleModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelGoogleModal}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={handleCancelGoogleModal}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0, 0, 0, 0.7)",
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 24,
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={{
+              width: "100%",
+              maxWidth: 380,
+              backgroundColor: themeColors.cardBackground,
+              borderRadius: 20,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+            }}
+          >
+            {/* Header */}
+            <View style={{ alignItems: "center", marginBottom: 16 }}>
+              <View
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 14,
+                  backgroundColor: "rgba(225, 29, 72, 0.12)",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 12,
+                }}
+              >
+                <MaterialCommunityIcons name="shield-key-outline" size={28} color={themeColors.maroonPrimary} />
+              </View>
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "800",
+                  color: themeColors.textPrimary,
+                  textAlign: "center",
+                  marginBottom: 6,
+                }}
+              >
+                {t("googleInviteTitle")}
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: themeColors.textMuted,
+                  textAlign: "center",
+                  lineHeight: 18,
+                }}
+              >
+                {t("googleInviteSub")}
+              </Text>
+            </View>
+
+            {/* Google Account Preview Pill */}
+            {googleUserPending && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  backgroundColor: themeColors.surfaceContainer,
+                  padding: 10,
+                  borderRadius: 10,
+                  marginBottom: 16,
+                  gap: 10,
+                }}
+              >
+                <MaterialCommunityIcons name="google" size={18} color="#EA4335" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {googleUserPending.displayName}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: themeColors.textMuted }} numberOfLines={1}>
+                    {googleUserPending.email}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Invite Code Input */}
+            <View style={{ marginBottom: 16 }}>
+              <Text style={[styles.label, { color: themeColors.textPrimary, marginBottom: 6 }]}>
+                {t("inviteCodeLabel")}
+              </Text>
+              <View
+                style={[
+                  styles.inputWithIcon,
+                  { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="key-outline"
+                  size={20}
+                  color={themeColors.maroonPrimary}
+                  style={{ marginLeft: 12 }}
+                />
+                <TextInput
+                  style={[
+                    styles.textInput,
+                    {
+                      color: themeColors.textPrimary,
+                      textTransform: "uppercase",
+                      fontWeight: "700",
+                      letterSpacing: 1,
+                    },
+                  ]}
+                  placeholder={t("inviteCodePlaceholder")}
+                  placeholderTextColor={themeColors.textMuted}
+                  value={googleInviteInput}
+                  onChangeText={(text) => setGoogleInviteInput(text.toUpperCase())}
+                  autoCapitalize="characters"
+                />
+              </View>
+              <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 4 }}>
+                {t("inviteCodeHint")}
+              </Text>
+            </View>
+
+            {/* Activate Button */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleActivateGoogleAccount}
+              disabled={isActivatingGoogle}
+              style={[
+                styles.primaryButton,
+                { backgroundColor: themeColors.maroonPrimary },
+                isActivatingGoogle && { opacity: 0.7 },
+              ]}
+            >
+              {isActivatingGoogle ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>{t("activateAccountBtn")}</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Cancel Button */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleCancelGoogleModal}
+              disabled={isActivatingGoogle}
+              style={{
+                marginTop: 10,
+                paddingVertical: 10,
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ fontSize: 13, color: themeColors.textMuted, fontWeight: "600" }}>
+                {t("cancelRegistrationBtn")}
+              </Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>

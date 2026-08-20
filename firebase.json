@@ -35,6 +35,12 @@
           }
         ]
       }
+    ],
+    "rewrites": [
+      {
+        "source": "/admin",
+        "destination": "/admin.html"
+      }
     ]
   }
 }

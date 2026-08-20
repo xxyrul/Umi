@@ -355,6 +355,9 @@ function buildMessage(device, manifest) {
         priority: "high",
         notification: {
           channel_id: "app-updates",
+          default_sound: true,
+          default_vibrate_timings: true,
+          notification_priority: "PRIORITY_HIGH",
         },
       },
     },

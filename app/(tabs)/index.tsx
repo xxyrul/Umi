@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import {
   View,
   Text,
@@ -13,7 +15,7 @@ import {
   AppState,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Polyline, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
 import { firestore, auth } from "@/services/firebase";
@@ -43,6 +45,72 @@ export default function DashboardScreen() {
   const [selectedYear, setSelectedYear] = useState("2026");
   const [showYearModal, setShowYearModal] = useState(false);
 
+  // Announcement State
+  const [announcement, setAnnouncement] = useState<any>(null);
+  const [dismissedAnnIds, setDismissedAnnIds] = useState<string[]>([]);
+  const [dismissedLoaded, setDismissedLoaded] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const recentAnnouncementsRef = useRef<any[]>([]);
+
+  // Calculate unread announcements count
+  const updateUnreadCount = useCallback(async (annList?: any[]) => {
+    try {
+      const list = annList || recentAnnouncementsRef.current;
+      if (!list || list.length === 0) {
+        setUnreadNotifCount(0);
+        return;
+      }
+
+      const [storedRead, storedLastSeen] = await Promise.all([
+        AsyncStorage.getItem("@read_notification_ids"),
+        AsyncStorage.getItem("@last_seen_notifications_at"),
+      ]);
+
+      const readIds: string[] = storedRead ? JSON.parse(storedRead) : [];
+      const lastSeenTime = storedLastSeen ? new Date(storedLastSeen).getTime() : 0;
+
+      let unread = 0;
+      for (const item of list) {
+        const itemTime = item.createdAt ? new Date(item.createdAt).getTime() : 0;
+        const isRead = readIds.includes(item.id) || (lastSeenTime > 0 && itemTime <= lastSeenTime);
+        if (!isRead) {
+          unread++;
+        }
+      }
+      setUnreadNotifCount(unread);
+    } catch (e) {
+      console.warn("Failed to calculate unread notifications count", e);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      updateUnreadCount();
+    }, [updateUnreadCount])
+  );
+
+  // Load dismissed announcement IDs from local storage
+  useEffect(() => {
+    AsyncStorage.getItem("@dismissed_announcements")
+      .then((val) => {
+        if (val) {
+          try {
+            setDismissedAnnIds(JSON.parse(val));
+          } catch (e) {}
+        }
+      })
+      .catch(() => {})
+      .finally(() => setDismissedLoaded(true));
+  }, []);
+
+  const handleDismissAnnouncement = async (id: string) => {
+    setDismissedAnnIds((prev) => {
+      const updated = [...prev, id];
+      AsyncStorage.setItem("@dismissed_announcements", JSON.stringify(updated)).catch(() => {});
+      return updated;
+    });
+  };
+
   // Fetch Firestore Listings and Cases in Realtime
   useEffect(() => {
     const profile = getCurrentUserProfile();
@@ -70,6 +138,7 @@ export default function DashboardScreen() {
 
     let unsubListings: (() => void) | null = null;
     let unsubCases: (() => void) | null = null;
+    let unsubAnn: (() => void) | null = null;
 
     const attachDashboardListeners = () => {
       if (unsubListings) {
@@ -80,6 +149,33 @@ export default function DashboardScreen() {
         unsubCases();
         unsubCases = null;
       }
+      if (unsubAnn) {
+        unsubAnn();
+        unsubAnn = null;
+      }
+
+      // Realtime Listener for Announcements
+      unsubAnn = firestore()
+        .collection("announcements")
+        .orderBy("createdAt", "desc")
+        .limit(20)
+        .onSnapshot(
+          (snapshot) => {
+            if (snapshot && !snapshot.empty) {
+              const allDocs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+              recentAnnouncementsRef.current = allDocs;
+              setAnnouncement(allDocs[0]);
+              updateUnreadCount(allDocs);
+            } else {
+              recentAnnouncementsRef.current = [];
+              setAnnouncement(null);
+              setUnreadNotifCount(0);
+            }
+          },
+          (error) => {
+            console.error("Realtime announcement listener error:", error);
+          }
+        );
 
       // Realtime Listener for Listings
       unsubListings = firestore()
@@ -141,6 +237,10 @@ export default function DashboardScreen() {
       if (unsubCases) {
         unsubCases();
         unsubCases = null;
+      }
+      if (unsubAnn) {
+        unsubAnn();
+        unsubAnn = null;
       }
     };
 
@@ -283,11 +383,31 @@ export default function DashboardScreen() {
           },
         ]}
       >
-        <Text style={[styles.topBarTitle, { color: themeColors.maroonPrimary }]}>
-          Artha
+        <Text style={[styles.topBarTitle, { color: themeColors.maroonPrimary, textTransform: "none" }]}>
+          artha
         </Text>
 
-        <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          {/* Notifications Inbox Bell */}
+          <TouchableOpacity
+            style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}
+            onPress={() => router.push("/notifications" as any)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialCommunityIcons
+              name={unreadNotifCount > 0 ? "bell-badge-outline" : "bell-outline"}
+              size={22}
+              color={unreadNotifCount > 0 ? themeColors.maroonPrimary : themeColors.textPrimary}
+            />
+            {unreadNotifCount > 0 && (
+              <View style={[styles.badgePill, { backgroundColor: themeColors.maroonPrimary }]}>
+                <Text style={styles.badgeText}>
+                  {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}
             onPress={() => router.push("/(tabs)/calculator" as any)}
@@ -321,15 +441,58 @@ export default function DashboardScreen() {
           />
         }
       >
+        {/* Announcement Banner */}
+        {dismissedLoaded && announcement && !dismissedAnnIds.includes(announcement.id) && (() => {
+          const isMalay = language === "BM";
+          const annTitle = isMalay
+            ? (announcement.titleBM || announcement.title)
+            : (announcement.titleEN || announcement.title);
+          const annMessage = isMalay
+            ? (announcement.messageBM || announcement.message)
+            : (announcement.messageEN || announcement.message);
+
+          return (
+          <Animated.View entering={FadeInDown.springify()} style={{ backgroundColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#DC26261A" : (announcement.type || "").toUpperCase() === "LISTING_ALERT" ? "#2563EB1A" : themeColors.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#EF444440" : themeColors.borderColor, padding: 14, marginBottom: 16, flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+            <TouchableOpacity 
+              activeOpacity={0.7}
+              onPress={() => {
+                const text = ((announcement.title || "") + " " + (announcement.message || "")).toLowerCase();
+                if (text.includes("update") || text.includes("version")) {
+                  router.push("/updates" as any);
+                }
+              }}
+              style={{ flex: 1 }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 4 }}>
+                {annTitle}
+              </Text>
+              <Text style={{ fontSize: 12, color: themeColors.textMuted, lineHeight: 17 }}>
+                {annMessage}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDismissAnnouncement(announcement.id);
+              }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              style={{ padding: 4 }}
+            >
+              <MaterialCommunityIcons name="close" size={18} color={themeColors.textMuted} />
+            </TouchableOpacity>
+          </Animated.View>
+          );
+        })()}
+
         {/* Welcome Section */}
-        <View style={styles.welcomeSection}>
+        <Animated.View entering={FadeInDown.duration(180)} style={styles.welcomeSection}>
           <Text style={[styles.welcomeTitle, { color: themeColors.textPrimary }]}>
             {t("greeting")}, {userProfile?.displayName ? userProfile.displayName.split(" ")[0] : "Agent"} 👋
           </Text>
           <Text style={[styles.welcomeSubtitle, { color: themeColors.textMuted }]}>
             {t("performanceSummary")}
           </Text>
-        </View>
+        </Animated.View>
 
         {/* Real Live Metrics Grid */}
         <View style={styles.metricsGrid}>
@@ -634,6 +797,26 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: 6,
     borderRadius: 20,
+    position: "relative",
+  },
+  badgePill: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 11,
   },
   welcomeSection: {
     marginBottom: 16,

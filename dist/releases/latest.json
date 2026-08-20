@@ -1,13 +1,15 @@
 {
-  "packageName": "com.umi.caseflow",
-  "versionName": "1.2.1",
-  "versionCode": 45,
-  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.2.1.apk",
-  "fileSizeBytes": 61827554,
-  "mandatory": false,
+  "versionName": "1.3.2-2",
+  "versionCode": 51,
+  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2-2.apk",
+  "releaseDate": "2026-08-21",
   "releaseNotes": [
-    "Fixed navigation bar overlap on 3-button navigation devices.",
-    "Improved Firestore realtime listener stability and memory efficiency.",
-    "Search filter null-safety and stability improvements."
-  ]
+    "🔔 Notifications Inbox: View all past agency announcements anytime from the new bell icon on your Dashboard.",
+    "📲 Direct Phone Notifications: Receive important announcements directly in your phone notification center.",
+    "🌐 Language Matching: Announcements now seamlessly adapt to your preferred language (English / Bahasa Melayu).",
+    "✨ Smarter Dashboard: Dismissed announcement banners stay closed permanently with zero startup flash."
+  ],
+  "isCritical": false,
+  "packageName": "com.umi.caseflow",
+  "fileSizeBytes": 61799847
 }

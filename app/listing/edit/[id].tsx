@@ -8,5 +8,5 @@ export default function ListingEditRoute() {
     return <Redirect href="/(tabs)/listings" />;
   }
 
-  return <Redirect href={{ pathname: "/(tabs)/tambah", params: { id } }} />;
+  return <Redirect href={{ pathname: "/tambah" as any, params: { id } }} />;
 }

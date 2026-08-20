@@ -30,7 +30,11 @@ export default function CaseDetailScreen() {
   const [permissionDenied, setPermissionDenied] = useState(false);
 
   const handleBackToCases = () => {
-    router.replace("/(tabs)/cases");
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/(tabs)/cases");
+    }
   };
 
   useEffect(() => {

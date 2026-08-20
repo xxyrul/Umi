@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import Animated, { 
   useAnimatedStyle, 
+  useSharedValue,
   withSpring, 
 } from "react-native-reanimated";
 import { ScrollAwareBarProvider, useScrollAwareBar } from "@/context/ScrollAwareBarContext";
@@ -16,6 +17,26 @@ const TABS = [
   { name: "listings", labelEN: "Listings", labelBM: "Listing", icon: "view-list" },
   { name: "profile", labelEN: "Profile", labelBM: "Profil", icon: "account" },
 ];
+
+function TabItemButton({ tab, isFocused, onPress, tintColor, tabLabel }: any) {
+  return (
+    <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={styles.tabItem}>
+      <MaterialCommunityIcons
+        name={tab.icon as any}
+        size={20}
+        color={tintColor}
+      />
+      <Text 
+        style={[
+          styles.tabLabel, 
+          { color: tintColor, fontWeight: isFocused ? "700" : "600" }
+        ]}
+      >
+        {tabLabel}
+      </Text>
+    </TouchableOpacity>
+  );
+}
 
 function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -64,21 +85,14 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
           const tabLabel = language === "BM" ? tab.labelBM : tab.labelEN;
 
           return (
-            <TouchableOpacity key={tab.name} onPress={onPress} style={styles.tabItem}>
-              <MaterialCommunityIcons
-                name={tab.icon as any}
-                size={20}
-                color={tintColor}
-              />
-              <Text 
-                style={[
-                  styles.tabLabel, 
-                  { color: tintColor, fontWeight: isFocused ? "700" : "600" }
-                ]}
-              >
-                {tabLabel}
-              </Text>
-            </TouchableOpacity>
+            <TabItemButton
+              key={tab.name}
+              tab={tab}
+              isFocused={isFocused}
+              onPress={onPress}
+              tintColor={tintColor}
+              tabLabel={tabLabel}
+            />
           );
         })}
       </View>
@@ -87,21 +101,25 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
 }
 
 export default function TabsLayout() {
+  const { themeColors } = useAppSettings();
+
   return (
     <ScrollAwareBarProvider>
       <Tabs
         tabBar={(props) => <CustomFloatingTabBar {...props} />}
         screenOptions={{
           headerShown: false,
+          freezeOnBlur: true,
+          sceneStyle: {
+            backgroundColor: themeColors.canvasBackground,
+          },
         }}
       >
         <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
         <Tabs.Screen name="cases" options={{ title: "Cases" }} />
         <Tabs.Screen name="listings" options={{ title: "Listings" }} />
         <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-        <Tabs.Screen name="tambah" options={{ href: null }} />
         <Tabs.Screen name="calculator" options={{ href: null }} />
-        <Tabs.Screen name="updates" options={{ href: null }} />
         <Tabs.Screen name="tasks" options={{ href: null }} />
       </Tabs>
     </ScrollAwareBarProvider>

@@ -1,6 +1,6 @@
 import auth from "@react-native-firebase/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
-import { firebaseAuth } from "./firebase";
+import { firebaseAuth, firebaseDB } from "./firebase";
 import { unregisterFromUpdateNotifications } from "./updateNotifications";
 import type { UserProfile } from "@/types/case";
 import { Platform } from "react-native";
@@ -34,9 +34,68 @@ export async function initializeGoogleSignIn(): Promise<void> {
 }
 
 /**
+ * Check if a user is an existing registered user or new user, and check suspension
+ */
+export async function isUserRegistrationComplete(uid: string): Promise<{ isRegistered: boolean; isSuspended: boolean }> {
+  try {
+    const doc = await firebaseDB.collection("users").doc(uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (data?.status === "SUSPENDED") {
+        return { isRegistered: false, isSuspended: true };
+      }
+      // Existing user account already active in the system
+      return { isRegistered: true, isSuspended: false };
+    }
+  } catch (e) {
+    console.warn("Could not check user registration status:", e);
+  }
+  return { isRegistered: false, isSuspended: false };
+}
+
+export async function checkUserRegistrationStatus(uid: string): Promise<{ isRegistered: boolean; userDoc?: any }> {
+  const res = await isUserRegistrationComplete(uid);
+  return { isRegistered: res.isRegistered };
+}
+
+import { validateInviteCodeOnly, claimInviteCodeOnly } from "./inviteCodes";
+
+/**
+ * Completes Google registration by validating and claiming the required invite code
+ */
+export async function completeGoogleRegistration(
+  uid: string,
+  email: string,
+  displayName: string,
+  inviteCode: string
+): Promise<{ success: boolean; code: string }> {
+  // 1. Validate invite code first
+  const { code: validatedCode, isMaster } = await validateInviteCodeOnly(inviteCode);
+
+  // 2. Set user record in Firestore
+  await firebaseDB.collection("users").doc(uid).set(
+    {
+      uid,
+      email,
+      displayName,
+      registeredWithCode: validatedCode,
+      role: "agent",
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+
+  // 3. Claim the code in Firestore
+  await claimInviteCodeOnly(validatedCode, email, displayName, isMaster);
+
+  return { success: true, code: validatedCode };
+}
+
+/**
  * Sign in with Google
  */
-export async function signInWithGoogle(): Promise<UserProfile> {
+export async function signInWithGoogle(): Promise<{ userProfile: UserProfile; isRegistered: boolean }> {
   try {
     if (Platform.OS === "web") {
       throw new Error("Google Sign-In is available in the Android app.");
@@ -52,12 +111,17 @@ export async function signInWithGoogle(): Promise<UserProfile> {
     const credential = auth.GoogleAuthProvider.credential(userInfo.idToken);
     const userCredential = await firebaseAuth.signInWithCredential(credential);
 
-    return {
+    // Check if this Google user is already a registered agent in Firestore
+    const { isRegistered } = await checkUserRegistrationStatus(userCredential.user.uid);
+
+    const userProfile: UserProfile = {
       uid: userCredential.user.uid,
       email: userCredential.user.email || "",
-      displayName: userCredential.user.displayName || "User",
+      displayName: userCredential.user.displayName || "Agent",
       photoURL: userCredential.user.photoURL || undefined,
     };
+
+    return { userProfile, isRegistered };
   } catch (error) {
     console.error("Error signing in with Google:", error);
     throw error;
@@ -90,13 +154,17 @@ export async function signInWithEmail(
 }
 
 /**
- * Create account with email and password
+ * Create account with email, password, and required invite code
  */
 export async function signUpWithEmail(
   email: string,
   password: string,
-  displayName: string
+  displayName: string,
+  inviteCode: string
 ): Promise<UserProfile> {
+  // 1. Validate invite code BEFORE creating account (does not consume it yet)
+  const { code: validatedCode, isMaster } = await validateInviteCodeOnly(inviteCode);
+
   try {
     const userCredential = await firebaseAuth.createUserWithEmailAndPassword(
       email,
@@ -108,6 +176,27 @@ export async function signUpWithEmail(
       displayName,
     });
 
+    // Dispatch email verification link (silently in background)
+    userCredential.user.sendEmailVerification().catch(() => {});
+
+    // Sync user record to Firestore with invite code tracking
+    try {
+      await firebaseDB.collection("users").doc(userCredential.user.uid).set({
+        uid: userCredential.user.uid,
+        email: userCredential.user.email || email,
+        displayName: displayName,
+        registeredWithCode: validatedCode,
+        role: "agent",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (dbError) {
+      console.warn("Could not sync user profile to Firestore:", dbError);
+    }
+
+    // Now safely consume the invite code
+    await claimInviteCodeOnly(validatedCode, email, displayName, isMaster).catch(() => {});
+
     return {
       uid: userCredential.user.uid,
       email: userCredential.user.email || "",
@@ -118,6 +207,24 @@ export async function signUpWithEmail(
     console.error("Error creating account:", error);
     throw error;
   }
+}
+
+/**
+ * Check if the user has an admin role in Firestore
+ */
+export async function getUserRole(uid: string): Promise<"admin" | "agent"> {
+  try {
+    const doc = await firebaseDB.collection("users").doc(uid).get();
+    if (doc.exists) {
+      const data = doc.data();
+      if (data?.role === "admin") {
+        return "admin";
+      }
+    }
+  } catch (e) {
+    console.warn("Could not fetch user role:", e);
+  }
+  return "agent";
 }
 
 /**
