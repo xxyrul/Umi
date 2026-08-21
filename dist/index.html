@@ -667,27 +667,24 @@
           }
         }
       })
-      .catch(() => {})
-      .finally(() => {
-        // Fetch Full History Manifest and filter out the active latest version
-        fetch('https://umiren-d6a66.web.app/releases/history.json')
-          .then(r => r.json())
-          .then(history => {
-            const container = document.getElementById('history-list-container');
-            if (!Array.isArray(history) || history.length === 0) {
-              container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px; padding: 12px;">No historical releases available.</div>';
-              return;
-            }
+    // Fetch Full History Manifest
+    fetch('https://umiren-d6a66.web.app/releases/history.json')
+      .then(r => r.json())
+      .then(history => {
+        const container = document.getElementById('history-list-container');
+        if (!Array.isArray(history) || history.length === 0) {
+          container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px; padding: 12px;">No historical releases available.</div>';
+          return;
+        }
 
-            // Dynamically show only previous/older versions
-            const previousReleases = history.filter(item => 
-              item.versionName !== latestVerName && Number(item.versionCode) < Number(latestBuildCode)
-            );
+        // Dynamically show only previous/older versions (exclude build 54 / v1.4.2)
+        const previousReleases = history.filter(item => 
+          Number(item.versionCode) < 54 && item.versionName !== '1.4.2'
+        );
 
         container.innerHTML = previousReleases.map((item, idx) => {
           const notes = Array.isArray(item.releaseNotes) ? item.releaseNotes : [];
           const date = item.releaseDate || item.date || '-';
-          const sizeMb = item.fileSizeBytes ? ` • ${(item.fileSizeBytes / (1024*1024)).toFixed(1)} MB` : '';
           const dlUrl = item.downloadUrl || ('https://umiren-d6a66.web.app/releases/artha-' + item.versionName + '.apk');
 
           return `
