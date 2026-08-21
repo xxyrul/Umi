@@ -411,6 +411,39 @@ async function main() {
     return;
   }
 
+  // Also record announcement in in-app notification box
+  try {
+    const annDocId = `ann_release_${manifest.versionCode}_${Date.now()}`;
+    const titleEN = `🚀 Artha Update v${manifest.versionName} Available!`;
+    const titleBM = `🚀 Kemaskini Artha v${manifest.versionName} Kini Tersedia!`;
+    const notesText = Array.isArray(manifest.releaseNotes) ? manifest.releaseNotes.join("\n") : (manifest.releaseNotes?.en || "");
+    const messageEN = notesText || `Version ${manifest.versionName} is now available for download.`;
+    const messageBM = notesText || `Versi ${manifest.versionName} kini boleh dimuat turun.`;
+
+    await fetch(firestoreUrl(projectId, `/announcements/${annDocId}`), {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        fields: {
+          title: { stringValue: titleEN },
+          titleEN: { stringValue: titleEN },
+          titleBM: { stringValue: titleBM },
+          message: { stringValue: messageEN },
+          messageEN: { stringValue: messageEN },
+          messageBM: { stringValue: messageBM },
+          type: { stringValue: "GENERAL" },
+          sentBy: { stringValue: "Artha Core Team" },
+          createdAt: { stringValue: new Date().toISOString() },
+        },
+      }),
+    });
+  } catch (err) {
+    console.warn("[notify-release] Could not save in-app announcement doc:", err.message);
+  }
+
   let sent = 0;
   let pruned = 0;
   for (const device of recipients) {
