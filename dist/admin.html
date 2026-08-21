@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Artha Admin Portal | Master Agency Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+  
+  <!-- Firebase App & Auth & Firestore SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <script>
+    // Strict sessionStorage: survives page refreshes, automatically destroyed on browser/tab close
+    try {
+      localStorage.removeItem('artha_admin_unlocked');
+      localStorage.removeItem('artha_admin_session_token');
+    } catch(e) {}
+
+    if (sessionStorage.getItem('artha_admin_unlocked') === 'true') {
+      document.documentElement.classList.add('artha-unlocked');
+    }
+  </script>
+
+  <style>
+    /* Prevent Flash of Login View when already unlocked */
+    html.artha-unlocked #view-login { display: none !important; }
+    html.artha-unlocked #view-dashboard { display: block !important; }
+    html.artha-unlocked #auth-nav { display: block !important; }
+
+    :root {
+      --bg-canvas: #070B14;
+      --bg-surface: #0E1626;
+      --bg-surface-elevated: #152238;
+      --bg-card: rgba(14, 22, 38, 0.75);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(225, 29, 72, 0.35);
+      --primary: #E11D48;
+      --primary-hover: #BE123C;
+      --primary-light: rgba(225, 29, 72, 0.15);
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --success: #10B981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --warning: #F59E0B;
+      --warning-bg: rgba(245, 158, 11, 0.12);
+      --danger: #EF4444;
+      --danger-bg: rgba(239, 68, 68, 0.12);
+      --info: #3B82F6;
+      --info-bg: rgba(59, 130, 246, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-canvas);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Top Bar */
+    header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 16px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(12px);
+    }
+
+    .header-inner {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text-main);
+    }
+
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #E11D48, #BE123C);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 18px;
+      color: #FFF;
+      box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35);
+    }
+
+    .brand-name {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-badge {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(225, 29, 72, 0.15);
+      color: #FDA4AF;
+      border: 1px solid rgba(225, 29, 72, 0.3);
+    }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .btn-logout {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #F87171;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-logout:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 24px 80px;
+      flex: 1;
+    }
+
+    /* Auth Wrap */
+    .auth-wrap {
+      max-width: 440px;
+      margin: 60px auto 0;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 36px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .auth-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      text-align: center;
+      letter-spacing: -0.5px;
+    }
+
+    .auth-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .nav-tab-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .nav-tab-btn:hover {
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .nav-tab-btn.active {
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+      color: #FFF;
+      border-color: var(--primary);
+      box-shadow: 0 4px 16px rgba(225, 29, 72, 0.35);
+    }
+
+    .tab-badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.25);
+      color: #FFF;
+      font-weight: 800;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 20px 24px;
+    }
+
+    .stat-card-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .stat-card-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -1px;
+    }
+
+    /* Panel Card */
+    .panel-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 28px;
+      margin-bottom: 24px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .panel-title {
+      font-size: 17px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Forms & Inputs */
+    .gen-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .input-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    .input-control {
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: var(--text-main);
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .input-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.15);
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+      color: #FFF;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      box-shadow: 0 4px 14px rgba(225, 29, 72, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(225, 29, 72, 0.4);
+    }
+
+    .btn-secondary {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--border-subtle);
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-icon-action {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-icon-action:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .btn-danger-action {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      color: #F87171;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-danger-action:hover {
+      background: rgba(239, 68, 68, 0.25);
+    }
+
+    .action-btn-group {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    /* Share Card */
+    .share-card {
+      display: none;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-highlight);
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+
+    .share-code-display {
+      font-size: 24px;
+      font-weight: 800;
+      color: #FDA4AF;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: 1px;
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    thead th {
+      background: var(--bg-canvas);
+      color: var(--text-dim);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border-subtle);
+      transition: background 0.15s;
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    tbody td {
+      padding: 16px 18px;
+      vertical-align: middle;
+    }
+
+    /* Badges & Pills */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-active { background: var(--success-bg); color: var(--success); }
+    .badge-used { background: var(--info-bg); color: var(--info); }
+    .badge-suspended { background: var(--warning-bg); color: var(--warning); }
+    .badge-revoked { background: var(--danger-bg); color: var(--danger); }
+    .badge-admin { background: rgba(225, 29, 72, 0.15); color: #FDA4AF; }
+
+    .code-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      cursor: pointer;
+      display: inline-block;
+      transition: all 0.2s;
+    }
+
+    .code-pill:hover {
+      background: rgba(225, 29, 72, 0.15);
+      border-color: rgba(225, 29, 72, 0.3);
+      color: #FDA4AF;
+    }
+
+    /* Tabs Filter Row */
+    .tabs-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      padding: 6px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-canvas);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: var(--bg-surface-elevated);
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Listings Row Enhancements */
+    .listing-cell-main {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 280px;
+    }
+
+    .listing-thumb {
+      width: 52px;
+      height: 52px;
+      border-radius: 10px;
+      object-fit: cover;
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+
+    .listing-thumb-fallback {
+      width: 52px;
+      height: 52px;
+      border-radius: 10px;
+      background: var(--bg-surface-elevated);
+      border: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .listing-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .listing-title {
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text-main);
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      line-height: 1.4;
+      cursor: pointer;
+    }
+
+    .listing-title:hover {
+      color: #FDA4AF;
+    }
+
+    .listing-specs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .spec-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .btn-whatsapp {
+      background: #25D366;
+      color: #FFF;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-whatsapp:hover {
+      background: #1EBE5D;
+      box-shadow: 0 4px 12px rgba(37, 211, 102, 0.35);
+    }
+
+    .status-select {
+      background: var(--bg-canvas);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      color: var(--text-main);
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      max-width: 680px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 28px;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.8);
+      position: relative;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: var(--text-main);
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
+      transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+      background: rgba(239, 68, 68, 0.3);
+      color: #F87171;
+    }
+
+    /* Toast */
+    #toast {
+      visibility: hidden;
+      min-width: 260px;
+      background-color: var(--bg-surface-elevated);
+      border: 1px solid var(--border-highlight);
+      color: #FFF;
+      text-align: center;
+      border-radius: 12px;
+      padding: 14px 20px;
+      position: fixed;
+      z-index: 100;
+      bottom: 30px;
+      right: 30px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      opacity: 0;
+      transition: opacity 0.3s, visibility 0.3s;
+    }
+
+    #toast.show {
+      visibility: visible;
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="header-inner">
+      <a href="/admin" class="brand">
+        <img src="./assets/icon.png" alt="Artha Logo" style="width: 36px; height: 36px; border-radius: 8px; object-fit: cover; box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35);" />
+        <div class="brand-name">Artha</div>
+        <span class="brand-badge">Admin Portal</span>
+      </a>
+
+      <div id="auth-nav" style="display: none;">
+        <div class="user-pill">
+          <a href="/" target="_blank" style="color: var(--text-muted); font-size: 12px; font-weight: 700; text-decoration: none; padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; transition: all 0.2s;">↗ Downloads</a>
+          <span id="user-email-display" style="font-weight: 600;">Super Admin</span>
+          <button class="btn-logout" onclick="handleLogout()">Sign Out</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- View 1: Passcode / Login Gate -->
+    <div id="view-login" class="auth-wrap">
+      <h2 class="auth-title">Admin Portal</h2>
+      <p class="auth-subtitle">Enter your access code to continue.</p>
+
+      <div class="input-group">
+        <input type="password" id="passcode-input" class="input-control" placeholder="Access Code" onkeydown="if(event.key==='Enter') unlockWithPasscode()" />
+      </div>
+
+      <button class="btn-primary" onclick="unlockWithPasscode()" style="margin-bottom: 20px; width: 100%; justify-content: center;">
+        Sign In
+      </button>
+
+      <div style="text-align: center; color: var(--text-dim); font-size: 11px; margin-bottom: 16px;">or continue with</div>
+
+      <button class="btn-secondary" style="width: 100%; justify-content: center; margin-bottom: 16px;" onclick="signInWithGoogle()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/></svg>
+        Google
+      </button>
+
+      <div class="input-group">
+        <label class="input-label">Email</label>
+        <input type="email" id="login-email" class="input-control" placeholder="admin@drtmasterlisting.com" />
+      </div>
+
+      <div class="input-group">
+        <label class="input-label">Password</label>
+        <input type="password" id="login-pass" class="input-control" placeholder="••••••••" onkeydown="if(event.key==='Enter') signInWithEmail()" />
+      </div>
+
+      <button class="btn-secondary" style="width: 100%; justify-content: center;" onclick="signInWithEmail()">
+        Sign In with Email
+      </button>
+    </div>
+
+    <!-- View 2: Claim Elevation Gate -->
+    <div id="view-claim" class="auth-wrap" style="display: none;">
+      <h2 class="auth-title">Claim Admin Privileges</h2>
+      <p class="auth-subtitle">Your account is not yet designated as an Admin. Enter your agency Master Secret Key to elevate this account.</p>
+
+      <div class="input-group">
+        <label class="input-label">Master Secret Key</label>
+        <input type="password" id="claim-secret-key" class="input-control" placeholder="Enter Master Key" />
+      </div>
+
+      <button class="btn-primary" onclick="claimAdminElevation()" style="width: 100%; justify-content: center;">
+        🔑 Verify & Unlock Admin Access
+      </button>
+    </div>
+
+    <!-- View 3: Full Admin Dashboard -->
+    <div id="view-dashboard" style="display: none;">
+      <!-- Navigation Tabs -->
+      <div class="nav-tabs">
+        <button class="nav-tab-btn active" id="tab-btn-codes" onclick="switchDashboardSection('codes')">
+          🔑 Single Code Generator <span class="tab-badge" id="badge-active-codes">0</span>
+        </button>
+        <button class="nav-tab-btn" id="tab-btn-batch" onclick="switchDashboardSection('batch')">
+          🎲 Batch Code Generator
+        </button>
+        <button class="nav-tab-btn" id="tab-btn-broadcast" onclick="switchDashboardSection('broadcast')">
+          📢 Broadcast Push Notice <span class="tab-badge" id="badge-announcements">0</span>
+        </button>
+        <button class="nav-tab-btn" id="tab-btn-agents" onclick="switchDashboardSection('agents')">
+          👥 Registered Agents <span class="tab-badge" id="badge-agents">0</span>
+        </button>
+        <button class="nav-tab-btn" id="tab-btn-listings" onclick="switchDashboardSection('listings')">
+          🏘️ Agency Master Listings <span class="tab-badge" id="badge-listings">0</span>
+        </button>
+      </div>
+
+      <!-- Stats Overview -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-card-title">Registered Agents</div>
+          <div class="stat-card-value" id="stat-agents-count">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Active Invite Codes</div>
+          <div class="stat-card-value" style="color: var(--success);" id="stat-active-codes">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Claimed (Used) Codes</div>
+          <div class="stat-card-value" style="color: var(--primary);" id="stat-used-codes">0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-title">Agency Listings</div>
+          <div class="stat-card-value" style="color: #60A5FA;" id="stat-listings-count">0</div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 1: Single Invite Code Generator ================= -->
+      <div id="section-codes">
+        <!-- Form Panel -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#E11D48"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+              Generate Single Registration Code
+            </div>
+            <button class="btn-secondary" onclick="generateRandomCodeInput()">
+              🎲 Random Key (XXXX-XXXX)
+            </button>
+          </div>
+
+          <div class="gen-grid">
+            <div class="input-group">
+              <label class="input-label">Invite Code / Key</label>
+              <input type="text" id="gen-code" class="input-control" placeholder="e.g. 7K9X-482A" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700;" />
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Code Type</label>
+              <select id="gen-type" class="input-control">
+                <option value="single">Single-Use (Auto-Expires on 1 Registration)</option>
+                <option value="team">Master Team Code (Multi-Use for All Agents)</option>
+                <option value="admin">👑 Admin Elevation Code</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Notes / Agent Name</label>
+              <input type="text" id="gen-notes" class="input-control" placeholder="e.g. For Agent Ahmad (Perak Branch)" />
+            </div>
+          </div>
+
+          <button class="btn-primary" style="max-width: 260px;" onclick="handleCreateInviteCode()">
+            ➕ Create & Activate Code
+          </button>
+
+          <!-- Share Output Card -->
+          <div id="share-card" class="share-card">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 11px; font-weight: 800; color: var(--success); text-transform: uppercase; letter-spacing: 0.5px;">✅ Code Activated</div>
+                <div class="share-code-display" id="share-code-text">ART-8492</div>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-secondary" onclick="copyShareMessage()">
+                  📋 Copy WhatsApp Invite
+                </button>
+                <button class="btn-primary" style="padding: 10px 16px; font-size: 13px;" onclick="openWhatsAppShare()">
+                  📲 Share to WhatsApp
+                </button>
+              </div>
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); background: var(--bg-canvas); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-subtle);" id="share-preview-text">
+              Loading preview...
+            </div>
+          </div>
+        </div>
+
+        <!-- Invite Codes Directory Table -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#64748B"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+              Invite Codes Directory
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="purgeClaimedCodes()">
+                🧹 Clean Claimed & Revoked Codes
+              </button>
+              <input type="text" id="filter-code-input" class="input-control" placeholder="Search codes / notes..." style="width: 200px; padding: 8px 12px; font-size: 12px;" oninput="renderCodesTable()" />
+            </div>
+          </div>
+
+          <div class="tabs-row">
+            <button class="tab-btn active" onclick="setCodesFilter('ALL', this)">All</button>
+            <button class="tab-btn" onclick="setCodesFilter('ACTIVE', this)">🟢 Active (Unused)</button>
+            <button class="tab-btn" onclick="setCodesFilter('USED', this)">✅ Used (Claimed)</button>
+            <button class="tab-btn" onclick="setCodesFilter('REVOKED', this)">⛔ Revoked</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code (Click to Copy)</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Claimed By</th>
+                  <th>Notes</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="codes-table-body">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading invite codes...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 2: Batch Invite Code Generator ================= -->
+      <div id="section-batch" style="display: none;">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#10B981"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+              Batch Generate Invite Codes (Bulk Onboarding)
+            </div>
+          </div>
+
+          <div class="gen-grid">
+            <div class="input-group">
+              <label class="input-label">Custom Prefix (Optional)</label>
+              <input type="text" id="batch-prefix" class="input-control" value="" placeholder="Leave blank for secure keys (e.g. 7K9X-482A)" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700;" />
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Number of Codes</label>
+              <select id="batch-count" class="input-control">
+                <option value="5">5 Codes</option>
+                <option value="10" selected>10 Codes</option>
+                <option value="25">25 Codes</option>
+                <option value="50">50 Codes</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Batch Notes / Cohort Tag</label>
+              <input type="text" id="batch-notes" class="input-control" placeholder="e.g. Intake Q3 - Perak Team" />
+            </div>
+          </div>
+
+          <button class="btn-primary" onclick="handleBatchGenerateCodes()">
+            🎲 Generate Batch Codes in 1-Click
+          </button>
+
+          <!-- Batch Output Box -->
+          <div id="batch-output-card" class="share-card" style="margin-top: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+              <div>
+                <div style="font-size: 11px; font-weight: 800; color: var(--success); text-transform: uppercase;">🎉 Batch Created Successfully</div>
+                <div style="font-size: 14px; font-weight: 700; color: var(--text-main);" id="batch-summary-text">10 codes generated</div>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn-secondary" onclick="copyBatchWhatsAppList()">
+                  📋 Copy WhatsApp List
+                </button>
+                <button class="btn-primary" onclick="downloadBatchCSV()">
+                  📥 Download CSV File
+                </button>
+              </div>
+            </div>
+            <div id="batch-pills-container" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 200px; overflow-y: auto; background: var(--bg-canvas); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 3: Broadcast Push Notice ================= -->
+      <div id="section-broadcast" style="display: none;">
+        <!-- Broadcast Form -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#3B82F6"><path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+              Broadcast Team Push Announcement
+            </div>
+          </div>
+
+          <div class="gen-grid">
+            <div class="input-group" style="grid-column: span 2;">
+              <label class="input-label">Announcement Title</label>
+              <input type="text" id="ann-title" class="input-control" placeholder="e.g. 📢 New Project Launch: Residensi Meru Ipoh" />
+            </div>
+
+            <div class="input-group">
+              <label class="input-label">Category / Priority</label>
+              <select id="ann-type" class="input-control">
+                <option value="GENERAL">📢 General Notice</option>
+                <option value="URGENT">🚨 Urgent Announcement</option>
+                <option value="LISTING_ALERT">💼 New Listing / Project</option>
+                <option value="COMMISSION">🏆 Commission / Incentive</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label class="input-label">Message Details</label>
+            <textarea id="ann-message" class="input-control" rows="3" placeholder="Type your announcement message here for all agents..."></textarea>
+          </div>
+
+          <button class="btn-primary" onclick="handleBroadcastAnnouncement()">
+            🚀 Broadcast Announcement to All Agents
+          </button>
+        </div>
+
+        <!-- Announcement History Table -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">Past Announcements Log</div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Category</th>
+                  <th>Message Preview</th>
+                  <th>Date Broadcasted</th>
+                  <th>Sent By</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="announcements-table-body">
+                <tr>
+                  <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading announcements...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 4: Registered Agents Directory ================= -->
+      <div id="section-agents" style="display: none;">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#E11D48"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+              Registered Agents Directory & Access Controls
+            </div>
+            <input type="text" id="filter-agents-input" class="input-control" placeholder="Search agents by name/email..." style="width: 240px; padding: 8px 12px; font-size: 12px;" oninput="renderAgentsTable()" />
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Agent Name</th>
+                  <th>Email</th>
+                  <th>Registered Date</th>
+                  <th>Code Used</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Access Controls</th>
+                </tr>
+              </thead>
+              <tbody id="agents-table-body">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading registered agents...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 5: Agency Master Listings ================= -->
+      <div id="section-listings" style="display: none;">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#3B82F6"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+              Agency Master Listings Feed
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <select id="filter-listing-status" class="input-control" style="width: 140px; padding: 8px 12px; font-size: 12px;" onchange="renderListingsTable()">
+                <option value="ALL">All Status</option>
+                <option value="Aktif">Aktif / Available</option>
+                <option value="Booking">Booking</option>
+                <option value="Sold">Sold / Closed</option>
+              </select>
+              <input type="text" id="filter-listing-input" class="input-control" placeholder="Search property, location, agent..." style="width: 220px; padding: 8px 12px; font-size: 12px;" oninput="renderListingsTable()" />
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Property</th>
+                  <th>Price (RM)</th>
+                  <th>Location</th>
+                  <th>Type</th>
+                  <th>Agent In Charge</th>
+                  <th>Status</th>
+                  <th style="text-align: right;">Contact</th>
+                </tr>
+              </thead>
+              <tbody id="listings-table-body">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading agency listings...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Listing Details Modal -->
+  <div id="listing-details-modal" class="modal-overlay" onclick="if(event.target===this) closeListingModal()">
+    <div class="modal-card">
+      <button class="modal-close" onclick="closeListingModal()">✕</button>
+      
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+        <span id="modal-listing-status" class="badge badge-active">Aktif</span>
+        <span id="modal-listing-type" style="font-size: 12px; color: var(--text-muted); font-weight: 700;">Teres</span>
+      </div>
+
+      <h2 id="modal-listing-title" style="font-size: 18px; font-weight: 800; line-height: 1.4; margin-bottom: 16px;">Property Title</h2>
+
+      <!-- Image Gallery -->
+      <div id="modal-gallery" style="display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 16px;"></div>
+
+      <!-- Price & Specs Grid -->
+      <div style="background: var(--bg-canvas); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 16px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px;">
+          <div>
+            <div style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Asking Price</div>
+            <div id="modal-listing-price" style="font-size: 24px; font-weight: 800; color: #FDA4AF;">RM 230,000</div>
+          </div>
+          <div id="modal-listing-loan" style="font-size: 12px; color: var(--text-muted); text-align: right;">Est. RM 1,020 / mo (30 yrs)</div>
+        </div>
+
+        <div id="modal-specs-pills" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;"></div>
+        <div id="modal-listing-address" style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">📍 Address</div>
+      </div>
+
+      <!-- Agent Info Box -->
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; background: var(--bg-surface-elevated); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 14px 18px; margin-bottom: 20px;">
+        <div>
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-dim); text-transform: uppercase;">Agent in Charge</div>
+          <div id="modal-agent-name" style="font-size: 14px; font-weight: 800; color: var(--text-main);">Agent Name</div>
+          <div id="modal-agent-email" style="font-size: 11px; color: var(--text-muted);">-</div>
+        </div>
+        <div id="modal-agent-contact-btn"></div>
+      </div>
+
+      <!-- Copywriting Section -->
+      <div style="margin-bottom: 16px; width: 100%;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <label style="font-size: 12px; font-weight: 700; color: var(--text-main);">Full Copywriting / Description</label>
+          <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" onclick="copyModalCopywriting(this)">📋 Copy Text</button>
+        </div>
+        <textarea id="modal-copywriting-text" class="input-control" rows="10" readonly style="width: 100%; box-sizing: border-box; font-family: inherit; font-size: 13px; line-height: 1.6; resize: vertical; min-height: 180px; white-space: pre-wrap; word-break: break-word;"></textarea>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="toast">Copied to clipboard!</div>
+
+  <script src="./admin.js"></script>
+</body>
+</html>

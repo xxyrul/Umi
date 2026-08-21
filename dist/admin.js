@@ -89,10 +89,13 @@ async function unlockWithPasscode() {
       throw new Error(data.error || 'Invalid Access Code');
     }
 
+    // Strict sessionStorage: Persists on page refresh, automatically wiped on browser/tab close
     sessionStorage.setItem('artha_admin_unlocked', 'true');
     sessionStorage.setItem('artha_admin_session_token', data.sessionToken);
-    localStorage.setItem('artha_admin_unlocked', 'true');
-    localStorage.setItem('artha_admin_session_token', data.sessionToken);
+    try {
+      localStorage.removeItem('artha_admin_unlocked');
+      localStorage.removeItem('artha_admin_session_token');
+    } catch(e) {}
 
     document.documentElement.classList.add('artha-unlocked');
     document.getElementById('auth-nav').style.display = 'block';
@@ -111,8 +114,8 @@ async function unlockWithPasscode() {
   }
 }
 
-// Auto unlock if previously unlocked with valid session
-if (sessionStorage.getItem('artha_admin_unlocked') === 'true' || localStorage.getItem('artha_admin_unlocked') === 'true') {
+// Auto unlock on refresh if active in current browser session
+if (sessionStorage.getItem('artha_admin_unlocked') === 'true') {
   document.documentElement.classList.add('artha-unlocked');
   document.getElementById('auth-nav').style.display = 'block';
   document.getElementById('user-email-display').textContent = 'Super Admin';
@@ -170,7 +173,6 @@ async function claimAdminElevation() {
       }, { merge: true });
       currentRole = 'admin';
       sessionStorage.setItem('artha_admin_unlocked', 'true');
-      localStorage.setItem('artha_admin_unlocked', 'true');
       document.documentElement.classList.add('artha-unlocked');
       showView('view-dashboard');
       restoreActiveTab();
@@ -185,8 +187,12 @@ async function claimAdminElevation() {
 // Logout
 function handleLogout() {
   sessionStorage.removeItem('artha_admin_unlocked');
-  localStorage.removeItem('artha_admin_unlocked');
-  localStorage.removeItem('artha_admin_active_tab');
+  sessionStorage.removeItem('artha_admin_session_token');
+  try {
+    localStorage.removeItem('artha_admin_unlocked');
+    localStorage.removeItem('artha_admin_session_token');
+    localStorage.removeItem('artha_admin_active_tab');
+  } catch(e) {}
   document.documentElement.classList.remove('artha-unlocked');
   auth.signOut();
   window.history.replaceState(null, '', '/admin');
@@ -209,7 +215,6 @@ auth.onAuthStateChanged(async (user) => {
       if (hasAdminClaim || hasAdminDoc || user.uid === 'admin_super_portal') {
         currentRole = 'admin';
         sessionStorage.setItem('artha_admin_unlocked', 'true');
-        localStorage.setItem('artha_admin_unlocked', 'true');
         document.documentElement.classList.add('artha-unlocked');
         showView('view-dashboard');
         restoreActiveTab();
@@ -222,8 +227,8 @@ auth.onAuthStateChanged(async (user) => {
       showView('view-claim');
     }
   } else {
-    // Check if unlocked via Access Code / Session Token
-    const isUnlocked = sessionStorage.getItem('artha_admin_unlocked') === 'true' || localStorage.getItem('artha_admin_unlocked') === 'true';
+    // Check if unlocked via current browser session
+    const isUnlocked = sessionStorage.getItem('artha_admin_unlocked') === 'true';
     if (isUnlocked) {
       document.documentElement.classList.add('artha-unlocked');
       document.getElementById('auth-nav').style.display = 'block';
@@ -236,7 +241,7 @@ auth.onAuthStateChanged(async (user) => {
 
     document.getElementById('auth-nav').style.display = 'none';
     sessionStorage.removeItem('artha_admin_unlocked');
-    localStorage.removeItem('artha_admin_unlocked');
+    sessionStorage.removeItem('artha_admin_session_token');
     document.documentElement.classList.remove('artha-unlocked');
     showView('view-login');
     stopRealtimeListeners();
