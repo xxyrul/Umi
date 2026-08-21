@@ -181,16 +181,20 @@ function RootLayoutInner({
     );
   }, [language]);
 
-  // Handle taps on broadcast announcement push notifications
+  // Handle taps on push notifications
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { kind?: string } | undefined;
-      if (data?.kind === "broadcast-announcement") {
-        router.push("/(tabs)");
+      const data = response.notification.request.content.data as { kind?: string; type?: string } | undefined;
+      if (
+        data?.kind === "broadcast-announcement" ||
+        data?.kind === "announcement" ||
+        data?.kind === "update-available"
+      ) {
+        router.push("/notifications" as any);
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     // Auth state is now managed globally by RootLayout to avoid duplicate listeners.

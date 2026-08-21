@@ -60,44 +60,48 @@ export default function NotificationsScreen() {
     }
   };
 
-  // Fetch latest 50 announcements from Firestore
-  const fetchAnnouncements = async () => {
-    try {
-      const snapshot = await firestore()
-        .collection("announcements")
-        .orderBy("createdAt", "desc")
-        .limit(50)
-        .get();
-
-      if (snapshot && !snapshot.empty) {
-        const items: AnnouncementItem[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          docId: doc.id,
-          ...doc.data(),
-        })) as AnnouncementItem[];
-        setAnnouncements(items);
-      } else {
-        setAnnouncements([]);
-      }
-    } catch (error) {
-      console.error("Error fetching notification history:", error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  };
-
+  // Realtime Firestore Listener for Announcements
   useEffect(() => {
     loadReadState();
-    fetchAnnouncements();
+
+    const unsubscribe = firestore()
+      .collection("announcements")
+      .orderBy("createdAt", "desc")
+      .limit(50)
+      .onSnapshot(
+        (snapshot) => {
+          if (snapshot && !snapshot.empty) {
+            const items: AnnouncementItem[] = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              docId: doc.id,
+              ...doc.data(),
+            })) as AnnouncementItem[];
+            setAnnouncements(items);
+          } else {
+            setAnnouncements([]);
+          }
+          setIsLoading(false);
+          setIsRefreshing(false);
+        },
+        (error) => {
+          console.error("Realtime announcement inbox error:", error);
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
+      );
 
     // Update last seen timestamp so the dashboard unread badge clears
     AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([loadReadState(), fetchAnnouncements()]);
+    await loadReadState();
+    setIsRefreshing(false);
   };
 
   const handleToggleExpand = async (id: string) => {
