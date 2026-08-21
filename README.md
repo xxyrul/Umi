@@ -1,15 +1,12 @@
 # 🏢 Artha (Umi) — Real Estate CaseFlow & Master Listing CRM
 
-[![Version](https://img.shields.io/badge/version-1.4.2%20(Build%2054)-E11D48.svg)](https://umiren-d6a66.web.app/)
-[![Vibecoded](https://img.shields.io/badge/built%20with-vibecoding%20⚡-8B5CF6.svg)](https://github.com/xxyrul/Umi)
+[![Version](https://img.shields.io/badge/version-1.4.2%20(Build%2054)-E11D48.svg)](#)
+[![Vibecoded](https://img.shields.io/badge/built%20with-vibecoding%20⚡-8B5CF6.svg)](#)
 [![React Native](https://img.shields.io/badge/React%20Native-0.76-61DAFB.svg)](https://reactnative.dev/)
 [![Expo](https://img.shields.io/badge/Expo%20SDK-52-000000.svg)](https://expo.dev/)
 [![Firebase](https://img.shields.io/badge/Firebase-Backend-FFCA28.svg)](https://firebase.google.com/)
 
 Master Listing and Case Management application for Malaysian Real Estate Negotiators (RENs).
-
-* **Download Portal:** [https://umiren-d6a66.web.app/](https://umiren-d6a66.web.app/)
-* **Admin Portal:** [https://umiren-d6a66.web.app/admin](https://umiren-d6a66.web.app/admin)
 
 ---
 
