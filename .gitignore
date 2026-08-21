@@ -12,7 +12,14 @@ node_modules/
 .expo/
 android/
 .android-sdk/
-ios/
-dist/
-.tmp.driveupload/
+# Build & Binaries
+*.apk
+platform-tools/
+.idea/
+artifacts/
+.firebase/*.cache
+*.log
+.replit
+replit.md
+
 # @end expo-cli
