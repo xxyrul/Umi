@@ -17,7 +17,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { firestore } from "@/services/firebase";
+import { firestore, auth } from "@/services/firebase";
+import {
+  syncNotificationStateWithCloud,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+} from "@/services/notificationStorage";
 
 export interface AnnouncementItem {
   id: string;
@@ -33,9 +38,6 @@ export interface AnnouncementItem {
   createdAt?: string;
 }
 
-const READ_IDS_KEY = "@read_notification_ids";
-const LAST_SEEN_KEY = "@last_seen_notifications_at";
-
 export default function NotificationsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -48,15 +50,13 @@ export default function NotificationsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Load read IDs
+  // Load & sync read IDs with Firestore cloud storage
   const loadReadState = async () => {
     try {
-      const stored = await AsyncStorage.getItem(READ_IDS_KEY);
-      if (stored) {
-        setReadIds(JSON.parse(stored));
-      }
+      const state = await syncNotificationStateWithCloud();
+      setReadIds(state.readIds);
     } catch (e) {
-      console.warn("Failed to load read notification ids", e);
+      console.warn("Failed to sync read notification ids", e);
     }
   };
 
@@ -90,9 +90,6 @@ export default function NotificationsScreen() {
         }
       );
 
-    // Update last seen timestamp so the dashboard unread badge clears
-    AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
-
     return () => {
       unsubscribe();
     };
@@ -110,20 +107,17 @@ export default function NotificationsScreen() {
       [id]: !prev[id],
     }));
 
-    // Mark as read if not already read
+    // Mark as read if not already read (syncs locally and to Firestore)
     if (!readIds.includes(id)) {
-      const updated = [...readIds, id];
+      const updated = await markNotificationAsRead(id);
       setReadIds(updated);
-      await AsyncStorage.setItem(READ_IDS_KEY, JSON.stringify(updated)).catch(() => {});
     }
   };
 
   const handleMarkAllRead = async () => {
     const allIds = announcements.map((a) => a.id);
-    const merged = Array.from(new Set([...readIds, ...allIds]));
+    const merged = await markAllNotificationsAsRead(allIds);
     setReadIds(merged);
-    await AsyncStorage.setItem(READ_IDS_KEY, JSON.stringify(merged)).catch(() => {});
-    await AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
   };
 
   const formatRelativeTime = (isoString?: string) => {

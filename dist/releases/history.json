@@ -1,15 +1,28 @@
 [
   {
+    "versionName": "1.4.2",
+    "versionCode": 54,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.2.apk",
+    "releaseDate": "2026-08-22",
+    "releaseNotes": [
+      "🔔 Smarter Notification Inbox: Notifications you've already read or cleared stay cleared on your account, even if you reinstall the app or clear data.",
+      "⚡ Real-Time In-App Sync: New announcements and release notes now appear instantly in your Notification Inbox without refreshing.",
+      "📲 Direct Notification Routing: Tapping any update or announcement notification opens your Notification Inbox directly."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
     "versionName": "1.4.1",
     "versionCode": 53,
     "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.1.apk",
-    "releaseDate": "2026-08-21",
+    "releaseDate": "2026-08-22",
     "releaseNotes": [
-      "📱 Universal Responsive UI Scaling: Automatic proportional scaling across all Android screen sizes and display zoom levels.",
-      "🖼️ Refined Photo Grid & Media Vault: Balanced 3-column square photo tiles with compact non-overlapping badges and reorder controls.",
-      "⚡ Seamless Listing Cache & Switching: Fixed image cross-contamination when switching between My Listings and All Listings.",
-      "🔢 Contextual Listing Counters: Added clear filtered count display matching segment totals.",
-      "🌐 Full Bilingual Navigation: Seamless language switching across listing creation, editing, and review steps."
+      "📱 Better Display on All Phones: Buttons, cards, and text now automatically fit and scale cleanly on every Android screen size and zoom level.",
+      "📸 Cleaner Photo Uploads: Neater square photo tiles with easy-to-tap controls when adding and editing listings.",
+      "⚡ Glitch-Free Listing Views: Fixed photos occasionally mixing up when switching between My Listings and All Listings.",
+      "🔒 Enhanced Security: Server-side admin authentication and direct navigation."
     ],
     "isCritical": false,
     "packageName": "com.umi.caseflow",

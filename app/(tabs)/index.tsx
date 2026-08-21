@@ -19,6 +19,10 @@ import { router, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Polyline, Defs, LinearGradient, Stop, Circle } from "react-native-svg";
 import { firestore, auth } from "@/services/firebase";
+import {
+  syncNotificationStateWithCloud,
+  dismissAnnouncementCloud,
+} from "@/services/notificationStorage";
 
 import { CaseCard } from "@/components";
 import { deleteCase } from "@/services/storage";
@@ -89,26 +93,24 @@ export default function DashboardScreen() {
     }, [updateUnreadCount])
   );
 
-  // Load dismissed announcement IDs from local storage
+  // Load & sync dismissed announcement IDs and read state from Firestore / local storage
   useEffect(() => {
-    AsyncStorage.getItem("@dismissed_announcements")
-      .then((val) => {
-        if (val) {
-          try {
-            setDismissedAnnIds(JSON.parse(val));
-          } catch (e) {}
+    const currentUser = auth().currentUser;
+    syncNotificationStateWithCloud(currentUser?.uid)
+      .then((state) => {
+        if (state.dismissedIds) {
+          setDismissedAnnIds(state.dismissedIds);
         }
+        updateUnreadCount();
       })
       .catch(() => {})
       .finally(() => setDismissedLoaded(true));
-  }, []);
+  }, [updateUnreadCount]);
 
   const handleDismissAnnouncement = async (id: string) => {
-    setDismissedAnnIds((prev) => {
-      const updated = [...prev, id];
-      AsyncStorage.setItem("@dismissed_announcements", JSON.stringify(updated)).catch(() => {});
-      return updated;
-    });
+    const currentUser = auth().currentUser;
+    const updated = await dismissAnnouncementCloud(id, currentUser?.uid);
+    setDismissedAnnIds(updated);
   };
 
   // Fetch Firestore Listings and Cases in Realtime
