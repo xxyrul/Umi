@@ -25,6 +25,7 @@ export interface PropertyListing {
 
   // Maklumat Asas
   tajuk: string;
+  description?: string;
   harga: number | string;
   alamat: string;
   negeri: string;

@@ -469,7 +469,8 @@ async function uploadFileToStorage(localUri: string, path: string): Promise<stri
  */
 export async function createPropertyListing(
   listingData: Partial<PropertyListing>,
-  files: ListingFiles
+  files: ListingFiles,
+  onProgress?: (progress: { current: number; total: number; stage: string }) => void
 ): Promise<PropertyListing> {
   try {
     const agentId = getCurrentUserId();
@@ -477,52 +478,49 @@ export async function createPropertyListing(
     const docRef = firestore().collection(LISTINGS_COLLECTION).doc();
     const listingId = docRef.id;
 
-    // Upload Property Images (Gambar Hartanah)
-    const uploadedGambarUrls: string[] = [];
+    // Upload Property Images (Gambar Hartanah) concurrently
+    let uploadedGambarUrls: string[] = [];
     if (files.gambar && files.gambar.length > 0) {
-      for (let i = 0; i < files.gambar.length; i++) {
-        const uri = files.gambar[i];
-        if (uri) {
-          const compressedUri = await compressImage(uri);
-          const ext = compressedUri.split(".").pop()?.split("?")[0] || "webp";
-          const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
-          const url = await uploadFileToStorage(compressedUri, path);
-          if (url) uploadedGambarUrls.push(url);
+      const totalImages = files.gambar.length;
+      let completed = 0;
+      onProgress?.({ current: 0, total: totalImages, stage: "photos" });
+
+      const uploadPromises = files.gambar.map(async (uri, i) => {
+        if (!uri) return "";
+        if (uri.startsWith("http://") || uri.startsWith("https://")) {
+          completed++;
+          onProgress?.({ current: completed, total: totalImages, stage: "photos" });
+          return uri;
         }
-      }
+        const compressedUri = await compressImage(uri);
+        const ext = compressedUri.split(".").pop()?.split("?")[0] || "webp";
+        const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
+        const url = await uploadFileToStorage(compressedUri, path);
+        completed++;
+        onProgress?.({ current: completed, total: totalImages, stage: "photos" });
+        return url;
+      });
+
+      const results = await Promise.all(uploadPromises);
+      uploadedGambarUrls = results.filter(Boolean);
     }
 
-    // Upload Geran Document
-    let geranUrl = "";
-    if (files.geran) {
-      const ext = files.geran.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/geran_${Date.now()}.${ext}`;
-      geranUrl = await uploadFileToStorage(files.geran, path);
-    }
-
-    // Upload IC Owner Document
-    let icOwnerUrl = "";
-    if (files.icOwner) {
-      const ext = files.icOwner.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/icOwner_${Date.now()}.${ext}`;
-      icOwnerUrl = await uploadFileToStorage(files.icOwner, path);
-    }
-
-    // Upload SPA Document (if provided)
-    let spaUrl = "";
-    if (files.spa) {
-      const ext = files.spa.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/spa_${Date.now()}.${ext}`;
-      spaUrl = await uploadFileToStorage(files.spa, path);
-    }
-
-    // Upload Bil Utility Document (if provided)
-    let bilUtilityUrl = "";
-    if (files.bilUtility) {
-      const ext = files.bilUtility.split(".").pop()?.split("?")[0] || "pdf";
-      const path = `listings/${listingId}/bilUtility_${Date.now()}.${ext}`;
-      bilUtilityUrl = await uploadFileToStorage(files.bilUtility, path);
-    }
+    // Upload Documents concurrently
+    onProgress?.({ current: 0, total: 1, stage: "documents" });
+    const [geranUrl, icOwnerUrl, spaUrl, bilUtilityUrl] = await Promise.all([
+      files.geran && !files.geran.startsWith("http")
+        ? uploadFileToStorage(files.geran, `listings/${listingId}/geran_${Date.now()}.${files.geran.split(".").pop()?.split("?")[0] || "pdf"}`)
+        : files.geran || "",
+      files.icOwner && !files.icOwner.startsWith("http")
+        ? uploadFileToStorage(files.icOwner, `listings/${listingId}/icOwner_${Date.now()}.${files.icOwner.split(".").pop()?.split("?")[0] || "pdf"}`)
+        : files.icOwner || "",
+      files.spa && !files.spa.startsWith("http")
+        ? uploadFileToStorage(files.spa, `listings/${listingId}/spa_${Date.now()}.${files.spa.split(".").pop()?.split("?")[0] || "pdf"}`)
+        : files.spa || "",
+      files.bilUtility && !files.bilUtility.startsWith("http")
+        ? uploadFileToStorage(files.bilUtility, `listings/${listingId}/bilUtility_${Date.now()}.${files.bilUtility.split(".").pop()?.split("?")[0] || "pdf"}`)
+        : files.bilUtility || "",
+    ]);
 
     const currentUser = auth().currentUser;
     const userId = currentUser?.uid || "";
@@ -533,6 +531,7 @@ export async function createPropertyListing(
       agentId,
       status: (listingData.status as any) || "Aktif",
       tajuk: listingData.tajuk || "",
+      description: listingData.description || "",
       harga: listingData.harga || "",
       alamat: listingData.alamat || "",
       negeri: listingData.negeri || "",
@@ -576,7 +575,8 @@ export async function createPropertyListing(
 export async function updatePropertyListing(
   listingId: string,
   listingData: Partial<PropertyListing>,
-  files: ListingFiles
+  files: ListingFiles,
+  onProgress?: (progress: { current: number; total: number; stage: string }) => void
 ): Promise<void> {
   try {
     const now = new Date().toISOString();
@@ -587,23 +587,31 @@ export async function updatePropertyListing(
       : null;
     const existingImageUrls = collectListingImageUrls(existingListing);
 
-    // 1. Upload new/existing images
-    const uploadedGambarUrls: string[] = [];
+    // 1. Upload new/existing images concurrently
+    let uploadedGambarUrls: string[] = [];
     if (files.gambar !== undefined && files.gambar.length > 0) {
-      for (let i = 0; i < files.gambar.length; i++) {
-        const uri = files.gambar[i];
-        if (uri) {
-          if (uri.startsWith("http://") || uri.startsWith("https://")) {
-            uploadedGambarUrls.push(uri);
-          } else {
-            const compressedUri = await compressImage(uri);
-            const ext = compressedUri.split(".").pop()?.split("?")[0] || "webp";
-            const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
-            const url = await uploadFileToStorage(compressedUri, path);
-            if (url) uploadedGambarUrls.push(url);
-          }
+      const totalImages = files.gambar.length;
+      let completed = 0;
+      onProgress?.({ current: 0, total: totalImages, stage: "photos" });
+
+      const uploadPromises = files.gambar.map(async (uri, i) => {
+        if (!uri) return "";
+        if (uri.startsWith("http://") || uri.startsWith("https://")) {
+          completed++;
+          onProgress?.({ current: completed, total: totalImages, stage: "photos" });
+          return uri;
         }
-      }
+        const compressedUri = await compressImage(uri);
+        const ext = compressedUri.split(".").pop()?.split("?")[0] || "webp";
+        const path = `listings/${listingId}/gambar_${i}_${Date.now()}.${ext}`;
+        const url = await uploadFileToStorage(compressedUri, path);
+        completed++;
+        onProgress?.({ current: completed, total: totalImages, stage: "photos" });
+        return url;
+      });
+
+      const results = await Promise.all(uploadPromises);
+      uploadedGambarUrls = results.filter(Boolean);
     }
 
     const finalGambarUrls =
@@ -611,50 +619,30 @@ export async function updatePropertyListing(
         ? existingImageUrls
         : (uploadedGambarUrls.length > 0 ? uploadedGambarUrls : (files.gambar.length === 0 ? [] : existingImageUrls));
 
-    // 2. Upload documents
-    let geranUrl = listingData.geran || null;
-    if (files.geran) {
-      if (files.geran.startsWith("http://") || files.geran.startsWith("https://")) {
-        geranUrl = files.geran;
-      } else {
-        const ext = files.geran.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/geran_${Date.now()}.${ext}`;
-        geranUrl = await uploadFileToStorage(files.geran, path);
-      }
-    }
-
-    let icOwnerUrl = listingData.icOwner || null;
-    if (files.icOwner) {
-      if (files.icOwner.startsWith("http://") || files.icOwner.startsWith("https://")) {
-        icOwnerUrl = files.icOwner;
-      } else {
-        const ext = files.icOwner.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/icOwner_${Date.now()}.${ext}`;
-        icOwnerUrl = await uploadFileToStorage(files.icOwner, path);
-      }
-    }
-
-    let spaUrl = listingData.spa || null;
-    if (files.spa) {
-      if (files.spa.startsWith("http://") || files.spa.startsWith("https://")) {
-        spaUrl = files.spa;
-      } else {
-        const ext = files.spa.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/spa_${Date.now()}.${ext}`;
-        spaUrl = await uploadFileToStorage(files.spa, path);
-      }
-    }
-
-    let bilUtilityUrl = listingData.bilUtility || null;
-    if (files.bilUtility) {
-      if (files.bilUtility.startsWith("http://") || files.bilUtility.startsWith("https://")) {
-        bilUtilityUrl = files.bilUtility;
-      } else {
-        const ext = files.bilUtility.split(".").pop()?.split("?")[0] || "pdf";
-        const path = `listings/${listingId}/bilUtility_${Date.now()}.${ext}`;
-        bilUtilityUrl = await uploadFileToStorage(files.bilUtility, path);
-      }
-    }
+    // 2. Upload documents concurrently
+    onProgress?.({ current: 0, total: 1, stage: "documents" });
+    const [geranUrl, icOwnerUrl, spaUrl, bilUtilityUrl] = await Promise.all([
+      files.geran
+        ? (files.geran.startsWith("http")
+            ? files.geran
+            : uploadFileToStorage(files.geran, `listings/${listingId}/geran_${Date.now()}.${files.geran.split(".").pop()?.split("?")[0] || "pdf"}`))
+        : (listingData.geran || null),
+      files.icOwner
+        ? (files.icOwner.startsWith("http")
+            ? files.icOwner
+            : uploadFileToStorage(files.icOwner, `listings/${listingId}/icOwner_${Date.now()}.${files.icOwner.split(".").pop()?.split("?")[0] || "pdf"}`))
+        : (listingData.icOwner || null),
+      files.spa
+        ? (files.spa.startsWith("http")
+            ? files.spa
+            : uploadFileToStorage(files.spa, `listings/${listingId}/spa_${Date.now()}.${files.spa.split(".").pop()?.split("?")[0] || "pdf"}`))
+        : (listingData.spa || null),
+      files.bilUtility
+        ? (files.bilUtility.startsWith("http")
+            ? files.bilUtility
+            : uploadFileToStorage(files.bilUtility, `listings/${listingId}/bilUtility_${Date.now()}.${files.bilUtility.split(".").pop()?.split("?")[0] || "pdf"}`))
+        : (listingData.bilUtility || null),
+    ]);
 
     // 3. Update the private document and its safe public projection.
     const privateUpdate = {

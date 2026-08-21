@@ -2,7 +2,10 @@ import * as ImageManipulator from "expo-image-manipulator";
 
 export async function compressImage(uri: string): Promise<string> {
   try {
-    if (uri.startsWith("http://") || uri.startsWith("https://")) {
+    if (!uri || uri.startsWith("http://") || uri.startsWith("https://")) {
+      return uri;
+    }
+    if (uri.includes("ImageManipulator") && uri.endsWith(".webp")) {
       return uri;
     }
     const manipResult = await ImageManipulator.manipulateAsync(

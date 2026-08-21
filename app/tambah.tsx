@@ -41,6 +41,9 @@ import Animated, {
 
 import type { PeganganType, LotStatusType, PropertyLocation, PropertyListing } from "@/types/listing";
 import { createPropertyListing, updatePropertyListing } from "@/services/storage";
+import { compressImage } from "@/utils/imageUtils";
+import { detectMalaysianState } from "@/utils/locationDetector";
+import { resolveLocationWithGoogleLearning, initLearnedLocationCache } from "@/services/learningLocationService";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { SPACING } from "@/constants/theme";
 
@@ -122,14 +125,22 @@ export default function TambahScreen() {
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; stage: string }>({
+    current: 0,
+    total: 0,
+    stage: "",
+  });
   const [currentStep, setCurrentStep] = useState(1);
 
   // Listing Form States
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const [tajuk, setTajuk] = useState("");
+  const [description, setDescription] = useState("");
   const [harga, setHarga] = useState("");
   const [alamat, setAlamat] = useState("");
   const [negeri, setNegeri] = useState("Selangor");
+  const [autoDetectedStateInfo, setAutoDetectedStateInfo] = useState<{ state: string; keyword: string } | null>(null);
+  const [hasManuallySelectedState, setHasManuallySelectedState] = useState(false);
   const [jenis, setJenis] = useState("Residential / Teres");
   const [pegangan, setPegangan] = useState<PeganganType>("Freehold");
   const [lot, setLot] = useState<LotStatusType>("Bumi Lot");
@@ -162,56 +173,213 @@ export default function TambahScreen() {
   const [isSearchingMap, setIsSearchingMap] = useState(false);
   const pickerMapRef = useRef<MapView>(null);
 
+  // Location Autocomplete Search logic with 300ms Debounce
   useEffect(() => {
     if (!isMapPickerVisible) return;
+    const query = pickerSearchQuery.trim();
+    if (query.length < 2) {
+      setPickerSuggestions([]);
+      setIsSearchingMap(false);
+      return;
+    }
+
     const delayDebounceFn = setTimeout(async () => {
-      if (pickerSearchQuery.length > 2) {
-        setIsSearchingMap(true);
-        try {
-          const GOOGLE_API_KEY = "AIzaSyBjWosdtEPIJz6IpqUjZtPQ-62ed8ly7iE";
-          const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': GOOGLE_API_KEY },
-            body: JSON.stringify({ input: pickerSearchQuery, includedRegionCodes: ['MY'] })
-          });
-          const data = await response.json();
-          setPickerSuggestions(data.suggestions || []);
-        } catch (err) {
-          console.error("Autocomplete error:", err);
-          setPickerSuggestions([]);
-        } finally {
-          setIsSearchingMap(false);
+      setIsSearchingMap(true);
+      try {
+        // 1. Try Photon OpenStreetMap Autocomplete (Fast, Free, prioritized for Malaysia)
+        const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lat=4.2105&lon=101.9758`;
+        const res = await fetch(photonUrl, {
+          headers: { Accept: "application/json" },
+        });
+        const json = await res.json();
+
+        if (json.features && json.features.length > 0) {
+          const suggestions = json.features
+            .map((f: any, idx: number) => {
+              const props = f.properties || {};
+              const coords = f.geometry?.coordinates || [];
+              const lon = coords[0];
+              const lat = coords[1];
+              const name = props.name || props.street || query;
+              const subtitleParts = [
+                props.street && props.street !== name ? props.street : null,
+                props.district || props.city || props.county,
+                props.state,
+                props.country,
+              ].filter(Boolean);
+
+              return {
+                id: `photon-${idx}-${lat}-${lon}`,
+                title: name,
+                subtitle: subtitleParts.join(", ") || props.country || "Malaysia",
+                latitude: lat,
+                longitude: lon,
+              };
+            })
+            .filter((s: any) => s.latitude && s.longitude);
+
+          if (suggestions.length > 0) {
+            setPickerSuggestions(suggestions);
+            setIsSearchingMap(false);
+            return;
+          }
         }
-      } else {
+
+        // 2. Fallback to Nominatim OpenStreetMap
+        const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&countrycodes=my&limit=8`;
+        const nomRes = await fetch(nominatimUrl, {
+          headers: { "User-Agent": "ArthaApp/1.3" },
+        });
+        const nomData = await nomRes.json();
+        if (Array.isArray(nomData) && nomData.length > 0) {
+          const suggestions = nomData.map((item: any, idx: number) => ({
+            id: `nom-${item.place_id || idx}`,
+            title: item.name || item.display_name?.split(",")[0] || query,
+            subtitle: item.display_name,
+            latitude: parseFloat(item.lat),
+            longitude: parseFloat(item.lon),
+          }));
+          setPickerSuggestions(suggestions);
+          setIsSearchingMap(false);
+          return;
+        }
+
+        // 3. Fallback to Native Geocoder
+        const nativeResults = await Location.geocodeAsync(
+          query.toLowerCase().includes("malaysia") ? query : `${query}, Malaysia`
+        );
+        if (nativeResults && nativeResults.length > 0) {
+          const suggestions = nativeResults.slice(0, 5).map((loc, idx) => ({
+            id: `native-${idx}`,
+            title: query,
+            subtitle: `Koordinat: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+          }));
+          setPickerSuggestions(suggestions);
+          setIsSearchingMap(false);
+          return;
+        }
+
         setPickerSuggestions([]);
+      } catch (err) {
+        console.warn("Location search error:", err);
+        try {
+          const nativeResults = await Location.geocodeAsync(
+            query.toLowerCase().includes("malaysia") ? query : `${query}, Malaysia`
+          );
+          if (nativeResults && nativeResults.length > 0) {
+            const suggestions = nativeResults.slice(0, 5).map((loc, idx) => ({
+              id: `native-${idx}`,
+              title: query,
+              subtitle: `Koordinat: ${loc.latitude.toFixed(4)}, ${loc.longitude.toFixed(4)}`,
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+            }));
+            setPickerSuggestions(suggestions);
+          } else {
+            setPickerSuggestions([]);
+          }
+        } catch {
+          setPickerSuggestions([]);
+        }
+      } finally {
+        setIsSearchingMap(false);
       }
-    }, 400);
+    }, 300);
+
     return () => clearTimeout(delayDebounceFn);
   }, [pickerSearchQuery, isMapPickerVisible]);
 
-  const handleSelectSuggestion = async (rawPlaceId: string) => {
+  // Initialize learned location cache on mount
+  useEffect(() => {
+    initLearnedLocationCache().catch(() => {});
+  }, []);
+
+  // Real-time location auto-detection from Title, Address, and Description
+  useEffect(() => {
+    const combined = `${tajuk} ${alamat} ${description}`.trim();
+    if (!combined || isEditMode) return;
+
+    // 1. Instant local dictionary check (0ms)
+    const localRes = detectMalaysianState(combined);
+    if (localRes) {
+      if (!hasManuallySelectedState || negeri === "Selangor") {
+        setNegeri(localRes.state);
+        setAutoDetectedStateInfo({ state: localRes.state, keyword: localRes.matchedKeyword });
+      }
+      return;
+    }
+
+    // 2. Google background geocoder + self learning fallback
+    const timer = setTimeout(async () => {
+      const googleRes = await resolveLocationWithGoogleLearning(combined);
+      if (googleRes) {
+        if (!hasManuallySelectedState || negeri === "Selangor") {
+          setNegeri(googleRes.state);
+          setAutoDetectedStateInfo({ state: googleRes.state, keyword: "Google Maps" });
+        }
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [tajuk, alamat, description, hasManuallySelectedState, isEditMode, negeri]);
+
+  const handleSelectSuggestion = (item: {
+    latitude: number;
+    longitude: number;
+    title: string;
+    subtitle?: string;
+  }) => {
+    Keyboard.dismiss();
+    setPickerSuggestions([]);
+    setIsSearchingMap(false);
+
+    const target = { latitude: item.latitude, longitude: item.longitude };
+    setPickerCoords(target);
+    if (item.subtitle || item.title) {
+      setPickerAddressPreview(item.subtitle || item.title);
+    }
+
+    pickerMapRef.current?.animateToRegion(
+      {
+        ...target,
+        latitudeDelta: 0.012,
+        longitudeDelta: 0.012,
+      },
+      500
+    );
+    updatePickerAddress(target.latitude, target.longitude);
+  };
+
+  const handleSearchSubmit = async () => {
+    const query = pickerSearchQuery.trim();
+    if (!query) return;
     Keyboard.dismiss();
     setPickerSuggestions([]);
     setIsSearchingMap(true);
+
     try {
-      const placeId = rawPlaceId.replace(/^places\//, "");
-      const GOOGLE_API_KEY = "AIzaSyBjWosdtEPIJz6IpqUjZtPQ-62ed8ly7iE";
-      const response = await fetch(`https://places.googleapis.com/v1/places/${placeId}?fields=location`, {
-        headers: { 'X-Goog-Api-Key': GOOGLE_API_KEY }
-      });
-      const data = await response.json();
-      if (data.location) {
-        const target = { latitude: data.location.latitude, longitude: data.location.longitude };
+      // Direct geocode on enter press
+      const results = await Location.geocodeAsync(
+        query.toLowerCase().includes("malaysia") ? query : `${query}, Malaysia`
+      );
+      if (results && results.length > 0) {
+        const first = results[0];
+        const target = { latitude: first.latitude, longitude: first.longitude };
         setPickerCoords(target);
-        pickerMapRef.current?.animateToRegion({
-          ...target,
-          latitudeDelta: 0.015,
-          longitudeDelta: 0.015,
-        }, 500);
+        pickerMapRef.current?.animateToRegion(
+          {
+            ...target,
+            latitudeDelta: 0.012,
+            longitudeDelta: 0.012,
+          },
+          500
+        );
         updatePickerAddress(target.latitude, target.longitude);
       }
     } catch (err) {
-      console.error("Place details error:", err);
+      console.warn("Search submit geocode error:", err);
     } finally {
       setIsSearchingMap(false);
     }
@@ -296,6 +464,7 @@ export default function TambahScreen() {
         if (doc.exists) {
           const data = doc.data() as PropertyListing;
           if (data.tajuk) setTajuk(data.tajuk);
+          if ((data as any).description) setDescription((data as any).description);
           if (data.harga) setHarga(String(data.harga));
           if (data.alamat) setAlamat(data.alamat);
           if (data.negeri) setNegeri(data.negeri);
@@ -476,9 +645,30 @@ export default function TambahScreen() {
         quality: 0.8,
       });
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const newUris = result.assets.map((asset) => asset.uri);
+        const rawUris = result.assets.map((asset) => asset.uri);
         setHasEditedImages(true);
-        setGambar((prev) => [...prev, ...newUris]);
+        setGambar((prev) => [...prev, ...rawUris]);
+
+        // Background pre-compression so images are tiny WebP files before submit
+        (async () => {
+          try {
+            const compressed = await Promise.all(
+              rawUris.map((uri) => compressImage(uri))
+            );
+            setGambar((prev) => {
+              const updated = [...prev];
+              rawUris.forEach((raw, i) => {
+                const idx = updated.indexOf(raw);
+                if (idx !== -1 && compressed[i]) {
+                  updated[idx] = compressed[i];
+                }
+              });
+              return updated;
+            });
+          } catch (e) {
+            console.warn("Background pre-compression warning:", e);
+          }
+        })();
       }
     } catch (error) {
       console.error("Image picking error:", error);
@@ -533,7 +723,7 @@ export default function TambahScreen() {
   };
 
   const resetForm = () => {
-    setTajuk(""); setHarga(""); setAlamat(""); setNegeri("Selangor"); setJenis("Residential / Teres");
+    setTajuk(""); setDescription(""); setHarga(""); setAlamat(""); setNegeri("Selangor"); setJenis("Residential / Teres");
     setPegangan("Freehold"); setLot("Bumi Lot"); setListingStatus("Aktif"); setBilikTidur("3"); setBilikAir("2");
     setKeluasan(""); setNamaOwner(""); setTelOwner(""); setLocation(null); setGambar([]);
     setGeran(null); setGeranName(null); setSpa(null); setSpaName(null); setIcOwner(null); setIcOwnerName(null);
@@ -545,23 +735,28 @@ export default function TambahScreen() {
     if (!harga.trim()) { Alert.alert(t("incompleteInfo") || "Incomplete", t("enterPrice") || "Please enter price"); return; }
     try {
       setIsSubmitting(true);
+      setUploadProgress({ current: 0, total: 0, stage: "" });
       const listingData = {
-        tajuk: tajuk.trim(), harga: harga.trim(), alamat: alamat.trim(), negeri, jenis, pegangan, lot,
+        tajuk: tajuk.trim(), description: description.trim(), harga: harga.trim(), alamat: alamat.trim(), negeri, jenis, pegangan, lot,
         bilikTidur: parseInt(bilikTidur) || 0, bilikAir: parseInt(bilikAir) || 0, keluasan: keluasan.trim(),
         location, namaOwner: namaOwner.trim(), telOwner: telOwner.trim(), navLink: navLink.trim(), status: listingStatus,
       };
       const files = { gambar: isEditMode ? (hasEditedImages ? gambar : undefined) : gambar, geran, spa, icOwner };
+      const onProgress = (p: { current: number; total: number; stage: string }) => {
+        setUploadProgress(p);
+      };
       if (isEditMode && editId) {
-        await updatePropertyListing(editId, listingData, files);
+        await updatePropertyListing(editId, listingData, files, onProgress);
         Alert.alert(t("listingUpdated") || "Updated", `"${tajuk}"`, [{ text: t("goToListing") || "OK", onPress: () => { resetForm(); router.replace("/(tabs)/listings"); } }]);
       } else {
-        await createPropertyListing(listingData, files);
+        await createPropertyListing(listingData, files, onProgress);
         Alert.alert(t("listingSaved") || "Saved", `"${tajuk}"`, [{ text: t("goToListing") || "OK", onPress: () => { resetForm(); router.replace("/(tabs)/listings"); } }]);
       }
     } catch (error: any) {
       Alert.alert(t("saveFailed") || "Failed", error?.message || t("errorTitle"));
     } finally {
       setIsSubmitting(false);
+      setUploadProgress({ current: 0, total: 0, stage: "" });
     }
   };
 
@@ -643,6 +838,31 @@ export default function TambahScreen() {
       </View>
 
       <TextInput placeholder={language === "BM" ? "Keluasan (sqft)" : "Size (sqft)"} placeholderTextColor={themeColors.textMuted} value={keluasan} onChangeText={setKeluasan} keyboardType="default" onFocus={handleInputFocus} style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]} />
+
+      {/* Description / Keterangan (Pilihan) */}
+      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary, marginTop: SPACING.md }]}>
+        {language === "BM" ? "Keterangan / Penerangan (Pilihan)" : "Description / Details (Optional)"}
+      </Text>
+      <TextInput
+        placeholder={language === "BM" ? "Salin/tampal maklumat penuh hartanah, kemudahan berdekatan, atau nota tambahan di sini..." : "Paste full property copywriting, nearby amenities, or additional notes here..."}
+        placeholderTextColor={themeColors.textMuted}
+        value={description}
+        onChangeText={setDescription}
+        multiline
+        numberOfLines={4}
+        textAlignVertical="top"
+        onFocus={handleInputFocus}
+        style={[
+          styles.input,
+          {
+            color: themeColors.textPrimary,
+            backgroundColor: themeColors.cardBackground,
+            borderColor: themeColors.borderColor,
+            minHeight: 90,
+            paddingTop: 12,
+          },
+        ]}
+      />
     </Animated.View>
   );
 
@@ -733,9 +953,19 @@ export default function TambahScreen() {
       ) : null}
 
       {/* State (Negeri) Dropdown Trigger */}
-      <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 6, marginTop: 4 }]}>
-        {language === "BM" ? "Negeri" : "State"}
-      </Text>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6, marginTop: 4 }}>
+        <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 0 }]}>
+          {language === "BM" ? "Negeri" : "State"}
+        </Text>
+        {autoDetectedStateInfo ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: `${themeColors.maroonPrimary}15`, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: `${themeColors.maroonPrimary}30` }}>
+            <MaterialCommunityIcons name="auto-fix" size={12} color={themeColors.maroonPrimary} />
+            <Text style={{ fontSize: 11, fontWeight: "600", color: themeColors.maroonPrimary }}>
+              {language === "BM" ? `Dikesan: ${autoDetectedStateInfo.keyword}` : `Detected: ${autoDetectedStateInfo.keyword}`}
+            </Text>
+          </View>
+        ) : null}
+      </View>
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={() => setIsStateModalVisible(true)}
@@ -1043,6 +1273,8 @@ export default function TambahScreen() {
                   placeholderTextColor={themeColors.textMuted}
                   value={pickerSearchQuery}
                   onChangeText={setPickerSearchQuery}
+                  onSubmitEditing={handleSearchSubmit}
+                  returnKeyType="search"
                   style={{ flex: 1, fontSize: 14, color: themeColors.textPrimary }}
                 />
                 {isSearchingMap ? (
@@ -1063,7 +1295,7 @@ export default function TambahScreen() {
                     borderRadius: 12,
                     borderWidth: 1,
                     borderColor: themeColors.borderColor,
-                    maxHeight: 220,
+                    maxHeight: 240,
                     shadowColor: "#000",
                     shadowOffset: { width: 0, height: 4 },
                     shadowOpacity: 0.3,
@@ -1076,11 +1308,11 @@ export default function TambahScreen() {
                     keyboardShouldPersistTaps="always"
                     nestedScrollEnabled={true}
                     showsVerticalScrollIndicator={true}
-                    style={{ maxHeight: 220 }}
+                    style={{ maxHeight: 240 }}
                   >
                     {pickerSuggestions.map((item, index) => (
                       <TouchableOpacity
-                        key={item.placePrediction?.placeId || `place-${index}`}
+                        key={item.id || `place-${index}`}
                         activeOpacity={0.7}
                         style={{
                           paddingHorizontal: 14,
@@ -1088,16 +1320,21 @@ export default function TambahScreen() {
                           borderBottomWidth: index === pickerSuggestions.length - 1 ? 0 : 1,
                           borderBottomColor: themeColors.borderColor,
                         }}
-                        onPress={() => handleSelectSuggestion(item.placePrediction?.place || item.placePrediction?.placeId)}
+                        onPress={() => handleSelectSuggestion(item)}
                       >
-                        <Text style={{ color: themeColors.textPrimary, fontWeight: "700", fontSize: 14 }}>
-                          {item.placePrediction?.structuredFormat?.mainText?.text || item.placePrediction?.text?.text}
-                        </Text>
-                        {item.placePrediction?.structuredFormat?.secondaryText?.text ? (
-                          <Text style={{ color: themeColors.textSecondary, fontSize: 12, marginTop: 2 }}>
-                            {item.placePrediction.structuredFormat.secondaryText.text}
-                          </Text>
-                        ) : null}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                          <MaterialCommunityIcons name="map-marker-outline" size={20} color={themeColors.maroonPrimary} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ color: themeColors.textPrimary, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
+                              {item.title}
+                            </Text>
+                            {item.subtitle ? (
+                              <Text style={{ color: themeColors.textSecondary, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
+                                {item.subtitle}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -1313,6 +1550,8 @@ export default function TambahScreen() {
                         activeOpacity={0.7}
                         onPress={() => {
                           setNegeri(stateItem);
+                          setHasManuallySelectedState(true);
+                          setAutoDetectedStateInfo(null);
                           setIsStateModalVisible(false);
                           setStateSearchQuery("");
                           Haptics.selectionAsync().catch(() => {});
@@ -1346,6 +1585,45 @@ export default function TambahScreen() {
             </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Uploading Progress Overlay Modal */}
+      <Modal visible={isSubmitting} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <View style={{ width: "100%", maxWidth: 320, backgroundColor: themeColors.cardBackground, borderRadius: 20, padding: 24, alignItems: "center", gap: 14 }}>
+            <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
+            <Text style={{ fontSize: 17, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
+              {isEditMode
+                ? (language === "BM" ? "Mengemaskini Listing..." : "Updating Listing...")
+                : (language === "BM" ? "Menyimpan Listing..." : "Saving Listing...")}
+            </Text>
+            {uploadProgress.total > 0 ? (
+              <View style={{ width: "100%", gap: 8 }}>
+                <Text style={{ fontSize: 13, color: themeColors.textSecondary, textAlign: "center" }}>
+                  {uploadProgress.stage === "photos"
+                    ? (language === "BM"
+                        ? `Memuat naik foto ${uploadProgress.current}/${uploadProgress.total} (${Math.round((uploadProgress.current / Math.max(uploadProgress.total, 1)) * 100)}%)`
+                        : `Uploading photo ${uploadProgress.current}/${uploadProgress.total} (${Math.round((uploadProgress.current / Math.max(uploadProgress.total, 1)) * 100)}%)`)
+                    : (language === "BM" ? "Memproses dokumen..." : "Processing documents...")}
+                </Text>
+                <View style={{ height: 6, width: "100%", backgroundColor: themeColors.surfaceContainer, borderRadius: 3, overflow: "hidden" }}>
+                  <View
+                    style={{
+                      height: "100%",
+                      width: `${Math.round((uploadProgress.current / Math.max(uploadProgress.total, 1)) * 100)}%`,
+                      backgroundColor: themeColors.maroonPrimary,
+                      borderRadius: 3,
+                    }}
+                  />
+                </View>
+              </View>
+            ) : (
+              <Text style={{ fontSize: 13, color: themeColors.textSecondary, textAlign: "center" }}>
+                {language === "BM" ? "Menyediakan data..." : "Preparing data..."}
+              </Text>
+            )}
+          </View>
+        </View>
       </Modal>
     </KeyboardAvoidingView>
   );

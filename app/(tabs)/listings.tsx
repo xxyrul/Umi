@@ -39,41 +39,8 @@ import type { PropertyListing } from "@/types/listing";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { ListingSkeleton } from "@/components/ListingSkeleton";
-
-const STATE_COORDINATES: Record<string, { latitude: number; longitude: number }> = {
-  "kuala lumpur": { latitude: 3.139, longitude: 101.6869 },
-  "selangor": { latitude: 3.0738, longitude: 101.5183 },
-  "putrajaya": { latitude: 2.9264, longitude: 101.6964 },
-  "perak": { latitude: 4.5921, longitude: 101.0901 },
-  "penang": { latitude: 5.4164, longitude: 100.3327 },
-  "pulau pinang": { latitude: 5.4164, longitude: 100.3327 },
-  "johor": { latitude: 1.4927, longitude: 103.7414 },
-  "kedah": { latitude: 6.1184, longitude: 100.3685 },
-  "kelantan": { latitude: 6.1254, longitude: 102.2381 },
-  "melaka": { latitude: 2.1896, longitude: 102.2501 },
-  "malacca": { latitude: 2.1896, longitude: 102.2501 },
-  "negeri sembilan": { latitude: 2.7258, longitude: 101.9424 },
-  "pahang": { latitude: 3.8126, longitude: 103.3256 },
-  "perlis": { latitude: 6.4449, longitude: 100.1986 },
-  "sabah": { latitude: 5.9804, longitude: 116.0735 },
-  "sarawak": { latitude: 1.5533, longitude: 110.3592 },
-  "terengganu": { latitude: 5.3117, longitude: 103.1324 },
-  "labuan": { latitude: 5.2831, longitude: 115.2308 },
-};
-
-function getListingCoordinates(item: PropertyListing, index: number): { latitude: number; longitude: number } {
-  if (item.location && typeof item.location.latitude === "number" && typeof item.location.longitude === "number" && item.location.latitude !== 0) {
-    return { latitude: item.location.latitude, longitude: item.location.longitude };
-  }
-  const negeri = (item.negeri || "").toLowerCase().trim();
-  const base = STATE_COORDINATES[negeri] || { latitude: 3.139, longitude: 101.6869 };
-  const offsetLat = ((index % 7) - 3) * 0.015 + ((item.id.charCodeAt(0) || 0) % 5) * 0.002;
-  const offsetLng = (((index * 3) % 7) - 3) * 0.015 + ((item.id.charCodeAt(item.id.length - 1) || 0) % 5) * 0.002;
-  return {
-    latitude: base.latitude + offsetLat,
-    longitude: base.longitude + offsetLng,
-  };
-}
+import { cleanListingTitle } from "@/utils/loanCalculator";
+import { resolveListingLocation, getSmartListingCoordinates } from "@/utils/locationDetector";
 
 function formatCompactPrice(value: string | number | undefined): string {
   const parsed = parsePriceNumber(value);
@@ -579,11 +546,19 @@ export default function MasterListingScreen() {
     }
   };
 
+  const isListingActiveOrBooked = (item: PropertyListing) => {
+    const s = (item.status || "").toString().toLowerCase().trim();
+    return s === "aktif" || s === "active" || s === "booking";
+  };
+
   const myListingsCount = useMemo(
     () => listings.filter((item) => isListingOwnedByUser(item, currentUserId)).length,
     [listings, currentUserId]
   );
-  const allListingsCount = listings.length;
+  const allListingsCount = useMemo(
+    () => listings.filter((item) => isListingActiveOrBooked(item)).length,
+    [listings]
+  );
 
   // Compute active filter count for badge (Aktif is the natural default, so count is 0)
   const activeFilterCount = useMemo(() => {
@@ -610,16 +585,21 @@ export default function MasterListingScreen() {
   // Segment + Filter + Search Logic (Memoized for max performance)
   const filteredListings = useMemo(() => {
     return listings.filter((item: PropertyListing) => {
-      if (activeSegment === "mine" && !isListingOwnedByUser(item, currentUserId)) return false;
-
-      // Draft listings are private — only visible to their owner
+      const isMine = isListingOwnedByUser(item, currentUserId);
       const rawStatus = (item.status || "").toString().toLowerCase().trim();
-      if (rawStatus === "draft" && !isListingOwnedByUser(item, currentUserId)) return false;
+
+      if (activeSegment === "mine") {
+        if (!isMine) return false;
+      } else {
+        // Public "All Listings" marketplace strictly shows active / booking listings
+        if (rawStatus === "draft") return false;
+        if (rawStatus === "sold" || rawStatus === "terjual") return false;
+      }
 
       if (activeFilter !== "Semua") {
-        const status = (item.status || "").toString().toLowerCase().trim();
+        const status = rawStatus;
         if (activeFilter === "Sold" && status !== "terjual" && status !== "sold") return false;
-        if (activeFilter === "Booking" && status !== "draft" && status !== "booking") return false;
+        if (activeFilter === "Booking" && status !== "booking") return false;
         if (activeFilter === "Aktif" && status !== "aktif" && status !== "active") return false;
         if (activeFilter === "Draft" && status !== "draft") return false;
       }
@@ -976,9 +956,7 @@ export default function MasterListingScreen() {
   const renderListingCard = ({ item }: { item: PropertyListing }) => {
     const imageUri = getListingImageUri(item);
     const allImages = getListingImagesList(item);
-    const locationLabel =
-      [item.alamat, item.negeri].map((part) => (part || "").trim()).filter(Boolean).join(", ") ||
-      "Lokasi tiada";
+    const locationLabel = resolveListingLocation(item).displayLocation || "Lokasi tiada";
     const sizeLabel = formatSizeLabel(item.keluasan);
 
     return (
@@ -1021,7 +999,7 @@ export default function MasterListingScreen() {
 
           <View style={styles.cardContent}>
             <Text style={[styles.cardTitle, { color: themeColors.textPrimary }]} numberOfLines={2}>
-              {item.tajuk}
+              {cleanListingTitle(item.tajuk)}
             </Text>
 
             <Text style={[styles.cardPrice, { color: themeColors.maroonPrimary }]} numberOfLines={1}>
@@ -1095,7 +1073,7 @@ export default function MasterListingScreen() {
     const imageUri = getListingImageUri(item);
     const allImages = getListingImagesList(item);
     const isOwner = isListingOwnedByUser(item, currentUserId);
-    const locationLabel = item.negeri || item.alamat || "Malaysia";
+    const locationLabel = resolveListingLocation(item).displayState || item.negeri || "Malaysia";
     const sizeLabel = formatSizeLabel(item.keluasan);
 
     return (
@@ -1176,7 +1154,7 @@ export default function MasterListingScreen() {
             style={[styles.gridCardTitle, { color: themeColors.textPrimary }]}
             numberOfLines={2}
           >
-            {item.tajuk}
+            {cleanListingTitle(item.tajuk)}
           </Text>
 
           <View style={styles.gridLocationRow}>
@@ -1566,7 +1544,7 @@ export default function MasterListingScreen() {
             }}
           >
             {sortedListings.map((item, idx) => {
-              const coords = getListingCoordinates(item, idx);
+              const coords = getSmartListingCoordinates(item, idx);
               const isSelected = selectedMapListing?.id === item.id;
               return (
                 <Marker
@@ -1661,10 +1639,10 @@ export default function MasterListingScreen() {
                     {formatPriceLabel(selectedMapListing.harga)}
                   </Text>
                   <Text style={[styles.mapCardTitle, { color: themeColors.textPrimary }]} numberOfLines={1}>
-                    {selectedMapListing.tajuk}
+                    {cleanListingTitle(selectedMapListing.tajuk)}
                   </Text>
                   <Text style={[styles.mapCardLocation, { color: themeColors.textMuted }]} numberOfLines={1}>
-                    📍 {selectedMapListing.negeri || selectedMapListing.alamat || "Malaysia"}
+                    📍 {resolveListingLocation(selectedMapListing).displayLocation}
                   </Text>
                   {(selectedMapListing.bilikTidur || selectedMapListing.bilikAir) ? (
                     <Text style={[styles.mapCardSpecs, { color: themeColors.textSecondary }]}>
