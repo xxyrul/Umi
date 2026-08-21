@@ -1002,12 +1002,13 @@ export default function MasterListingScreen() {
           <View style={{ position: "relative" }}>
             {imageUri ? (
               <ExpoImage
+                key={`thumb-${item.id}-${imageUri}`}
                 source={{ uri: imageUri }}
                 style={styles.thumbnail}
                 contentFit="cover"
-                transition={200}
+                transition={150}
                 cachePolicy="memory-disk"
-                recyclingKey={imageUri}
+                recyclingKey={`thumb-${item.id}`}
               />
             ) : (
               <View style={[styles.thumbnailPlaceholder, { backgroundColor: themeColors.maroonLight, borderColor: themeColors.maroonBorder }]}>
@@ -1125,12 +1126,13 @@ export default function MasterListingScreen() {
         <View style={styles.gridImageWrap}>
           {imageUri ? (
             <ExpoImage
+              key={`grid-thumb-${item.id}-${imageUri}`}
               source={{ uri: imageUri }}
               style={styles.gridThumbnail}
               contentFit="cover"
               transition={150}
               cachePolicy="memory-disk"
-              recyclingKey={imageUri}
+              recyclingKey={`grid-thumb-${item.id}`}
             />
           ) : (
             <View
@@ -1468,7 +1470,9 @@ export default function MasterListingScreen() {
         {/* Row 3: Toolbar */}
         <View style={styles.toolbarRow}>
           <Text style={[styles.resultCountText, { color: themeColors.textPrimary }]}>
-            {filteredListings.length} {filteredListings.length === 1 ? "listing" : "listings"}
+            {hasAnyFilterActive
+              ? `${filteredListings.length} of ${activeSegment === "mine" ? myListingsCount : allListingsCount} listings`
+              : `${filteredListings.length} ${filteredListings.length === 1 ? "listing" : "listings"}`}
           </Text>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -1701,7 +1705,7 @@ export default function MasterListingScreen() {
         </ScrollView>
       ) : (
         <FlashList
-          key={viewMode}
+          key={`${viewMode}-${activeSegment}`}
           data={sortedListings}
           numColumns={viewMode === "grid" ? 2 : 1}
           keyExtractor={(item) => item.id}
@@ -1712,7 +1716,7 @@ export default function MasterListingScreen() {
           contentContainerStyle={{
             paddingHorizontal: viewMode === "grid" ? 8 : 16,
             paddingTop: 12,
-            paddingBottom: Math.max(insets.bottom, 24) + 132,
+            paddingBottom: Math.max(insets.bottom, 24) + 140,
           }}
           showsVerticalScrollIndicator={false}
           refreshControl={

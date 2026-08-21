@@ -260,3 +260,69 @@ exports.sendBroadcastPush = onRequest(
     }
   }
 );
+
+const crypto = require("crypto");
+
+/**
+ * Server-side verification for the Admin Access Code.
+ * If valid, generates a cryptographic session token and records the session securely.
+ */
+exports.verifyAdminAccessCode = onRequest(
+  { cors: true },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+
+      let body = req.body;
+      if (typeof body === "string") {
+        try { body = JSON.parse(body); } catch (e) {}
+      }
+      const passcode = body?.passcode;
+      const MASTER_KEY = (process.env.ADMIN_ACCESS_CODE || "Artha#8492!Admin$K9x").trim();
+
+      if (!passcode || typeof passcode !== "string" || passcode.trim() !== MASTER_KEY) {
+        logger.warn("Invalid admin passcode attempt.");
+        res.status(401).json({ error: "Invalid access code" });
+        return;
+      }
+
+      // Generate a cryptographically secure session token
+      const sessionId = "session_" + crypto.randomBytes(16).toString("hex");
+      const timestamp = Date.now();
+      const expiresAt = timestamp + (24 * 60 * 60 * 1000); // 24 hours
+      
+      const payload = `${sessionId}:${timestamp}:${expiresAt}:admin`;
+      const secret = process.env.SESSION_SECRET || "artha_master_super_admin_secret_2026";
+      const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+
+      const sessionToken = `${payload}:${signature}`;
+
+      // Record session in Firestore for auditing
+      const db = admin.firestore();
+      await db.collection("_admin_sessions").doc(sessionId).set({
+        sessionId,
+        role: "admin",
+        createdAt: new Date(timestamp).toISOString(),
+        expiresAt: new Date(expiresAt).toISOString(),
+        clientIp: req.ip || "unknown",
+      }).catch(e => logger.warn("Session logging warning:", e.message));
+
+      logger.info("Admin access code verified successfully.");
+      res.json({
+        success: true,
+        sessionToken,
+        sessionId,
+        role: "admin",
+        displayName: "Super Admin",
+      });
+    } catch (error) {
+      logger.error("verifyAdminAccessCode error:", error);
+      res.status(500).json({ error: "Authentication failed. Please try again." });
+    }
+  }
+);
+
+

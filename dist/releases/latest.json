@@ -1,15 +1,14 @@
 {
-  "versionName": "1.3.2-2",
-  "versionCode": 51,
-  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2-2.apk",
+  "versionName": "1.4.1",
+  "versionCode": 53,
+  "packageName": "com.umi.caseflow",
+  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.1.apk",
   "releaseDate": "2026-08-21",
   "releaseNotes": [
-    "🔔 Notifications Inbox: View all past agency announcements anytime from the new bell icon on your Dashboard.",
-    "📲 Direct Phone Notifications: Receive important announcements directly in your phone notification center.",
-    "🌐 Language Matching: Announcements now seamlessly adapt to your preferred language (English / Bahasa Melayu).",
-    "✨ Smarter Dashboard: Dismissed announcement banners stay closed permanently with zero startup flash."
-  ],
-  "isCritical": false,
-  "packageName": "com.umi.caseflow",
-  "fileSizeBytes": 61799847
+    "📱 Universal Responsive UI Scaling: Automatic proportional scaling across all Android screen sizes and display zoom levels.",
+    "🖼️ Refined Photo Grid & Media Vault: Balanced 3-column square photo tiles with compact non-overlapping badges and reorder controls.",
+    "⚡ Seamless Listing Cache & Switching: Fixed image cross-contamination when switching between My Listings and All Listings.",
+    "🔢 Contextual Listing Counters: Added clear filtered count display matching segment totals.",
+    "🌐 Full Bilingual Navigation: Seamless language switching across listing creation, editing, and review steps."
+  ]
 }

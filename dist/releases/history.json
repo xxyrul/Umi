@@ -1,5 +1,35 @@
 [
   {
+    "versionName": "1.4.1",
+    "versionCode": 53,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.1.apk",
+    "releaseDate": "2026-08-21",
+    "releaseNotes": [
+      "📱 Universal Responsive UI Scaling: Automatic proportional scaling across all Android screen sizes and display zoom levels.",
+      "🖼️ Refined Photo Grid & Media Vault: Balanced 3-column square photo tiles with compact non-overlapping badges and reorder controls.",
+      "⚡ Seamless Listing Cache & Switching: Fixed image cross-contamination when switching between My Listings and All Listings.",
+      "🔢 Contextual Listing Counters: Added clear filtered count display matching segment totals.",
+      "🌐 Full Bilingual Navigation: Seamless language switching across listing creation, editing, and review steps."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
+    "versionName": "1.4.0",
+    "versionCode": 52,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.0.apk",
+    "releaseDate": "2026-08-21",
+    "releaseNotes": [
+      "📸 Streamlined 2-Option Share Sheet: Share multi-photo albums with live download progress.",
+      "💡 Universal Android Guidance: Send clean albums with auto-caption without repeated text on all Android brands.",
+      "📋 1-Tap Copywriting: Instant copy with price/sqft and monthly loan estimates."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
     "versionName": "1.3.2-2",
     "versionCode": 51,
     "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2-2.apk",

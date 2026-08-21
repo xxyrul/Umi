@@ -32,6 +32,10 @@
           {
             "key": "Access-Control-Allow-Origin",
             "value": "*"
+          },
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
           }
         ]
       }
@@ -40,6 +44,10 @@
       {
         "source": "/admin",
         "destination": "/admin.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
       }
     ]
   }

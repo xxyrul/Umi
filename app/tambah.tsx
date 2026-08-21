@@ -100,9 +100,6 @@ function extractCoordsFromUrl(text: string): { latitude: number; longitude: numb
   return null;
 }
 
-const { width } = Dimensions.get("window");
-const IMAGE_SIZE = (width - SPACING.lg * 2 - 16) / 3; 
-
 export default function TambahScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -1035,42 +1032,59 @@ export default function TambahScreen() {
       <View style={styles.imageGrid}>
         {gambar.map((uri, idx) => (
           <Animated.View entering={FadeInDown} key={idx} style={styles.imageWrapper}>
-            <Image source={{ uri }} style={styles.gridImage} />
+            <Image source={{ uri }} style={styles.gridImage} resizeMode="cover" />
             {idx === 0 ? (
               <View style={styles.coverBadge}>
-                <MaterialCommunityIcons name="star" size={10} color="#FFF" />
-                <Text style={styles.coverBadgeText}>Cover</Text>
+                <MaterialCommunityIcons name="star" size={9} color="#FFF" />
+                <Text style={styles.coverBadgeText} numberOfLines={1}>Cover</Text>
               </View>
             ) : (
               <TouchableOpacity
                 onPress={() => handleSetCoverImage(idx)}
                 style={styles.setCoverBtn}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
-                <Text style={styles.setCoverBtnText}>Set Cover</Text>
+                <Text style={styles.setCoverBtnText} numberOfLines={1}>Cover</Text>
               </TouchableOpacity>
             )}
-            <TouchableOpacity onPress={() => handleRemoveImage(idx)} style={styles.removeGridBtn}>
-              <MaterialCommunityIcons name="close" size={14} color="#FFF" />
+            <TouchableOpacity
+              onPress={() => handleRemoveImage(idx)}
+              style={styles.removeGridBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MaterialCommunityIcons name="close" size={12} color="#FFF" />
             </TouchableOpacity>
             {gambar.length > 1 && (
               <View style={styles.reorderControls}>
                 {idx > 0 && (
-                  <TouchableOpacity onPress={() => handleMoveImage(idx, "left")} style={styles.reorderBtn}>
-                    <MaterialCommunityIcons name="chevron-left" size={14} color="#FFF" />
+                  <TouchableOpacity
+                    onPress={() => handleMoveImage(idx, "left")}
+                    style={styles.reorderBtn}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <MaterialCommunityIcons name="chevron-left" size={13} color="#FFF" />
                   </TouchableOpacity>
                 )}
                 {idx < gambar.length - 1 && (
-                  <TouchableOpacity onPress={() => handleMoveImage(idx, "right")} style={[styles.reorderBtn, { marginLeft: "auto" }]}>
-                    <MaterialCommunityIcons name="chevron-right" size={14} color="#FFF" />
+                  <TouchableOpacity
+                    onPress={() => handleMoveImage(idx, "right")}
+                    style={[styles.reorderBtn, { marginLeft: "auto" }]}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <MaterialCommunityIcons name="chevron-right" size={13} color="#FFF" />
                   </TouchableOpacity>
                 )}
               </View>
             )}
           </Animated.View>
         ))}
-        <TouchableOpacity onPress={handlePickImages} style={[styles.imageWrapper, styles.uploadGridBtn, { borderColor: themeColors.borderColor }]}>
-          <MaterialCommunityIcons name="camera-plus-outline" size={26} color={themeColors.textMuted} />
-          <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 4 }}>+ Foto</Text>
+        <TouchableOpacity
+          onPress={handlePickImages}
+          style={[styles.imageWrapper, styles.uploadGridBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}
+          activeOpacity={0.7}
+        >
+          <MaterialCommunityIcons name="camera-plus-outline" size={24} color={themeColors.textMuted} />
+          <Text style={{ fontSize: 11, fontWeight: "600", color: themeColors.textMuted, marginTop: 4 }}>+ Foto</Text>
         </TouchableOpacity>
       </View>
 
@@ -1091,8 +1105,8 @@ export default function TambahScreen() {
 
       {/* Review Summary */}
       <View style={[styles.reviewContainer, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, marginTop: SPACING.lg }]}>
-        <Text style={{ fontWeight: '700', color: themeColors.textPrimary, marginBottom: 8 }}>Review Listing</Text>
-        <Text style={{ color: themeColors.textSecondary }}>Title: {tajuk || "-"}</Text>
+        <Text style={{ fontWeight: '700', color: themeColors.textPrimary, marginBottom: 8 }}>{language === "BM" ? "Ringkasan Listing" : "Review Listing"}</Text>
+        <Text style={{ color: themeColors.textSecondary }} numberOfLines={2}>Title: {tajuk || "-"}</Text>
         <Text style={{ color: themeColors.textSecondary }}>Price: RM{harga || "-"}</Text>
         <Text style={{ color: themeColors.textSecondary }}>State: {negeri}</Text>
         <Text style={{ color: themeColors.textSecondary }}>Images: {gambar.length}</Text>
@@ -1143,12 +1157,12 @@ export default function TambahScreen() {
         <View style={styles.navRow}>
           {currentStep > 1 && (
             <TouchableOpacity onPress={() => setCurrentStep(prev => prev - 1)} style={[styles.navBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
-              <Text style={{ color: themeColors.textPrimary, fontWeight: "600" }}>Back</Text>
+              <Text style={{ color: themeColors.textPrimary, fontWeight: "600" }}>{language === "BM" ? "Kembali" : "Back"}</Text>
             </TouchableOpacity>
           )}
           {currentStep < 3 && (
             <TouchableOpacity onPress={() => setCurrentStep(prev => prev + 1)} style={[styles.navBtn, { backgroundColor: themeColors.maroonPrimary, marginLeft: 'auto' }]}>
-              <Text style={{ color: themeColors.canvasBackground, fontWeight: "600" }}>Next</Text>
+              <Text style={{ color: themeColors.canvasBackground, fontWeight: "600" }}>{language === "BM" ? "Seterusnya" : "Next"}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1647,17 +1661,17 @@ const styles = StyleSheet.create({
   stepperBtn: { width: 52, height: 52, alignItems: "center", justifyContent: "center" },
   stepperValue: { fontSize: 20, fontWeight: "700" },
   gpsBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, height: 52, borderRadius: 10, borderWidth: 1, marginTop: 4, marginBottom: 8 },
-  imageGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginVertical: SPACING.md },
-  imageWrapper: { width: IMAGE_SIZE, height: IMAGE_SIZE, borderRadius: 8, overflow: "hidden" },
-  gridImage: { width: "100%", height: "100%" },
-  removeGridBtn: { position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", zIndex: 10 },
-  coverBadge: { position: "absolute", top: 4, left: 4, flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: "#D97706", zIndex: 5 },
-  coverBadgeText: { color: "#FFF", fontSize: 10, fontWeight: "700" },
-  setCoverBtn: { position: "absolute", top: 4, left: 4, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: "rgba(0,0,0,0.6)", zIndex: 5 },
-  setCoverBtnText: { color: "#FFF", fontSize: 9, fontWeight: "600" },
+  imageGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "flex-start", gap: "3.2%", marginVertical: SPACING.md },
+  imageWrapper: { width: "31.2%", aspectRatio: 1, borderRadius: 10, overflow: "hidden", marginBottom: 10, position: "relative" },
+  gridImage: { width: "100%", height: "100%", borderRadius: 10 },
+  removeGridBtn: { position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center", zIndex: 10 },
+  coverBadge: { position: "absolute", top: 4, left: 4, flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: "#D97706", zIndex: 5 },
+  coverBadgeText: { color: "#FFF", fontSize: 8.5, fontWeight: "700" },
+  setCoverBtn: { position: "absolute", top: 4, left: 4, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: "rgba(0,0,0,0.65)", zIndex: 5 },
+  setCoverBtnText: { color: "#FFF", fontSize: 8.5, fontWeight: "600" },
   reorderControls: { position: "absolute", bottom: 4, left: 4, right: 4, flexDirection: "row", justifyContent: "space-between", zIndex: 5 },
-  reorderBtn: { width: 22, height: 22, borderRadius: 11, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center" },
-  uploadGridBtn: { borderWidth: 1, borderStyle: "dashed", alignItems: "center", justifyContent: "center" },
+  reorderBtn: { width: 20, height: 20, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.65)", alignItems: "center", justifyContent: "center" },
+  uploadGridBtn: { width: "31.2%", aspectRatio: 1, borderRadius: 10, borderWidth: 1.5, borderStyle: "dashed", alignItems: "center", justifyContent: "center", marginBottom: 10 },
   docBtn: { flexDirection: "row", alignItems: "center", gap: 12, height: 52, borderWidth: 1, borderRadius: 10, paddingHorizontal: SPACING.md },
   docBtnText: { flex: 1, fontSize: 15, fontWeight: "600" },
   reviewContainer: { padding: SPACING.md, borderRadius: 10, borderWidth: 1 },
