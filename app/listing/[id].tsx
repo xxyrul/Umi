@@ -218,7 +218,7 @@ export default function PropertyDetailScreen() {
   const [imageLoading, setImageLoading] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
-  const [isSharingImage, setIsSharingImage] = useState(false);
+  const [sharePhotoProgress, setSharePhotoProgress] = useState<{ current: number; total: number } | null>(null);
   const [isLoanCalcVisible, setIsLoanCalcVisible] = useState(false);
   const [downPaymentPercent, setDownPaymentPercent] = useState(10);
   const [interestRate, setInterestRate] = useState(4.2);
@@ -491,7 +491,7 @@ export default function PropertyDetailScreen() {
     });
   };
 
-  // Format share message
+  // Format rich real-estate share message
   const getFormattedShareMessage = () => {
     if (!listing) return "";
     const formattedPrice =
@@ -501,28 +501,44 @@ export default function PropertyDetailScreen() {
 
     const sizeStr = listing.keluasan
       ? (String(listing.keluasan).toLowerCase().includes("sq") ? listing.keluasan : `${listing.keluasan} sqft`)
-      : "N/A";
+      : "";
+
+    const pricePerSqftStr = pricePerSqft ? ` (RM ${pricePerSqft.toLocaleString()} / sqft)` : "";
+    const monthlyEstimateStr = mortgageEstimate ? `~RM ${mortgageEstimate.monthlyInstallment.toLocaleString()} / bln` : "";
 
     const isBM = language === "BM";
+    const titleText = cleanTitle || listing.tajuk || "Hartanah Untuk Dijual";
+    const locText = locationInfo.displayLocation || listing.alamat || listing.negeri || "Malaysia";
+    const descSnippet = (extractedDescription || (listing as any).description || "").trim();
 
     if (isBM) {
       return (
-        `WTS: ${listing.tajuk}\n` +
-        `Harga: RM ${formattedPrice}\n` +
-        `Lokasi: ${listing.alamat ? `${listing.alamat}, ` : ""}${listing.negeri || ""}\n` +
-        `Spesifikasi: ${listing.bilikTidur || 0} Bilik, ${listing.bilikAir || 0} Bilik Air | ${sizeStr}\n` +
-        `Status: ${listing.pegangan || "Freehold"} / ${listing.lot || "Bumi Lot"}\n\n` +
-        `Berminat? Hubungi saya segera untuk maklumat lanjut dan viewing!`
+        `🏡 ${titleText}\n\n` +
+        `💰 Harga: RM ${formattedPrice}${pricePerSqftStr}\n` +
+        (monthlyEstimateStr ? `📉 Anggaran Ansuran: ${monthlyEstimateStr}\n` : "") +
+        `📍 Lokasi: ${locText}\n\n` +
+        `✨ Maklumat Spesifikasi:\n` +
+        `• Bilik: ${listing.bilikTidur || 0} Bilik Tidur, ${listing.bilikAir || 0} Bilik Air\n` +
+        (sizeStr ? `• Keluasan: ${sizeStr}\n` : "") +
+        `• Status: ${listing.pegangan || "Freehold"} (${listing.lot || "Bumi Lot"})\n` +
+        (listing.jenis ? `• Jenis: ${listing.jenis}\n` : "") +
+        (descSnippet ? `\n📝 Keterangan:\n${descSnippet}\n` : "") +
+        `\n📲 Berminat? Hubungi saya segera untuk maklumat lanjut & viewing!`
       );
     }
 
     return (
-      `FOR SALE: ${listing.tajuk}\n` +
-      `Price: RM ${formattedPrice}\n` +
-      `Location: ${listing.alamat ? `${listing.alamat}, ` : ""}${listing.negeri || ""}\n` +
-      `Specs: ${listing.bilikTidur || 0} Beds, ${listing.bilikAir || 0} Baths | ${sizeStr}\n` +
-      `Tenure: ${listing.pegangan || "Freehold"} / ${listing.lot || "Bumi Lot"}\n\n` +
-      `Interested? Contact me now for more details and viewing appointment!`
+      `🏡 FOR SALE: ${titleText}\n\n` +
+      `💰 Price: RM ${formattedPrice}${pricePerSqftStr}\n` +
+      (monthlyEstimateStr ? `📉 Est. Monthly: ${monthlyEstimateStr}\n` : "") +
+      `📍 Location: ${locText}\n\n` +
+      `✨ Specifications:\n` +
+      `• Beds/Baths: ${listing.bilikTidur || 0} Beds, ${listing.bilikAir || 0} Baths\n` +
+      (sizeStr ? `• Built-up / Land: ${sizeStr}\n` : "") +
+      `• Tenure: ${listing.pegangan || "Freehold"} (${listing.lot || "Bumi Lot"})\n` +
+      (listing.jenis ? `• Type: ${listing.jenis}\n` : "") +
+      (descSnippet ? `\n📝 Description:\n${descSnippet}\n` : "") +
+      `\n📲 Interested? Contact me now for viewing & details!`
     );
   };
 
@@ -576,25 +592,33 @@ export default function PropertyDetailScreen() {
     setIsShareModalVisible(true);
   };
 
-  const handleShareWhatsApp = async () => {
+  // 1-Tap Copy Full Listing Text to Clipboard
+  const handleCopyListingText = async () => {
     setIsShareModalVisible(false);
     if (!listing) return;
     try {
       const message = getFormattedShareMessage();
-      const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        await Linking.openURL(url);
+      await Clipboard.setStringAsync(message);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      if (Platform.OS === "android") {
+        ToastAndroid.show(
+          language === "BM"
+            ? "📋 Teks iklan lengkap telah disalin ke papan keratan!"
+            : "📋 Full listing copywriting copied to clipboard!",
+          ToastAndroid.LONG
+        );
       } else {
-        await Share.share({ message, title: listing.tajuk });
+        Alert.alert(
+          language === "BM" ? "Disalin!" : "Copied!",
+          language === "BM" ? "Teks iklan lengkap telah disalin." : "Full listing text copied."
+        );
       }
     } catch (e) {
-      console.error("WhatsApp share error:", e);
-      const message = getFormattedShareMessage();
-      await Share.share({ message, title: listing.tajuk });
+      console.warn("Copy error:", e);
     }
   };
 
+  // Multi-Photo Album Share
   const handleSharePhoto = async () => {
     if (!listing) return;
     const allImages = getListingImagesList(listing);
@@ -607,7 +631,8 @@ export default function PropertyDetailScreen() {
     }
 
     setIsShareModalVisible(false);
-    setIsSharingImage(true);
+    const imagesToShare = allImages.slice(0, 12);
+    setSharePhotoProgress({ current: 1, total: imagesToShare.length });
 
     try {
       // 1. Auto-copy complete property details to clipboard and show toast
@@ -617,8 +642,8 @@ export default function PropertyDetailScreen() {
         if (Platform.OS === "android") {
           ToastAndroid.show(
             language === "BM"
-              ? "📋 Maklumat listing telah disalin! Sila tampal dalam ruangan teks/kapsyen."
-              : "📋 Listing details copied! Paste it in the caption/text field.",
+              ? "📋 Kapsyen telah disalin! Sila tampal dalam ruangan mesej WhatsApp."
+              : "📋 Caption copied! Paste it into the message box.",
             ToastAndroid.LONG
           );
         }
@@ -626,18 +651,35 @@ export default function PropertyDetailScreen() {
         console.warn("Clipboard copy failed:", clipErr);
       }
 
-      // 2. Prepare all available listing photos (up to 12)
-      const imagesToShare = allImages.slice(0, 12);
+      // 2. Prepare all available listing photos with progress updates
+      let completed = 0;
       const preparedUris = await Promise.all(
-        imagesToShare.map((imgUri, idx) => prepareListingImageForSharing(imgUri, idx))
+        imagesToShare.map(async (imgUri, idx) => {
+          const res = await prepareListingImageForSharing(imgUri, idx);
+          completed++;
+          setSharePhotoProgress({ current: completed, total: imagesToShare.length });
+          return res;
+        })
       );
+
+      // Dismiss loading modal before opening native share sheet
+      setSharePhotoProgress(null);
+
+      if (Platform.OS === "android") {
+        ToastAndroid.show(
+          language === "BM"
+            ? "💡 Tip: Pilih ikon aplikasi untuk 1 album kemas"
+            : "💡 Tip: Select the app icon for a clean album",
+          ToastAndroid.LONG
+        );
+      }
 
       // 3. Multi-image Android sharing with native Parcelable Uri MultiShareModule
       if (Platform.OS === "android" && NativeModules.MultiShare) {
         try {
           await NativeModules.MultiShare.shareMultipleImages(
             preparedUris,
-            listing.tajuk || "Property Listing",
+            cleanTitle || listing.tajuk || "Property Listing",
             message
           );
           return;
@@ -652,21 +694,20 @@ export default function PropertyDetailScreen() {
       
       if (isAvailable) {
         await Sharing.shareAsync(primaryUri, {
-          dialogTitle: listing.tajuk || "Property Listing",
+          dialogTitle: cleanTitle || listing.tajuk || "Property Listing",
           mimeType: "image/jpeg",
           UTI: "public.jpeg",
         });
       } else {
-        await Share.share({ message, title: listing.tajuk });
+        await Share.share({ message, title: cleanTitle || listing.tajuk });
       }
     } catch (e) {
       console.error("Photo share error:", e);
+      setSharePhotoProgress(null);
       Alert.alert(
         language === "BM" ? "Ralat Perkongsian" : "Share Error",
         language === "BM" ? "Gagal memproses gambar untuk dikongsi." : "Failed to prepare images for sharing."
       );
-    } finally {
-      setIsSharingImage(false);
     }
   };
 
@@ -1445,7 +1486,7 @@ export default function PropertyDetailScreen() {
               </TouchableOpacity>
             </View>
 
-            {listing?.tajuk ? (
+            {cleanTitle || listing?.tajuk ? (
               <Text
                 numberOfLines={1}
                 style={{
@@ -1454,134 +1495,122 @@ export default function PropertyDetailScreen() {
                   marginBottom: 16,
                 }}
               >
-                {listing.tajuk}
+                {cleanTitle || listing?.tajuk}
               </Text>
             ) : (
               <View style={{ marginBottom: 12 }} />
             )}
 
-            {/* Share Options */}
-            <View style={{ gap: 10 }}>
-              {/* WhatsApp Option */}
-              <TouchableOpacity
-                activeOpacity={0.75}
-                onPress={handleShareWhatsApp}
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  padding: 14,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: themeColors.borderColor,
-                  backgroundColor: themeColors.surfaceContainer,
-                  gap: 12,
-                }}
-              >
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: "#25D36622",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <MaterialCommunityIcons name="whatsapp" size={22} color="#25D366" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
-                    {language === "BM" ? "WhatsApp (Teks)" : "WhatsApp (Text)"}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
-                    {language === "BM"
-                      ? "Buka WhatsApp terus dengan maklumat listing"
-                      : "Open WhatsApp directly with formatted property details"}
-                  </Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
-              </TouchableOpacity>
-
-              {/* Photo & Caption Option */}
+            {/* Streamlined 2 Share Options */}
+            <View style={{ gap: 12 }}>
+              {/* Option 1: Multi-Photo Album Share */}
               <TouchableOpacity
                 activeOpacity={0.75}
                 onPress={handleSharePhoto}
-                disabled={isSharingImage}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  padding: 14,
-                  borderRadius: 14,
+                  padding: 16,
+                  borderRadius: 16,
                   borderWidth: 1,
                   borderColor: themeColors.borderColor,
                   backgroundColor: themeColors.surfaceContainer,
-                  gap: 12,
+                  gap: 14,
                 }}
               >
                 <View
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
                     backgroundColor: `${themeColors.maroonPrimary}22`,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  {isSharingImage ? (
-                    <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
-                  ) : (
-                    <MaterialCommunityIcons name="image-outline" size={22} color={themeColors.maroonPrimary} />
-                  )}
+                  <MaterialCommunityIcons name="image-multiple-outline" size={24} color={themeColors.maroonPrimary} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
-                    {language === "BM" ? "Kongsi Gambar (Brochure)" : "Share Photo & Details"}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                      {language === "BM"
+                        ? `Kongsi Foto (${getListingImagesList(listing).length} Foto)`
+                        : `Share Photos (${getListingImagesList(listing).length} Photos)`}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 3 }}>
                     {language === "BM"
-                      ? "Buka gambar dalam menu perkongsian (teks disalin ke papan keratan)"
-                      : "Open photo in share menu (caption copied to clipboard)"}
+                      ? "Hantar album foto bersama maklumat hartanah"
+                      : "Share photo album with property details"}
                   </Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
               </TouchableOpacity>
 
-              {/* More Apps Option */}
+              {/* Universal Guidance Tip Card */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "flex-start",
+                  padding: 12,
+                  borderRadius: 12,
+                  backgroundColor: "#F59E0B12",
+                  borderWidth: 1,
+                  borderColor: "#F59E0B30",
+                  gap: 10,
+                }}
+              >
+                <MaterialCommunityIcons name="lightbulb-on-outline" size={18} color="#F59E0B" style={{ marginTop: 1 }} />
+                <Text style={{ flex: 1, fontSize: 12, lineHeight: 17, color: themeColors.textSecondary }}>
+                  {language === "BM" ? (
+                    <>
+                      <Text style={{ fontWeight: "700", color: "#F59E0B" }}>Tip: </Text>
+                      Pilih <Text style={{ fontWeight: "600", color: themeColors.textPrimary }}>ikon aplikasi</Text> (cth: WhatsApp) dan bukannya pintasan kenalan untuk hantar semua foto sebagai 1 album kemas.
+                    </>
+                  ) : (
+                    <>
+                      <Text style={{ fontWeight: "700", color: "#F59E0B" }}>Tip: </Text>
+                      Select the <Text style={{ fontWeight: "600", color: themeColors.textPrimary }}>app icon</Text> (e.g. WhatsApp) instead of a direct contact shortcut to send all photos as a single neat album.
+                    </>
+                  )}
+                </Text>
+              </View>
+
+              {/* Option 2: 1-Tap Copy Full Copywriting */}
               <TouchableOpacity
                 activeOpacity={0.75}
-                onPress={handleShareGeneric}
+                onPress={handleCopyListingText}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
-                  padding: 14,
-                  borderRadius: 14,
+                  padding: 16,
+                  borderRadius: 16,
                   borderWidth: 1,
                   borderColor: themeColors.borderColor,
                   backgroundColor: themeColors.surfaceContainer,
-                  gap: 12,
+                  gap: 14,
                 }}
               >
                 <View
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
-                    backgroundColor: "#6366F122",
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: "#3B82F622",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <MaterialCommunityIcons name="share-variant-outline" size={22} color="#6366F1" />
+                  <MaterialCommunityIcons name="content-copy" size={22} color="#3B82F6" />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
-                    {language === "BM" ? "Pilihan Lain" : "More Sharing Options"}
+                    {language === "BM" ? "Salin Teks Iklan (Copywriting)" : "Copy Listing Copywriting"}
                   </Text>
-                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 2 }}>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 3 }}>
                     {language === "BM"
-                      ? "Buka menu perkongsian sistem untuk aplikasi lain"
-                      : "Open system share sheet for Telegram, Copy, and other apps"}
+                      ? "Salin maklumat lengkap (harga, ansuran bulanan, spesifikasi)"
+                      : "Copy full broadcast text (price, monthly loan, specs, location)"}
                   </Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
@@ -1589,6 +1618,82 @@ export default function PropertyDetailScreen() {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      {/* Photo Download & Preparation Progress Modal */}
+      <Modal
+        visible={sharePhotoProgress !== null}
+        transparent
+        animationType="fade"
+      >
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <View
+            style={{
+              width: "100%",
+              maxWidth: 320,
+              backgroundColor: themeColors.cardBackground,
+              borderRadius: 20,
+              padding: 24,
+              alignItems: "center",
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.3,
+              shadowRadius: 20,
+              elevation: 12,
+            }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: `${themeColors.maroonPrimary}20`,
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 16,
+              }}
+            >
+              <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
+            </View>
+
+            <Text style={{ fontSize: 17, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center", marginBottom: 6 }}>
+              {language === "BM" ? "Sedang Memuat Turun Gambar" : "Downloading Photos"}
+            </Text>
+
+            <Text style={{ fontSize: 13, color: themeColors.textSecondary, textAlign: "center", marginBottom: 16 }}>
+              {language === "BM"
+                ? `Gambar ${sharePhotoProgress?.current || 1} daripada ${sharePhotoProgress?.total || 1} (${Math.round(((sharePhotoProgress?.current || 1) / (sharePhotoProgress?.total || 1)) * 100)}%)`
+                : `Photo ${sharePhotoProgress?.current || 1} of ${sharePhotoProgress?.total || 1} (${Math.round(((sharePhotoProgress?.current || 1) / (sharePhotoProgress?.total || 1)) * 100)}%)`}
+            </Text>
+
+            {/* Progress Bar */}
+            <View
+              style={{
+                width: "100%",
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: themeColors.surfaceContainer,
+                overflow: "hidden",
+                marginBottom: 12,
+              }}
+            >
+              <View
+                style={{
+                  height: "100%",
+                  width: `${Math.round(((sharePhotoProgress?.current || 1) / (sharePhotoProgress?.total || 1)) * 100)}%`,
+                  backgroundColor: themeColors.maroonPrimary,
+                  borderRadius: 4,
+                }}
+              />
+            </View>
+
+            <Text style={{ fontSize: 12, color: themeColors.textMuted }}>
+              {language === "BM" ? "Sila tunggu sebentar..." : "Please wait a moment..."}
+            </Text>
+          </View>
+        </View>
       </Modal>
 
       {/* HOME LOAN CALCULATOR MODAL */}

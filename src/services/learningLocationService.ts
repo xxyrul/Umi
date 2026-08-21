@@ -137,7 +137,7 @@ export async function resolveLocationWithGoogleLearning(
   try {
     const encoded = encodeURIComponent(`${cleanQuery}, Malaysia`);
     const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encoded}`, {
-      headers: { "User-Agent": "UmiApp/1.3.3" },
+      headers: { "User-Agent": "UmiApp/1.4.0" },
     });
     if (res.ok) {
       const data = await res.json();
