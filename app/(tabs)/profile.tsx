@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { router, useFocusEffect } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
@@ -78,6 +79,7 @@ export default function ProfileScreen() {
   const [phoneInput, setPhoneInput] = useState("");
   const [isSavingAccount, setIsSavingAccount] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showTopMenu, setShowTopMenu] = useState(false);
 
   useEffect(() => {
     try {
@@ -606,11 +608,85 @@ export default function ProfileScreen() {
         paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6,
       }}
     >
+      {/* Top 3-Dots Action Bar */}
+      <View
+        style={{
+          width: "100%",
+          flexDirection: "row",
+          justifyContent: "flex-end",
+          alignItems: "center",
+          paddingHorizontal: SPACING.lg,
+          paddingVertical: 4,
+          zIndex: 100,
+        }}
+      >
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setShowTopMenu(!showTopMenu);
+          }}
+          style={{
+            width: 38,
+            height: 38,
+            borderRadius: 19,
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <MaterialCommunityIcons name="dots-vertical" size={24} color={themeColors.textPrimary} />
+        </TouchableOpacity>
+
+        {/* 3-Dots Dropdown Menu */}
+        {showTopMenu && (
+          <View
+            style={{
+              position: "absolute",
+              top: 44,
+              right: 20,
+              backgroundColor: themeColors.cardBackground,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.2,
+              shadowRadius: 12,
+              elevation: 8,
+              zIndex: 999,
+              minWidth: 150,
+              overflow: "hidden",
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => {
+                setShowTopMenu(false);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                handleSignOut();
+              }}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+              }}
+            >
+              <MaterialCommunityIcons name="logout" size={18} color="#EF4444" />
+              <Text style={{ fontSize: 14, fontWeight: "600", color: "#EF4444" }}>
+                {t("logout")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
       <ScrollView
         style={{ flex: 1, width: "100%" }}
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
-          paddingVertical: SPACING.xl,
+          paddingVertical: SPACING.sm,
           paddingBottom: Math.max(insets.bottom, 24) + 140,
           alignItems: "center",
         }}
