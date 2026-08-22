@@ -35,6 +35,8 @@ import Animated, {
   FadeInDown,
   SlideInRight,
   SlideOutLeft,
+  SlideInLeft,
+  SlideOutRight,
   FadeIn,
   FadeOut
 } from "react-native-reanimated";
@@ -128,6 +130,12 @@ export default function TambahScreen() {
     stage: "",
   });
   const [currentStep, setCurrentStep] = useState(1);
+  const [prevStep, setPrevStep] = useState(1);
+
+  const goToStep = useCallback((targetStep: number) => {
+    setPrevStep(currentStep);
+    setCurrentStep(targetStep);
+  }, [currentStep]);
 
   // Listing Form States
   const [isFetchingLocation, setIsFetchingLocation] = useState(false);
@@ -382,20 +390,51 @@ export default function TambahScreen() {
     }
   };
 
+  const handleCancelOrBack = useCallback(() => {
+    if (currentStep > 1) {
+      goToStep(currentStep - 1);
+    } else {
+      if (tajuk.trim() || harga.trim() || alamat.trim() || (gambar && gambar.length > 0)) {
+        Alert.alert(
+          language === "BM" ? "Batal Tambah Listing?" : "Discard Listing?",
+          language === "BM"
+            ? "Maklumat yang anda telah masukkan akan dipadam."
+            : "All entered information will be discarded.",
+          [
+            { text: language === "BM" ? "Teruskan Mengisi" : "Keep Editing", style: "cancel" },
+            {
+              text: language === "BM" ? "Padam & Keluar" : "Discard & Exit",
+              style: "destructive",
+              onPress: () => {
+                router.canGoBack() ? router.back() : router.replace("/(tabs)/listings");
+              },
+            },
+          ]
+        );
+      } else {
+        router.canGoBack() ? router.back() : router.replace("/(tabs)/listings");
+      }
+    }
+  }, [currentStep, goToStep, tajuk, harga, alamat, gambar, language]);
+
   // Intercept Hardware Back Button on Android
   useFocusEffect(
     useCallback(() => {
       const onBackPress = () => {
         if (currentStep > 1) {
-          setCurrentStep(prev => prev - 1);
+          goToStep(currentStep - 1);
           return true; // Prevent default behavior
+        }
+        if (tajuk.trim() || harga.trim() || alamat.trim() || (gambar && gambar.length > 0)) {
+          handleCancelOrBack();
+          return true;
         }
         return false; // Let default behavior happen (go back)
       };
 
       const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
       return () => subscription.remove();
-    }, [currentStep])
+    }, [currentStep, goToStep, handleCancelOrBack, tajuk, harga, alamat, gambar])
   );
 
   // Animations
@@ -759,8 +798,12 @@ export default function TambahScreen() {
 
   const headerPaddingTop = Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 12;
 
+  const isMovingForward = currentStep >= prevStep;
+  const stepEntering = isMovingForward ? SlideInRight.duration(240) : SlideInLeft.duration(240);
+  const stepExiting = isMovingForward ? SlideOutLeft.duration(240) : SlideOutRight.duration(240);
+
   const renderStep1 = () => (
-    <Animated.View entering={SlideInRight} exiting={SlideOutLeft} style={styles.stepContainer}>
+    <Animated.View key={`step-${currentStep}`} entering={stepEntering} exiting={stepExiting} style={styles.stepContainer}>
       <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{t("basicInfo")}</Text>
       <TextInput placeholder={t("titlePlaceholder")} placeholderTextColor={themeColors.textMuted} value={tajuk} onChangeText={setTajuk} onFocus={handleInputFocus} style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]} />
 
@@ -864,7 +907,7 @@ export default function TambahScreen() {
   );
 
   const renderStep2 = () => (
-    <Animated.View entering={SlideInRight} exiting={SlideOutLeft} style={styles.stepContainer}>
+    <Animated.View key={`step-${currentStep}`} entering={stepEntering} exiting={stepExiting} style={styles.stepContainer}>
       <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{language === "BM" ? "Lokasi Hartanah" : "Property Location"}</Text>
       
       {/* 2-Button Choice: Pick on Map OR Pin GPS */}
@@ -1107,7 +1150,7 @@ export default function TambahScreen() {
       <View style={[styles.reviewContainer, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, marginTop: SPACING.lg }]}>
         <Text style={{ fontWeight: '700', color: themeColors.textPrimary, marginBottom: 8 }}>{language === "BM" ? "Ringkasan Listing" : "Review Listing"}</Text>
         <Text style={{ color: themeColors.textSecondary }} numberOfLines={2}>Title: {tajuk || "-"}</Text>
-        <Text style={{ color: themeColors.textSecondary }}>Price: RM{harga || "-"}</Text>
+        <Text style={{ color: themeColors.textSecondary }}>Price: RM{harga ? Number(harga).toLocaleString() : "-"}</Text>
         <Text style={{ color: themeColors.textSecondary }}>State: {negeri}</Text>
         <Text style={{ color: themeColors.textSecondary }}>Images: {gambar.length}</Text>
         <Text style={{ color: themeColors.textSecondary }}>Documents: {[geran, spa, icOwner].filter(Boolean).length}</Text>
@@ -1122,13 +1165,7 @@ export default function TambahScreen() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: themeColors.canvasBackground }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={[styles.header, { paddingTop: headerPaddingTop, borderBottomColor: themeColors.borderColor, flexDirection: "row", alignItems: "center" }]}>
-        <TouchableOpacity onPress={() => {
-          if (currentStep > 1) {
-            setCurrentStep(prev => prev - 1);
-          } else {
-            router.canGoBack() ? router.back() : router.replace("/(tabs)/listings");
-          }
-        }} style={{ padding: 6, borderRadius: 20, backgroundColor: themeColors.surfaceContainer, marginRight: 12 }}>
+        <TouchableOpacity onPress={handleCancelOrBack} style={{ padding: 6, borderRadius: 20, backgroundColor: themeColors.surfaceContainer, marginRight: 12 }}>
           <MaterialCommunityIcons name="arrow-left" size={22} color={themeColors.textPrimary} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: themeColors.maroonPrimary, flex: 1 }]}>{isEditMode ? t("editListing") : t("addListing")}</Text>
@@ -1156,12 +1193,12 @@ export default function TambahScreen() {
         {/* Navigation Buttons */}
         <View style={styles.navRow}>
           {currentStep > 1 && (
-            <TouchableOpacity onPress={() => setCurrentStep(prev => prev - 1)} style={[styles.navBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
+            <TouchableOpacity onPress={() => goToStep(currentStep - 1)} style={[styles.navBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
               <Text style={{ color: themeColors.textPrimary, fontWeight: "600" }}>{language === "BM" ? "Kembali" : "Back"}</Text>
             </TouchableOpacity>
           )}
           {currentStep < 3 && (
-            <TouchableOpacity onPress={() => setCurrentStep(prev => prev + 1)} style={[styles.navBtn, { backgroundColor: themeColors.maroonPrimary, marginLeft: 'auto' }]}>
+            <TouchableOpacity onPress={() => goToStep(currentStep + 1)} style={[styles.navBtn, { backgroundColor: themeColors.maroonPrimary, marginLeft: 'auto' }]}>
               <Text style={{ color: themeColors.canvasBackground, fontWeight: "600" }}>{language === "BM" ? "Seterusnya" : "Next"}</Text>
             </TouchableOpacity>
           )}

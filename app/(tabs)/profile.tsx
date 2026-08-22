@@ -28,9 +28,20 @@ import {
   setUpdateNotificationsEnabled,
 } from "@/services/updateNotifications";
 import { SPACING } from "@/constants/theme";
-import { Button, InAppUpdateModal } from "@/components";
+import { Button, InAppUpdateModal, PinKeypad } from "@/components";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { getCurrentUserProfile, signOut, getUserInitials, getUserRole } from "@/services/auth";
+import {
+  getAppLockEnabled,
+  setAppLockEnabled,
+  getBiometricsEnabled,
+  setBiometricsEnabled,
+  getAppLockTimeout,
+  setAppLockTimeout,
+  setAppLockPin,
+  verifyAppLockPin,
+  isBiometricSupported,
+} from "@/services/security";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { firestore } from "@/services/firebase";
 import Constants from "expo-constants";
@@ -43,7 +54,7 @@ import type { PropertyListing } from "@/types/listing";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
-  const { theme, setTheme, language, themeColors, isDark, toggleTheme, setLanguage, t } = useAppSettings();
+  const { theme, setTheme, language, themeColors, isDark, toggleTheme, setLanguage, t, allowScreenshots, toggleAllowScreenshots } = useAppSettings();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
@@ -79,10 +90,96 @@ export default function ProfileScreen() {
       getUpdateNotificationsEnabled()
         .then(setUpdateAlertsEnabled)
         .catch(() => {});
+      getAppLockEnabled()
+        .then(setAppLockState)
+        .catch(() => {});
+      getBiometricsEnabled()
+        .then(setBiometricsState)
+        .catch(() => {});
+      isBiometricSupported()
+        .then(setHasBiometrics)
+        .catch(() => {});
+      getAppLockTimeout()
+        .then(setAppLockTimeoutState)
+        .catch(() => {});
     } catch (e) {
       console.warn("Profile load error:", e);
     }
   }, []);
+
+  // App Lock PIN & Biometrics State
+  const [appLockEnabled, setAppLockState] = useState(false);
+  const [biometricsEnabled, setBiometricsState] = useState(false);
+  const [appLockTimeout, setAppLockTimeoutState] = useState(60000);
+  const [hasBiometrics, setHasBiometrics] = useState(false);
+  const [isAppLockModalVisible, setIsAppLockModalVisible] = useState(false);
+  const [appLockStep, setAppLockStep] = useState<"menu" | "verify_for_disable" | "verify_for_change" | "set_new" | "confirm_new">("menu");
+  const [tempPin, setTempPin] = useState("");
+  const [pinError, setPinError] = useState("");
+
+  const handleSelectTimeout = async (timeoutMs: number) => {
+    try {
+      await setAppLockTimeout(timeoutMs);
+      setAppLockTimeoutState(timeoutMs);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleToggleBiometrics = async (val: boolean) => {
+    try {
+      await setBiometricsEnabled(val);
+      setBiometricsState(val);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePinCompleted = async (enteredPin: string) => {
+    setPinError("");
+    if (appLockStep === "verify_for_disable") {
+      const isValid = await verifyAppLockPin(enteredPin);
+      if (isValid) {
+        await setAppLockEnabled(false);
+        setAppLockState(false);
+        setIsAppLockModalVisible(false);
+        Alert.alert(
+          language === "BM" ? "Kunci Aplikasi Dimatikan" : "App Lock Disabled",
+          language === "BM" ? "Kunci PIN telah dinyahaktifkan." : "PIN protection has been disabled."
+        );
+      } else {
+        setPinError(language === "BM" ? "PIN tidak sah. Sila cuba lagi." : "Incorrect PIN. Please try again.");
+      }
+    } else if (appLockStep === "verify_for_change") {
+      const isValid = await verifyAppLockPin(enteredPin);
+      if (isValid) {
+        setAppLockStep("set_new");
+      } else {
+        setPinError(language === "BM" ? "PIN semasa salah." : "Incorrect current PIN.");
+      }
+    } else if (appLockStep === "set_new") {
+      setTempPin(enteredPin);
+      setAppLockStep("confirm_new");
+    } else if (appLockStep === "confirm_new") {
+      if (enteredPin === tempPin) {
+        await setAppLockPin(enteredPin);
+        await setAppLockEnabled(true);
+        setAppLockState(true);
+        setIsAppLockModalVisible(false);
+        setTempPin("");
+        Alert.alert(
+          language === "BM" ? "Kunci PIN Disimpan" : "PIN Saved",
+          language === "BM"
+            ? "Aplikasi anda kini dilindungi dengan kata laluan PIN."
+            : "Your app is now protected with your 4-digit PIN."
+        );
+      } else {
+        setPinError(language === "BM" ? "PIN tidak sepadan! Sila masukkan semula." : "PINs do not match! Try again.");
+        setTempPin("");
+        setAppLockStep("set_new");
+      }
+    }
+  };
 
   const handleToggleUpdateAlerts = async (value: boolean) => {
     const user = getCurrentUserProfile();
@@ -699,6 +796,31 @@ export default function ProfileScreen() {
               () => Linking.openURL("https://umiren-d6a66.web.app/admin").catch(() => {})
             )}
           {renderOptionRow("file-export-outline", t("exportReport"), t("exportSubtitle"), handleExportReport)}
+          {renderOptionRow(
+            "shield-lock-outline",
+            language === "BM" ? "Kunci Aplikasi (PIN)" : "App Lock (PIN)",
+            appLockEnabled
+              ? (language === "BM" ? "Aktif · Dilindungi PIN" : "Active · PIN Protected")
+              : (language === "BM" ? "Tidak Aktif" : "Disabled"),
+            () => {
+              if (appLockEnabled) {
+                setAppLockStep("menu");
+              } else {
+                setAppLockStep("set_new");
+              }
+              setPinError("");
+              setTempPin("");
+              setIsAppLockModalVisible(true);
+            }
+          )}
+          {renderOptionRow(
+            "monitor-screenshot",
+            language === "BM" ? "Tangkapan Skrin" : "Allow Screenshots",
+            allowScreenshots
+              ? (language === "BM" ? "Dibenarkan" : "Allowed")
+              : (language === "BM" ? "Disekat" : "Blocked"),
+            toggleAllowScreenshots
+          )}
           {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
           {renderOptionRow(
             "information-outline",
@@ -994,6 +1116,255 @@ export default function ProfileScreen() {
                 </View>
               )}
             </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* App Lock Management Modal */}
+      <Modal
+        visible={isAppLockModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsAppLockModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "padding"}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            justifyContent: "flex-end",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingTop: 16,
+              paddingBottom: Math.max(insets.bottom, 16) + 12,
+              paddingHorizontal: 20,
+              maxHeight: "90%",
+            }}
+          >
+            {/* Header */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 12,
+                paddingBottom: 10,
+                borderBottomWidth: 1,
+                borderBottomColor: themeColors.borderColor,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <MaterialCommunityIcons name="shield-lock-outline" size={22} color={themeColors.maroonPrimary} />
+                <Text style={{ fontSize: 17, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Keselamatan & Kunci PIN" : "App Lock & Security"}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setIsAppLockModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <MaterialCommunityIcons name="close" size={22} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {appLockStep === "menu" && (
+              <View style={{ gap: 14 }}>
+                <View
+                  style={{
+                    backgroundColor: themeColors.surfaceContainer,
+                    padding: 16,
+                    borderRadius: 14,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <View style={{ flex: 1, marginRight: 12 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                      {language === "BM" ? "Kunci Aplikasi PIN" : "App PIN Protection"}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
+                      {appLockEnabled
+                        ? (language === "BM" ? "PIN aktif untuk keselamatan akaun" : "PIN active for account security")
+                        : (language === "BM" ? "Lindungi data kes & listing anda" : "Protect your cases & listings")}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={appLockEnabled}
+                    onValueChange={(val) => {
+                      if (val) {
+                        setAppLockStep("set_new");
+                      } else {
+                        setAppLockStep("verify_for_disable");
+                      }
+                      setPinError("");
+                    }}
+                    trackColor={{ false: themeColors.borderColor, true: themeColors.maroonPrimary }}
+                  />
+                </View>
+
+                {hasBiometrics && appLockEnabled && (
+                  <View
+                    style={{
+                      backgroundColor: themeColors.surfaceContainer,
+                      padding: 16,
+                      borderRadius: 14,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                        {language === "BM" ? "Buka dengan Cap Jari / Biometrik" : "Unlock with Biometrics"}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
+                        {language === "BM" ? "Gunakan cap jari untuk buka pantas" : "Use fingerprint for fast access"}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={biometricsEnabled}
+                      onValueChange={handleToggleBiometrics}
+                      trackColor={{ false: themeColors.borderColor, true: themeColors.maroonPrimary }}
+                    />
+                  </View>
+                )}
+
+                {appLockEnabled && (
+                  <View
+                    style={{
+                      backgroundColor: themeColors.surfaceContainer,
+                      padding: 16,
+                      borderRadius: 14,
+                      gap: 10,
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <MaterialCommunityIcons name="timer-outline" size={20} color={themeColors.maroonPrimary} />
+                      <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                        {language === "BM" ? "Kunci Semula Automatik" : "Auto-Lock Timeout"}
+                      </Text>
+                    </View>
+                    <Text style={{ fontSize: 13, color: themeColors.textMuted }}>
+                      {language === "BM"
+                        ? "Pilih tempoh sebelum aplikasi dikunci semula selepas diminimumkan:"
+                        : "Choose when the app relocks after being minimized:"}
+                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+                      {[
+                        { label: language === "BM" ? "Serta-merta" : "Immediately", value: 0 },
+                        { label: language === "BM" ? "1 Minit" : "1 Minute", value: 60000 },
+                        { label: language === "BM" ? "5 Minit" : "5 Minutes", value: 300000 },
+                        { label: language === "BM" ? "15 Minit" : "15 Minutes", value: 900000 },
+                      ].map((opt) => {
+                        const isSelected = appLockTimeout === opt.value;
+                        return (
+                          <TouchableOpacity
+                            key={opt.value}
+                            activeOpacity={0.75}
+                            onPress={() => handleSelectTimeout(opt.value)}
+                            style={{
+                              paddingHorizontal: 12,
+                              paddingVertical: 8,
+                              borderRadius: 10,
+                              backgroundColor: isSelected ? themeColors.maroonPrimary : themeColors.cardBackground,
+                              borderWidth: 1,
+                              borderColor: isSelected ? themeColors.maroonPrimary : themeColors.borderColor,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "700",
+                                color: isSelected ? "#FFFFFF" : themeColors.textPrimary,
+                              }}
+                            >
+                              {opt.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
+
+                {appLockEnabled && (
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => {
+                      setAppLockStep("verify_for_change");
+                      setPinError("");
+                    }}
+                    style={{
+                      backgroundColor: themeColors.surfaceContainer,
+                      padding: 16,
+                      borderRadius: 14,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      <MaterialCommunityIcons name="form-textbox-password" size={22} color={themeColors.maroonPrimary} />
+                      <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                        {language === "BM" ? "Tukar Kata Laluan PIN" : "Change PIN Passcode"}
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {appLockStep === "verify_for_disable" && (
+              <View style={{ alignItems: "center" }}>
+                <PinKeypad
+                  title={language === "BM" ? "Sahkan PIN Semasa" : "Confirm Current PIN"}
+                  subtitle={language === "BM" ? "Masukkan PIN anda untuk mematikan kunci" : "Enter PIN to disable app lock"}
+                  onPinComplete={handlePinCompleted}
+                  showBiometricOption={false}
+                  errorMessage={pinError}
+                />
+              </View>
+            )}
+
+            {appLockStep === "verify_for_change" && (
+              <View style={{ alignItems: "center" }}>
+                <PinKeypad
+                  title={language === "BM" ? "Masukkan PIN Semasa" : "Enter Current PIN"}
+                  subtitle={language === "BM" ? "Sahkan identiti anda sebelum menukar PIN" : "Verify identity before changing PIN"}
+                  onPinComplete={handlePinCompleted}
+                  showBiometricOption={false}
+                  errorMessage={pinError}
+                />
+              </View>
+            )}
+
+            {appLockStep === "set_new" && (
+              <View style={{ alignItems: "center" }}>
+                <PinKeypad
+                  title={language === "BM" ? "Tetapkan PIN 4-Digit Baru" : "Set New 4-Digit PIN"}
+                  subtitle={language === "BM" ? "Pilih kod PIN yang mudah diingati" : "Choose a memorable 4-digit code"}
+                  onPinComplete={handlePinCompleted}
+                  showBiometricOption={false}
+                  errorMessage={pinError}
+                />
+              </View>
+            )}
+
+            {appLockStep === "confirm_new" && (
+              <View style={{ alignItems: "center" }}>
+                <PinKeypad
+                  title={language === "BM" ? "Sahkan PIN Baru Anda" : "Confirm Your New PIN"}
+                  subtitle={language === "BM" ? "Masukkan sekali lagi kod PIN yang sama" : "Re-enter the same 4-digit code"}
+                  onPinComplete={handlePinCompleted}
+                  showBiometricOption={false}
+                  errorMessage={pinError}
+                />
+              </View>
+            )}
           </View>
         </KeyboardAvoidingView>
       </Modal>

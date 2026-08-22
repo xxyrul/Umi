@@ -5,14 +5,25 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Property listings documents (SPA, IC, Geran, Utility bills, Photos, Videos)
-    // Files are uploaded under listings/{listingId}/{fileName}
-    match /listings/{listingId}/{allPaths=**} {
-      // Any authenticated agent can read property photos/documents
-      // Authenticated agents can upload files with generous limit (200MB)
-      allow read: if isAuthed();
-      allow write: if isAuthed()
-        && request.resource.size < 200 * 1024 * 1024;
+    function isListingOwner(listingId) {
+      return isAuthed() && (
+        firestore.get(/databases/(default)/documents/listings/$(listingId)).data.userId == request.auth.uid ||
+        firestore.get(/databases/(default)/documents/listings/$(listingId)).data.agentId == request.auth.uid
+      );
+    }
+
+    // Property listing files
+    // 1. Photos (gambar_*) are public to all authenticated agents.
+    // 2. Private documents (geran, IC, SPA, etc) can ONLY be read by the owner.
+    match /listings/{listingId}/{fileName} {
+      allow read: if isAuthed() && (fileName.matches('gambar_.*') || isListingOwner(listingId));
+      allow write: if isAuthed() && request.resource.size < 200 * 1024 * 1024;
+    }
+
+    // Catch-all for any nested sub-paths (just in case)
+    match /listings/{listingId}/{subPath=**} {
+      allow read: if isAuthed() && isListingOwner(listingId);
+      allow write: if isAuthed() && request.resource.size < 200 * 1024 * 1024;
     }
 
     // Feedback screenshots & attachments (feedback/{feedbackId}/{fileName})

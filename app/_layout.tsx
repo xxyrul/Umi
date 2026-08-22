@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import * as Sentry from '@sentry/react-native';
 import * as Notifications from 'expo-notifications';
-import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, StatusBar, Button, BackHandler, Platform } from "react-native";
+import { View, Text, ActivityIndicator, AppState, AppStateStatus, Animated, StatusBar, Button, BackHandler, Platform, Modal, KeyboardAvoidingView } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Slot, Stack, useSegments, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -21,6 +21,25 @@ import {
 } from "@/services/updateNotifications";
 import { isUserRegistrationComplete } from "@/services/auth";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import {
+  getAppLockEnabled,
+  verifyAppLockPin,
+  getBiometricsEnabled,
+  authenticateBiometric,
+  getAppLockTimeout,
+} from "@/services/security";
+import { PinKeypad, OfflineBanner } from "@/components";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import * as ScreenCapture from "expo-screen-capture";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes cache
+      retry: 2,
+    },
+  },
+});
 
 // Keep splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -148,9 +167,18 @@ function RootLayoutInner({
   authLoaded: boolean;
   setAuthLoaded: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
-  const { themeColors, isDark, language } = useAppSettings();
+  const { themeColors, isDark, language, allowScreenshots } = useAppSettings();
   const router = useRouter();
   const segments = useSegments() as string[];
+
+  // Screen Capture Protection
+  useEffect(() => {
+    if (allowScreenshots) {
+      ScreenCapture.allowScreenCaptureAsync().catch(() => {});
+    } else {
+      ScreenCapture.preventScreenCaptureAsync().catch(() => {});
+    }
+  }, [allowScreenshots]);
 
   const userRef = useRef<User | null>(user);
 
@@ -217,8 +245,86 @@ function RootLayoutInner({
     };
   }, [router]);
 
+  // App Lock PIN & Biometrics Screen Protection
+  const [isAppLocked, setIsAppLocked] = useState(false);
+  const [pinUnlockError, setPinUnlockError] = useState("");
+
+  const languageRef = useRef(language);
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  const checkAppLock = async () => {
+    try {
+      const enabled = await getAppLockEnabled();
+      if (enabled) {
+        setIsAppLocked(true);
+        const bioEnabled = await getBiometricsEnabled();
+        if (bioEnabled) {
+          const success = await authenticateBiometric(
+            languageRef.current === "BM" ? "Buka artha" : "Unlock artha"
+          );
+          if (success) {
+            setIsAppLocked(false);
+          }
+        }
+      } else {
+        setIsAppLocked(false);
+      }
+    } catch {
+      setIsAppLocked(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user && authLoaded) {
+      checkAppLock();
+    }
+  }, [user, authLoaded]);
+
+  const lastBackgroundTimeRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState === "background" || nextState === "inactive") {
+        lastBackgroundTimeRef.current = Date.now();
+      } else if (nextState === "active" && userRef.current) {
+        const lastBg = lastBackgroundTimeRef.current;
+        const timeoutMs = await getAppLockTimeout();
+        if (lastBg === null || Date.now() - lastBg >= timeoutMs) {
+          checkAppLock();
+        }
+        lastBackgroundTimeRef.current = null;
+      }
+    };
+    const sub = AppState.addEventListener("change", handleAppStateChange);
+    return () => sub.remove();
+  }, []);
+
+  const handleUnlockWithPin = async (pin: string) => {
+    setPinUnlockError("");
+    const isValid = await verifyAppLockPin(pin);
+    if (isValid) {
+      setIsAppLocked(false);
+    } else {
+      setPinUnlockError(
+        languageRef.current === "BM" ? "PIN tidak sah. Sila cuba lagi." : "Incorrect PIN. Please try again."
+      );
+    }
+  };
+
+  const handleUnlockWithBiometrics = async () => {
+    const success = await authenticateBiometric(
+      languageRef.current === "BM" ? "Buka artha" : "Unlock artha"
+    );
+    if (success) {
+      setIsAppLocked(false);
+    }
+  };
+
   return (
     <SafeAreaProvider>
+      <OfflineBanner />
       <AuthGuard user={user} authLoaded={authLoaded} />
       {/* Universal status bar — adapts to theme, prevents white flash */}
       <StatusBar
@@ -246,6 +352,38 @@ function RootLayoutInner({
           <Stack.Screen name="case/form" options={{ animation: "slide_from_right" }} />
         </Stack>
       </View>
+
+      {/* App Lock PIN Shield Screen */}
+      <Modal
+        visible={isAppLocked}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{
+            flex: 1,
+            backgroundColor: themeColors.canvasBackground,
+            justifyContent: "center",
+            alignItems: "center",
+            paddingHorizontal: 24,
+          }}
+        >
+          <PinKeypad
+            title={language === "BM" ? "Kunci Aplikasi" : "App Locked"}
+            subtitle={
+              language === "BM"
+                ? "Masukkan PIN 4-digit untuk membuka artha"
+                : "Enter your 4-digit PIN to unlock artha"
+            }
+            onPinComplete={handleUnlockWithPin}
+            onBiometricSuccess={handleUnlockWithBiometrics}
+            showBiometricOption={true}
+            errorMessage={pinUnlockError}
+          />
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaProvider>
   );
 }
@@ -280,14 +418,16 @@ function RootLayout() {
   }
 
   return (
-    <AppSettingsProvider>
-      <RootLayoutInner
-        user={user}
-        setUser={setUser}
-        authLoaded={authLoaded}
-        setAuthLoaded={setAuthLoaded}
-      />
-    </AppSettingsProvider>
+    <QueryClientProvider client={queryClient}>
+      <AppSettingsProvider>
+        <RootLayoutInner
+          user={user}
+          setUser={setUser}
+          authLoaded={authLoaded}
+          setAuthLoaded={setAuthLoaded}
+        />
+      </AppSettingsProvider>
+    </QueryClientProvider>
   );
 }
 

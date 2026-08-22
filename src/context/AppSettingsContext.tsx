@@ -20,6 +20,8 @@ export interface AppSettingsContextType {
   t: (key: TranslationKeys) => string;
   hasCompletedOnboarding: boolean;
   isOnboardingChecked: boolean;
+  allowScreenshots: boolean;
+  toggleAllowScreenshots: () => void;
   saveOnboardingCompleted: (agentName: string) => Promise<void>;
 }
 
@@ -34,6 +36,7 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<LanguageMode>("BM");
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState<boolean>(false);
   const [isOnboardingChecked, setIsOnboardingChecked] = useState<boolean>(false);
+  const [allowScreenshots, setAllowScreenshots] = useState<boolean>(true);
 
   // Load saved preferences on mount
   useEffect(() => {
@@ -49,6 +52,11 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
           setLanguageState(savedLang);
         }
 
+        const savedScreenshots = await AsyncStorage.getItem("@umi_allow_screenshots");
+        if (savedScreenshots !== null) {
+          setAllowScreenshots(savedScreenshots === "true");
+        }
+
         const onboardingCompleted = await AsyncStorage.getItem("hasCompletedOnboarding");
         setHasCompletedOnboarding(onboardingCompleted === "true");
       } catch (error) {
@@ -60,6 +68,16 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
 
     loadPreferences();
   }, []);
+
+  const toggleAllowScreenshots = async () => {
+    const newValue = !allowScreenshots;
+    setAllowScreenshots(newValue);
+    try {
+      await AsyncStorage.setItem("@umi_allow_screenshots", String(newValue));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const saveOnboardingCompleted = async (agentName: string) => {
     try {
@@ -131,6 +149,8 @@ export function AppSettingsProvider({ children }: { children: ReactNode }) {
         t,
         hasCompletedOnboarding,
         isOnboardingChecked,
+        allowScreenshots,
+        toggleAllowScreenshots,
         saveOnboardingCompleted,
       }}
     >

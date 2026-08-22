@@ -1,13 +1,15 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, LayoutChangeEvent } from "react-native";
 import { Tabs } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import Animated, { 
-  useAnimatedStyle, 
+import * as Haptics from "expo-haptics";
+import Animated, {
+  useAnimatedStyle,
   useSharedValue,
-  withSpring, 
+  withSpring,
+  withSequence,
 } from "react-native-reanimated";
 import { ScrollAwareBarProvider, useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 
@@ -18,18 +20,50 @@ const TABS = [
   { name: "profile", labelEN: "Profile", labelBM: "Profil", icon: "account" },
 ];
 
-function TabItemButton({ tab, isFocused, onPress, tintColor, tabLabel }: any) {
+function TabItemButton({
+  tab,
+  isFocused,
+  onPress,
+  tintColor,
+  tabLabel,
+}: any) {
+  const iconScale = useSharedValue(1);
+
+  useEffect(() => {
+    if (isFocused) {
+      iconScale.value = withSequence(
+        withSpring(1.22, { damping: 10, stiffness: 220 }),
+        withSpring(1.0, { damping: 12 })
+      );
+    }
+  }, [isFocused]);
+
+  const animatedIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: iconScale.value }],
+  }));
+
+  const handlePress = () => {
+    Haptics.selectionAsync().catch(() => {});
+    onPress();
+  };
+
   return (
-    <TouchableOpacity activeOpacity={0.75} onPress={onPress} style={styles.tabItem}>
-      <MaterialCommunityIcons
-        name={tab.icon as any}
-        size={20}
-        color={tintColor}
-      />
-      <Text 
+    <TouchableOpacity
+      activeOpacity={0.75}
+      onPress={handlePress}
+      style={styles.tabItem}
+    >
+      <Animated.View style={animatedIconStyle}>
+        <MaterialCommunityIcons
+          name={tab.icon as any}
+          size={20}
+          color={tintColor}
+        />
+      </Animated.View>
+      <Text
         style={[
-          styles.tabLabel, 
-          { color: tintColor, fontWeight: isFocused ? "700" : "600" }
+          styles.tabLabel,
+          { color: tintColor, fontWeight: isFocused ? "700" : "600" },
         ]}
       >
         {tabLabel}
@@ -43,34 +77,85 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
   const { themeColors, isDark, language } = useAppSettings();
   const { barTranslateY } = useScrollAwareBar();
 
-  // The bar container slides down (hides) when scrolling down, based on context
-  const animatedBarStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: withSpring(barTranslateY.value, { damping: 20, stiffness: 150 }) }],
-    };
-  });
+  const [barWidth, setBarWidth] = useState(0);
+  const indicatorTranslateX = useSharedValue(0);
+
+  const activeIndex = TABS.findIndex(
+    (t) => t.name === state.routes[state.index]?.name
+  );
+
+  useEffect(() => {
+    if (barWidth > 0 && activeIndex >= 0) {
+      const tabWidth = (barWidth - 16) / TABS.length; // accounting for 8px padding each side
+      indicatorTranslateX.value = withSpring(activeIndex * tabWidth + 8, {
+        damping: 18,
+        stiffness: 180,
+        mass: 0.7,
+      });
+    }
+  }, [activeIndex, barWidth]);
+
+  // Clean UI-thread translateY without double-spring wrapping
+  const animatedBarStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: barTranslateY.value }],
+  }));
+
+  const animatedIndicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorTranslateX.value }],
+    width: barWidth > 0 ? (barWidth - 16) / TABS.length : 0,
+  }));
 
   const currentRouteName = state.routes[state.index]?.name;
-  const mainTabNames = TABS.map(t => t.name);
+  const mainTabNames = TABS.map((t) => t.name);
   if (currentRouteName && !mainTabNames.includes(currentRouteName)) {
     return null;
   }
 
   const bottomInset = Math.max(insets.bottom, 12) + 12;
 
+  const handleLayout = (e: LayoutChangeEvent) => {
+    setBarWidth(e.nativeEvent.layout.width);
+  };
+
   return (
-    <Animated.View style={[styles.floatingContainer, { bottom: bottomInset }, animatedBarStyle]}>
-      <View 
+    <Animated.View
+      style={[styles.floatingContainer, { bottom: bottomInset }, animatedBarStyle]}
+    >
+      <View
+        onLayout={handleLayout}
         style={[
           styles.glassBar,
-          { 
-            backgroundColor: isDark ? "rgba(30, 30, 30, 0.92)" : "rgba(255, 255, 255, 0.92)",
-            borderColor: themeColors.borderColor 
-          }
+          {
+            backgroundColor: isDark
+              ? "rgba(26, 26, 28, 0.94)"
+              : "rgba(255, 255, 255, 0.94)",
+            borderColor: themeColors.borderColor,
+          },
         ]}
       >
-        {TABS.map((tab, index) => {
-          const routeIndex = state.routes.findIndex((r: any) => r.name === tab.name);
+        {/* Animated Active Tab Pill Indicator */}
+        {barWidth > 0 && (
+          <Animated.View
+            style={[
+              styles.indicatorPill,
+              {
+                backgroundColor: isDark
+                  ? "rgba(255, 178, 184, 0.20)"
+                  : "rgba(122, 17, 40, 0.12)",
+                borderWidth: 1,
+                borderColor: isDark
+                  ? "rgba(255, 178, 184, 0.35)"
+                  : "rgba(122, 17, 40, 0.22)",
+              },
+              animatedIndicatorStyle,
+            ]}
+          />
+        )}
+
+        {TABS.map((tab) => {
+          const routeIndex = state.routes.findIndex(
+            (r: any) => r.name === tab.name
+          );
           const isFocused = state.index === routeIndex;
 
           const onPress = () => {
@@ -153,10 +238,17 @@ const styles = StyleSheet.create({
     // Android Shadow
     elevation: 8,
   },
+  indicatorPill: {
+    position: "absolute",
+    top: 6,
+    bottom: 6,
+    borderRadius: 21,
+  },
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
+    zIndex: 1,
   },
   tabLabel: {
     fontSize: 10,

@@ -63,7 +63,10 @@ export interface UserProfile {
 
 export interface CaseMetrics {
   totalCases: number;
-  pending: number;
-  approved: number;
-  completed: number;
+  aktif: number;
+  booking: number;
+  underLoan: number;
+  underSpa: number;
+  sold: number;
+  expired: number;
 }

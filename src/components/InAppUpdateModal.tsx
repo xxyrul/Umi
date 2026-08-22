@@ -190,13 +190,11 @@ export function InAppUpdateModal({ visible, release, onClose }: InAppUpdateModal
 
               {/* Progress Track */}
               <View style={[styles.progressTrack, { backgroundColor: themeColors.surfaceContainer }]}>
-                <View
+                <Animated.View
                   style={[
                     styles.progressFill,
-                    {
-                      width: `${downloadProgress}%`,
-                      backgroundColor: themeColors.maroonPrimary,
-                    },
+                    { backgroundColor: themeColors.maroonPrimary },
+                    animatedProgressStyle,
                   ]}
                 />
               </View>

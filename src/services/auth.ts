@@ -69,25 +69,44 @@ export async function completeGoogleRegistration(
   displayName: string,
   inviteCode: string
 ): Promise<{ success: boolean; code: string }> {
-  // 1. Validate invite code first
+  // 1. Validate invite code first (read-only, outside transaction)
   const { code: validatedCode, isMaster } = await validateInviteCodeOnly(inviteCode);
 
-  // 2. Set user record in Firestore
-  await firebaseDB.collection("users").doc(uid).set(
-    {
-      uid,
-      email,
-      displayName,
-      registeredWithCode: validatedCode,
-      role: "agent",
-      updatedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-    { merge: true }
-  );
+  // 2. Atomically create user doc + claim the invite code in a single transaction.
+  //    If either step fails, both are rolled back — no orphaned states.
+  await firebaseDB.runTransaction(async (transaction) => {
+    const userRef = firebaseDB.collection("users").doc(uid);
 
-  // 3. Claim the code in Firestore
-  await claimInviteCodeOnly(validatedCode, email, displayName, isMaster);
+    transaction.set(
+      userRef,
+      {
+        uid,
+        email,
+        displayName,
+        registeredWithCode: validatedCode,
+        role: "agent",
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+
+    // Claim single-use codes inside the same transaction
+    if (!isMaster) {
+      const codeRef = firebaseDB.collection("invite_codes").doc(validatedCode);
+      transaction.update(codeRef, {
+        status: "USED",
+        usedBy: email,
+        usedByName: displayName,
+        usedAt: new Date().toISOString(),
+      });
+    }
+  });
+
+  // Master code metadata update is best-effort (non-critical)
+  if (isMaster) {
+    await claimInviteCodeOnly(validatedCode, email, displayName, true).catch(() => {});
+  }
 
   return { success: true, code: validatedCode };
 }
@@ -179,23 +198,44 @@ export async function signUpWithEmail(
     // Dispatch email verification link (silently in background)
     userCredential.user.sendEmailVerification().catch(() => {});
 
-    // Sync user record to Firestore with invite code tracking
+    // Atomically create user doc + claim invite code in a single transaction
     try {
-      await firebaseDB.collection("users").doc(userCredential.user.uid).set({
-        uid: userCredential.user.uid,
-        email: userCredential.user.email || email,
-        displayName: displayName,
-        registeredWithCode: validatedCode,
-        role: "agent",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
+      await firebaseDB.runTransaction(async (transaction) => {
+        const userRef = firebaseDB.collection("users").doc(userCredential.user.uid);
+
+        transaction.set(
+          userRef,
+          {
+            uid: userCredential.user.uid,
+            email: userCredential.user.email || email,
+            displayName: displayName,
+            registeredWithCode: validatedCode,
+            role: "agent",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+
+        // Claim single-use codes inside the same transaction
+        if (!isMaster) {
+          const codeRef = firebaseDB.collection("invite_codes").doc(validatedCode);
+          transaction.update(codeRef, {
+            status: "USED",
+            usedBy: email,
+            usedByName: displayName,
+            usedAt: new Date().toISOString(),
+          });
+        }
+      });
     } catch (dbError) {
       console.warn("Could not sync user profile to Firestore:", dbError);
     }
 
-    // Now safely consume the invite code
-    await claimInviteCodeOnly(validatedCode, email, displayName, isMaster).catch(() => {});
+    // Master code metadata update is best-effort
+    if (isMaster) {
+      await claimInviteCodeOnly(validatedCode, email, displayName, true).catch(() => {});
+    }
 
     return {
       uid: userCredential.user.uid,

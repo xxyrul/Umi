@@ -281,7 +281,13 @@ exports.verifyAdminAccessCode = onRequest(
         try { body = JSON.parse(body); } catch (e) {}
       }
       const passcode = body?.passcode;
-      const MASTER_KEY = (process.env.ADMIN_ACCESS_CODE || "Artha#8492!Admin$K9x").trim();
+      const MASTER_KEY = (process.env.ADMIN_ACCESS_CODE || "").trim();
+
+      if (!MASTER_KEY) {
+        logger.error("ADMIN_ACCESS_CODE environment variable is not configured.");
+        res.status(500).json({ error: "Server configuration error." });
+        return;
+      }
 
       if (!passcode || typeof passcode !== "string" || passcode.trim() !== MASTER_KEY) {
         logger.warn("Invalid admin passcode attempt.");
@@ -295,7 +301,14 @@ exports.verifyAdminAccessCode = onRequest(
       const expiresAt = timestamp + (24 * 60 * 60 * 1000); // 24 hours
       
       const payload = `${sessionId}:${timestamp}:${expiresAt}:admin`;
-      const secret = process.env.SESSION_SECRET || "artha_master_super_admin_secret_2026";
+      const secret = (process.env.SESSION_SECRET || "").trim();
+
+      if (!secret) {
+        logger.error("SESSION_SECRET environment variable is not configured.");
+        res.status(500).json({ error: "Server configuration error." });
+        return;
+      }
+
       const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
 
       const sessionToken = `${payload}:${signature}`;

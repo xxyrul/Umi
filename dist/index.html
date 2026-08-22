@@ -10,7 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   
   <script>
-    if (window.location.pathname !== '/' && !window.location.pathname.startsWith('/admin')) {
+    const isListingRoute = window.location.pathname.startsWith('/listing/') || window.location.search.includes('listingId=');
+    if (!isListingRoute && window.location.pathname !== '/' && !window.location.pathname.startsWith('/admin')) {
       window.history.replaceState(null, '', '/');
     }
     if ('serviceWorker' in navigator) {
@@ -463,13 +464,213 @@
       width: 100%;
       margin: 0 auto;
     }
+    /* Listing Showcase Styles */
+    .listing-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      overflow: hidden;
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: left;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+    .listing-hero-img {
+      width: 100%;
+      height: 380px;
+      object-fit: cover;
+      background: #0E1626;
+      display: block;
+    }
+    .listing-thumbs {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      overflow-x: auto;
+      background: rgba(0, 0, 0, 0.3);
+      border-bottom: 1px solid var(--border);
+    }
+    .listing-thumb {
+      width: 72px;
+      height: 54px;
+      border-radius: 8px;
+      object-fit: cover;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+      opacity: 0.7;
+    }
+    .listing-thumb.active, .listing-thumb:hover {
+      border-color: var(--maroon);
+      opacity: 1;
+    }
+    .listing-content {
+      padding: 28px;
+    }
+    .listing-price-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .listing-price {
+      font-size: 28px;
+      font-weight: 800;
+      color: #FDA4AF;
+    }
+    .listing-status-tag {
+      display: inline-flex;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34D399;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .listing-title {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.3;
+      margin-bottom: 12px;
+    }
+    .listing-location {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .specs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 12px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      margin-bottom: 24px;
+    }
+    .spec-box {
+      text-align: center;
+      padding: 8px;
+    }
+    .spec-icon {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .spec-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .spec-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-top: 2px;
+    }
+    .listing-desc-box {
+      border-top: 1px solid var(--border);
+      padding-top: 20px;
+      margin-top: 20px;
+    }
+    .listing-desc-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .listing-desc-text {
+      font-size: 14px;
+      line-height: 1.7;
+      color: #CBD5E1;
+      white-space: pre-line;
+    }
+    .agent-bar {
+      margin-top: 28px;
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(225, 29, 72, 0.1), rgba(14, 22, 38, 0.9));
+      border: 1px solid rgba(225, 29, 72, 0.3);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .agent-info {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .agent-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 24px;
+      background: var(--maroon);
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .agent-name {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .agent-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .agent-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn-whatsapp {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #25D366;
+      color: #FFF;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 800;
+      text-decoration: none;
+      box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);
+      transition: all 0.2s;
+    }
+    .btn-whatsapp:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(37, 211, 102, 0.5);
+    }
+    .btn-call {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: #FFF;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
 
   <header>
     <a href="/" class="brand">
-      <img src="./assets/icon.png" alt="Artha Logo" style="width: 38px; height: 38px; border-radius: 10px; object-fit: cover; box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35);" />
+      <img src="/assets/icon.png" alt="Artha Logo" style="width: 38px; height: 38px; border-radius: 10px; object-fit: cover; box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35);" />
       <div class="brand-name">Artha</div>
     </a>
     <div class="lang-switcher">
@@ -479,7 +680,83 @@
   </header>
 
   <main>
-    <div class="hero">
+    <!-- Listing Showcase Container (Only visible when viewing /listing/<id>) -->
+    <div id="listing-view" style="display: none;">
+      <div id="listing-loading" style="text-align: center; padding: 60px 0; color: var(--text-muted);">
+        <div style="font-size: 36px; margin-bottom: 12px;">🏡</div>
+        <div style="font-size: 16px; font-weight: 700;">Loading Property Listing...</div>
+      </div>
+
+      <div id="listing-card" class="listing-card" style="display: none;">
+        <img id="listing-hero" class="listing-hero-img" src="" alt="Property" />
+        <div id="listing-thumbnails" class="listing-thumbs"></div>
+
+        <div class="listing-content">
+          <div class="listing-price-row">
+            <div class="listing-price" id="listing-price">RM 0</div>
+            <div class="listing-status-tag" id="listing-status">For Sale</div>
+          </div>
+
+          <h1 class="listing-title" id="listing-title">Property Title</h1>
+          <div class="listing-location" id="listing-location">📍 Malaysia</div>
+
+          <div class="specs-grid">
+            <div class="spec-box">
+              <div class="spec-icon">🛏️</div>
+              <div class="spec-label">Beds</div>
+              <div class="spec-value" id="spec-beds">0</div>
+            </div>
+            <div class="spec-box">
+              <div class="spec-icon">🚿</div>
+              <div class="spec-label">Baths</div>
+              <div class="spec-value" id="spec-baths">0</div>
+            </div>
+            <div class="spec-box">
+              <div class="spec-icon">📐</div>
+              <div class="spec-label">Size</div>
+              <div class="spec-value" id="spec-size">-</div>
+            </div>
+            <div class="spec-box">
+              <div class="spec-icon">📜</div>
+              <div class="spec-label">Tenure</div>
+              <div class="spec-value" id="spec-tenure">-</div>
+            </div>
+            <div class="spec-box">
+              <div class="spec-icon">🏠</div>
+              <div class="spec-label">Type</div>
+              <div class="spec-value" id="spec-type">-</div>
+            </div>
+          </div>
+
+          <div class="listing-desc-box">
+            <div class="listing-desc-title">📝 Property Description</div>
+            <div class="listing-desc-text" id="listing-desc"></div>
+          </div>
+
+          <!-- Agent Contact & WhatsApp CTA -->
+          <div class="agent-bar">
+            <div class="agent-info">
+              <div class="agent-avatar" id="agent-avatar">A</div>
+              <div>
+                <div class="agent-name" id="agent-name">Property Agent</div>
+                <div class="agent-sub">Licensed Real Estate Negotiator</div>
+              </div>
+            </div>
+            <div class="agent-actions">
+              <a href="#" id="btn-agent-wa" target="_blank" class="btn-whatsapp">
+                <span>💬 WhatsApp Agent</span>
+              </a>
+              <a href="#" id="btn-agent-call" class="btn-call">
+                <span>📞 Call</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- App Download Landing View (Visible for root / visitors) -->
+    <div class="hero" id="app-download-view">
       <div class="badge-release" id="version-badge">
         🚀 Latest Release: v1.4.2 (Build 54)
       </div>
@@ -724,6 +1001,245 @@
       const arrow = headerEl.querySelector('.accordion-arrow');
       if (arrow) arrow.textContent = isHidden ? '▲' : '▼';
     }
+
+    // ==========================================
+    // Public Property Listing Viewer Handler
+    // ==========================================
+    let currentListingData = null;
+
+    function renderListingUI(docData, lang = 'en') {
+      const f = docData.fields || {};
+      const rawTitle = (f.tajuk?.stringValue || 'Hartanah Untuk Dijual').trim();
+      const rawDesc = (f.description?.stringValue || f.keterangan?.stringValue || '').trim();
+      const priceVal = f.harga?.integerValue || f.harga?.doubleValue || f.harga?.stringValue || 0;
+      const price = Number(priceVal) ? `RM ${Number(priceVal).toLocaleString()}` : (priceVal ? `RM ${priceVal}` : 'RM -');
+      const statusRaw = f.status?.stringValue || 'Aktif';
+      const location = f.alamat?.stringValue || f.negeri?.stringValue || 'Malaysia';
+      const beds = Number(f.bilikTidur?.integerValue || f.bilikTidur?.stringValue || 0);
+      const baths = Number(f.bilikAir?.integerValue || f.bilikAir?.stringValue || 0);
+      let size = f.keluasan?.stringValue || f.keluasan?.integerValue || '';
+      const tenure = f.pegangan?.stringValue || 'Freehold';
+      const lot = f.lot?.stringValue || '';
+      const type = f.jenis?.stringValue || 'Commercial / Land';
+      let agentName = (f.agentName?.stringValue || f.namaOwner?.stringValue || '').trim();
+      let agentPhone = (f.agentPhone?.stringValue || f.telOwner?.stringValue || '').trim();
+
+      // Smart title & description parser:
+      // If title is multi-line or very long, separate headline from description body
+      let cleanTitle = rawTitle;
+      let cleanDesc = rawDesc;
+
+      if (rawTitle.includes('\n') || rawTitle.length > 70) {
+        const lines = rawTitle.split('\n').map(l => l.trim()).filter(Boolean);
+        if (lines.length > 0) {
+          cleanTitle = lines[0]; // First line is headline
+          if (!cleanDesc || cleanDesc === 'Tiada keterangan tambahan.') {
+            cleanDesc = lines.slice(1).join('\n\n'); // Remaining lines are description
+          }
+        }
+      }
+
+      if (!cleanDesc) {
+        cleanDesc = lang === 'bm' ? 'Sila hubungi ejen untuk maklumat lanjut dan temujanji viewing.' : 'Please contact the agent for further details and viewing appointment.';
+      }
+
+      // If agentName is missing or just phone digits, try extracting name from description e.g. "Lela Farisha | 018-9851700"
+      if (!agentName || /^\+?[0-9\s-]+$/.test(agentName)) {
+        const fullText = rawTitle + '\n' + cleanDesc;
+        const agentMatch = fullText.match(/(?:📲|📞|Hubungi|Contact|PM\/WhatsApp|PM)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[|–-]\s*(\d[\d\s-]{8,14})/);
+        if (agentMatch) {
+          agentName = agentMatch[1].trim();
+          if (!agentPhone) agentPhone = agentMatch[2].replace(/[\s-]/g, '');
+        } else if (!agentName) {
+          agentName = 'Lela Farisha';
+        }
+      }
+      if (!agentPhone) agentPhone = '0189851700';
+
+      // Try auto-extracting size if empty
+      if (!size) {
+        const sizeMatch = (rawTitle + ' ' + cleanDesc).match(/(\d+[\d,.]*\s*(?:sqft|sq\s*ft|kaki\s*persegi|m²))/i);
+        if (sizeMatch) size = sizeMatch[1];
+      }
+
+      // Status tag
+      const isBM = (lang === 'bm');
+      let statusLabel = statusRaw;
+      if (statusRaw.toLowerCase() === 'aktif' || statusRaw.toLowerCase() === 'active') {
+        statusLabel = isBM ? 'Aktif / Untuk Dijual' : 'Active / For Sale';
+      } else if (statusRaw.toLowerCase() === 'booking') {
+        statusLabel = isBM ? 'Dalam Booking' : 'Under Booking';
+      } else if (statusRaw.toLowerCase() === 'sold' || statusRaw.toLowerCase() === 'terjual') {
+        statusLabel = isBM ? 'Terjual' : 'Sold';
+      }
+
+      document.title = `${cleanTitle} (${price}) — Artha`;
+      document.getElementById('listing-title').textContent = cleanTitle;
+      document.getElementById('listing-price').textContent = price;
+      document.getElementById('listing-status').textContent = statusLabel;
+      document.getElementById('listing-location').textContent = `📍 ${location}`;
+      document.getElementById('listing-desc').textContent = cleanDesc;
+      document.getElementById('agent-name').textContent = agentName;
+      document.getElementById('agent-avatar').textContent = (agentName || 'A')[0].toUpperCase();
+
+      // Dynamic Specs Grid: only show specs that exist & make sense
+      const specsGrid = document.querySelector('.specs-grid');
+      let specsHtml = '';
+
+      if (beds > 0) {
+        specsHtml += `
+          <div class="spec-box">
+            <div class="spec-icon">🛏️</div>
+            <div class="spec-label">${isBM ? 'Bilik' : 'Beds'}</div>
+            <div class="spec-value">${beds}</div>
+          </div>
+        `;
+      }
+
+      if (baths > 0) {
+        specsHtml += `
+          <div class="spec-box">
+            <div class="spec-icon">🚿</div>
+            <div class="spec-label">${isBM ? 'Bilik Air' : 'Baths'}</div>
+            <div class="spec-value">${baths}</div>
+          </div>
+        `;
+      }
+
+      if (size) {
+        specsHtml += `
+          <div class="spec-box">
+            <div class="spec-icon">📐</div>
+            <div class="spec-label">${isBM ? 'Keluasan' : 'Size'}</div>
+            <div class="spec-value">${String(size).includes('sq') || String(size).includes('m²') ? size : `${size} sqft`}</div>
+          </div>
+        `;
+      }
+
+      if (tenure) {
+        specsHtml += `
+          <div class="spec-box">
+            <div class="spec-icon">📜</div>
+            <div class="spec-label">${isBM ? 'Pegangan' : 'Tenure'}</div>
+            <div class="spec-value">${lot ? `${tenure} (${lot})` : tenure}</div>
+          </div>
+        `;
+      }
+
+      if (type) {
+        specsHtml += `
+          <div class="spec-box">
+            <div class="spec-icon">🏠</div>
+            <div class="spec-label">${isBM ? 'Jenis' : 'Type'}</div>
+            <div class="spec-value">${type}</div>
+          </div>
+        `;
+      }
+
+      specsGrid.innerHTML = specsHtml || `
+        <div class="spec-box" style="grid-column: 1 / -1;">
+          <div class="spec-icon">🏷️</div>
+          <div class="spec-label">${isBM ? 'Jenis Hartanah' : 'Property Type'}</div>
+          <div class="spec-value">${type || 'Hartanah'}</div>
+        </div>
+      `;
+
+      // Section titles & CTA text
+      document.querySelector('.listing-desc-title').textContent = isBM ? '📝 Keterangan Hartanah' : '📝 Property Description';
+      document.querySelector('.agent-sub').textContent = isBM ? 'Perunding Hartanah Berdaftar' : 'Licensed Real Estate Negotiator';
+
+      // Photos Hero & Thumbnails
+      let photos = [];
+      if (f.gambar?.arrayValue?.values) {
+        photos = f.gambar.arrayValue.values.map(v => v.stringValue).filter(Boolean);
+      }
+
+      const heroImg = document.getElementById('listing-hero');
+      const thumbsContainer = document.getElementById('listing-thumbnails');
+
+      if (photos.length > 0) {
+        heroImg.src = photos[0];
+        heroImg.style.display = 'block';
+        thumbsContainer.innerHTML = photos.map((src, i) => `
+          <img src="${src}" class="listing-thumb ${i === 0 ? 'active' : ''}" onclick="selectListingPhoto('${src}', this)" />
+        `).join('');
+        thumbsContainer.style.display = photos.length > 1 ? 'flex' : 'none';
+      } else {
+        heroImg.src = '/assets/icon.png';
+        thumbsContainer.style.display = 'none';
+      }
+
+      // WhatsApp & Call Buttons
+      const cleanPhone = String(agentPhone).replace(/[^0-9]/g, '');
+      const waPhone = cleanPhone.startsWith('60') ? cleanPhone : (cleanPhone.startsWith('0') ? '6' + cleanPhone : '60' + cleanPhone);
+      const waMsg = encodeURIComponent(
+        isBM
+          ? `Salam ${agentName}, saya berminat dengan listing hartanah:\n*${cleanTitle}* (${price})\n\nBoleh saya tahu status dan jadual viewing?`
+          : `Hello ${agentName}, I am interested in this property listing:\n*${cleanTitle}* (${price})\n\nCould you please share more details and arrange a viewing?`
+      );
+
+      const waBtn = document.getElementById('btn-agent-wa');
+      waBtn.href = `https://wa.me/${waPhone}?text=${waMsg}`;
+      waBtn.innerHTML = `<span>💬 ${isBM ? 'WhatsApp Ejen' : 'WhatsApp Agent'}</span>`;
+
+      const callBtn = document.getElementById('btn-agent-call');
+      callBtn.href = `tel:+${waPhone}`;
+      callBtn.innerHTML = `<span>📞 ${isBM ? 'Hubungi' : 'Call'}</span>`;
+
+      document.getElementById('listing-loading').style.display = 'none';
+      document.getElementById('listing-card').style.display = 'block';
+    }
+
+    if (isListingRoute) {
+      document.getElementById('app-download-view').style.display = 'none';
+      const listingView = document.getElementById('listing-view');
+      listingView.style.display = 'block';
+
+      let listingId = '';
+      const path = window.location.pathname;
+      if (path.startsWith('/listing/')) {
+        listingId = path.replace('/listing/', '').split('/')[0].split('?')[0];
+      }
+      if (!listingId) {
+        const params = new URLSearchParams(window.location.search);
+        listingId = params.get('listingId') || params.get('id') || '';
+      }
+
+      if (listingId) {
+        fetch(`https://firestore.googleapis.com/v1/projects/umiren-d6a66/databases/(default)/documents/publicListings/${encodeURIComponent(listingId)}`)
+          .then(res => {
+            if (!res.ok) throw new Error('Listing not found');
+            return res.json();
+          })
+          .then(doc => {
+            currentListingData = doc;
+            renderListingUI(doc, currentLang);
+          })
+          .catch(() => {
+            document.getElementById('listing-loading').innerHTML = `
+              <div style="font-size: 36px; margin-bottom: 12px;">🔍</div>
+              <div style="font-size: 18px; font-weight: 700; color: #FFF; margin-bottom: 8px;">Hartanah Tidak Dijumpai</div>
+              <div style="font-size: 14px; color: var(--text-muted); margin-bottom: 24px;">Listing ini mungkin telah dipadam atau pautan tidak sah.</div>
+              <a href="/" class="btn-download" style="display: inline-flex; width: auto; padding: 12px 24px; font-size: 14px;">Kembali ke Laman Utama</a>
+            `;
+          });
+      }
+    }
+
+    function selectListingPhoto(src, el) {
+      document.getElementById('listing-hero').src = src;
+      document.querySelectorAll('.listing-thumb').forEach(t => t.classList.remove('active'));
+      if (el) el.classList.add('active');
+    }
+
+    // Connect language switcher to re-render listing
+    const origSetLang = window.setLang;
+    window.setLang = function(lang) {
+      if (typeof origSetLang === 'function') origSetLang(lang);
+      if (currentListingData) {
+        renderListingUI(currentListingData, lang);
+      }
+    };
   </script>
 </body>
 </html>

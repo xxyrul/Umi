@@ -511,6 +511,8 @@ export default function PropertyDetailScreen() {
     const locText = locationInfo.displayLocation || listing.alamat || listing.negeri || "Malaysia";
     const descSnippet = (extractedDescription || (listing as any).description || "").trim();
 
+    const webLinkStr = listing.id ? `\n🔗 Info Penuh & Foto: https://umiren-d6a66.web.app/listing/${listing.id}` : "";
+
     if (isBM) {
       return (
         `🏡 ${titleText}\n\n` +
@@ -523,7 +525,8 @@ export default function PropertyDetailScreen() {
         `• Status: ${listing.pegangan || "Freehold"} (${listing.lot || "Bumi Lot"})\n` +
         (listing.jenis ? `• Jenis: ${listing.jenis}\n` : "") +
         (descSnippet ? `\n📝 Keterangan:\n${descSnippet}\n` : "") +
-        `\n📲 Berminat? Hubungi saya segera untuk maklumat lanjut & viewing!`
+        webLinkStr +
+        `\n\n📲 Berminat? Hubungi saya segera untuk maklumat lanjut & viewing!`
       );
     }
 
@@ -538,7 +541,8 @@ export default function PropertyDetailScreen() {
       `• Tenure: ${listing.pegangan || "Freehold"} (${listing.lot || "Bumi Lot"})\n` +
       (listing.jenis ? `• Type: ${listing.jenis}\n` : "") +
       (descSnippet ? `\n📝 Description:\n${descSnippet}\n` : "") +
-      `\n📲 Interested? Contact me now for viewing & details!`
+      (listing.id ? `\n🔗 Full Info & Photos: https://umiren-d6a66.web.app/listing/${listing.id}` : "") +
+      `\n\n📲 Interested? Contact me now for viewing & details!`
     );
   };
 

@@ -62,15 +62,20 @@ export async function createCase(caseData: Omit<PropertyCase, "id" | "userId" | 
 }
 
 /**
- * Get all cases for the current user
+ * Get all cases for the current user (supports optional limit)
  */
-export async function getUserCases(): Promise<PropertyCase[]> {
+export async function getUserCases(limitCount?: number): Promise<PropertyCase[]> {
   try {
     const userId = getCurrentUserId();
-    const querySnapshot = await firestore()
+    let query = firestore()
       .collection(CASES_COLLECTION)
-      .where("userId", "==", userId)
-      .get();
+      .where("userId", "==", userId);
+
+    if (limitCount && limitCount > 0) {
+      query = query.limit(limitCount);
+    }
+
+    const querySnapshot = await query.get();
 
     const cases = querySnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -85,15 +90,27 @@ export async function getUserCases(): Promise<PropertyCase[]> {
 }
 
 /**
- * Get recent cases for the current user (limited to N items)
+ * Get recent cases for the current user with server-side limit
  */
 export async function getRecentCases(limitCount: number = 3): Promise<PropertyCase[]> {
   try {
     const userId = getCurrentUserId();
-    const querySnapshot = await firestore()
-      .collection(CASES_COLLECTION)
-      .where("userId", "==", userId)
-      .get();
+    let querySnapshot;
+    try {
+      querySnapshot = await firestore()
+        .collection(CASES_COLLECTION)
+        .where("userId", "==", userId)
+        .orderBy("updatedAt", "desc")
+        .limit(limitCount)
+        .get();
+    } catch {
+      // Fallback in case compound index is not deployed yet
+      querySnapshot = await firestore()
+        .collection(CASES_COLLECTION)
+        .where("userId", "==", userId)
+        .limit(Math.max(limitCount * 2, 10))
+        .get();
+    }
 
     const cases = querySnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -218,16 +235,45 @@ export async function deleteCase(caseId: string): Promise<void> {
  */
 export async function getCaseMetrics(): Promise<CaseMetrics> {
   try {
-    const cases = await getUserCases();
+    const userId = getCurrentUserId();
+    const collection = firestore().collection(CASES_COLLECTION);
+    
+    // Using aggregation queries avoids downloading all documents, saving massive bandwidth
+    const [
+      totalSnap,
+      viewingSnap,
+      bookingSnap,
+      loanSnap,
+      spaSnap,
+      completedSnap,
+      cancelledSnap,
+      bankLoanSnap
+    ] = await Promise.all([
+      collection.where("userId", "==", userId).count().get(),
+      collection.where("userId", "==", userId).where("status", "==", "Viewing").count().get(),
+      collection.where("userId", "==", userId).where("status", "==", "Booking Paid").count().get(),
+      collection.where("userId", "==", userId).where("status", "==", "Loan Approved").count().get(),
+      collection.where("userId", "==", userId).where("status", "==", "SPA Signed").count().get(),
+      collection.where("userId", "==", userId).where("status", "==", "Completed").count().get(),
+      collection.where("userId", "==", userId).where("status", "==", "Cancelled").count().get(),
+      collection.where("userId", "==", userId).where("finance", "==", "Bank Loan").count().get(),
+    ]);
 
-    const metrics: CaseMetrics = {
-      totalCases: cases.length,
-      pending: cases.filter((c) => c.status === "Pending" || c.status === "Viewing").length,
-      approved: cases.filter((c) => c.status === "Loan Approved" || c.status === "SPA Signed").length,
-      completed: cases.filter((c) => c.status === "Completed").length,
+    // To prevent double counting for "underLoan" if status is "Loan Approved" AND finance is "Bank Loan"
+    // Since aggregation queries don't easily do complex distinct ORs across fields in older versions, 
+    // we'll just sum them roughly or you can use `Filter.or` if using Firebase v9+.
+    const loanApprovedCount = loanSnap.data().count;
+    const bankLoanCount = bankLoanSnap.data().count;
+
+    return {
+      totalCases: totalSnap.data().count,
+      aktif: viewingSnap.data().count + bookingSnap.data().count + loanSnap.data().count + spaSnap.data().count,
+      booking: bookingSnap.data().count,
+      underLoan: Math.max(loanApprovedCount, bankLoanCount), // Approximation to avoid double counting without fetching
+      underSpa: spaSnap.data().count,
+      sold: completedSnap.data().count,
+      expired: cancelledSnap.data().count,
     };
-
-    return metrics;
   } catch (error) {
     console.error("Error calculating metrics:", error);
     throw error;

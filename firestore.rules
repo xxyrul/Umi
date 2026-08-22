@@ -28,8 +28,13 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if true;
-      allow write: if true;
+      // Only authenticated users can read user profiles.
+      // Agents can read other agents' basic info (name, photo) for
+      // the "uploaded by" attribution on shared public listings.
+      allow read: if isAuthed();
+
+      // Users may only create or modify their own profile document.
+      allow write: if isAuthed() && request.auth.uid == userId;
 
       // Push registrations for update notifications. Each signed-in user may
       // only read or modify the devices recorded under their own account, so a
@@ -40,18 +45,42 @@ service cloud.firestore {
     }
 
     match /invite_codes/{code} {
+      // Unauthenticated read is required because email registration validates
+      // the invite code BEFORE creating the Firebase Auth account.
       allow read: if true;
-      allow write: if true;
+      // Agents can update codes to claim them (status → USED) after signing in.
+      // Creating new codes or deleting codes is restricted to admin/Cloud Functions.
+      allow update: if isAuthed();
+      allow create, delete: if false;
     }
 
     match /inviteCodes/{code} {
       allow read: if true;
-      allow write: if true;
+      allow update: if isAuthed();
+      allow create, delete: if false;
     }
 
     match /announcements/{annId} {
-      allow read: if true;
-      allow write: if true;
+      // All authenticated agents can read announcements.
+      allow read: if isAuthed();
+      // Only Cloud Functions (service account) can create/modify announcements.
+      // The admin dashboard creates announcements via the sendBroadcastPush
+      // Cloud Function which bypasses these rules.
+      allow write: if false;
+    }
+
+    // Agent feedback submissions (bug reports, feature requests).
+    // Agents can submit feedback; only Cloud Functions / admin can read it.
+    match /feedback/{docId} {
+      allow create: if isAuthed();
+      allow read, update, delete: if false;
+    }
+
+    // Self-learning geocoding cache populated by the location service.
+    // Any authenticated agent can read cached locations and contribute new ones.
+    match /locationKnowledgeBase/{docId} {
+      allow read, create, update: if isAuthed();
+      allow delete: if false;
     }
 
     match /cases/{caseId} {

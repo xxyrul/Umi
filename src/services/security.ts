@@ -111,6 +111,35 @@ export async function setAppLockEnabled(enabled: boolean): Promise<void> {
   }
 }
 
+const APP_LOCK_TIMEOUT_KEY = "@umi_app_lock_timeout";
+
+/**
+ * Get auto-lock timeout duration in milliseconds.
+ * 0 = Serta-merta (Immediately)
+ * 60000 = 1 Minit (1 Minute - Default)
+ * 300000 = 5 Minit (5 Minutes)
+ * 900000 = 15 Minit (15 Minutes)
+ */
+export async function getAppLockTimeout(): Promise<number> {
+  try {
+    const val = await AsyncStorage.getItem(APP_LOCK_TIMEOUT_KEY);
+    return val !== null ? parseInt(val, 10) : 60000;
+  } catch {
+    return 60000;
+  }
+}
+
+/**
+ * Set auto-lock timeout duration in milliseconds.
+ */
+export async function setAppLockTimeout(timeoutMs: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(APP_LOCK_TIMEOUT_KEY, String(timeoutMs));
+  } catch (error) {
+    console.error("Error saving app lock timeout:", error);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Biometrics enabled flag
 // ---------------------------------------------------------------------------

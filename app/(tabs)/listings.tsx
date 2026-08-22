@@ -12,7 +12,7 @@ import {
   RefreshControl,
   Platform,
   StatusBar,
-  Animated,
+  Animated as RNAnimated,
   Modal,
   Linking,
   AppState,
@@ -34,7 +34,19 @@ import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { firestore, auth } from "@/services/firebase";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  Easing,
+  interpolate,
+  Extrapolation,
+} from "react-native-reanimated";
+import { useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 import { useRouter } from "expo-router";
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 import type { PropertyListing } from "@/types/listing";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -221,48 +233,15 @@ export default function MasterListingScreen() {
 
   const masterMapRef = useRef<MapView>(null);
   const [isLocatingUser, setIsLocatingUser] = useState(false);
-
-  // Smart Auto-Hide FAB on Scroll
-  const fabAnim = useRef(new Animated.Value(0)).current; // 0 = visible, 1 = hidden
-  const lastScrollY = useRef(0);
-  const isFabHidden = useRef(false);
-
-  const showFab = () => {
-    if (isFabHidden.current) {
-      isFabHidden.current = false;
-      Animated.spring(fabAnim, {
-        toValue: 0,
-        friction: 7,
-        tension: 50,
-        useNativeDriver: true,
-      }).start();
-    }
-  };
-
-  const hideFab = () => {
-    if (!isFabHidden.current) {
-      isFabHidden.current = true;
-      Animated.timing(fabAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  };
-
-  const handleListScroll = (event: any) => {
-    const currentY = event.nativeEvent.contentOffset.y;
-    const diff = currentY - lastScrollY.current;
-
-    if (currentY <= 20) {
-      showFab();
-    } else if (diff > 10) {
-      hideFab();
-    } else if (diff < -10) {
-      showFab();
-    }
-    lastScrollY.current = currentY;
-  };
+  const { barTranslateY, scrollHandler } = useScrollAwareBar();
+  const animatedFabStyle = useAnimatedStyle(() => {
+    const translateY = barTranslateY ? barTranslateY.value : 0;
+    const opacity = interpolate(translateY, [0, 60], [1, 0], Extrapolation.CLAMP);
+    return {
+      transform: [{ translateY }],
+      opacity,
+    };
+  });
 
   const handleLocateMeOnMasterMap = async () => {
     try {
@@ -277,40 +256,22 @@ export default function MasterListingScreen() {
         setIsLocatingUser(false);
         return;
       }
-
-      let userCoords: { latitude: number; longitude: number } | null = null;
-      const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
-      if (lastKnown) {
-        userCoords = { latitude: lastKnown.coords.latitude, longitude: lastKnown.coords.longitude };
-        if (masterMapRef.current) {
-          masterMapRef.current.animateToRegion(
-            {
-              ...userCoords,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            },
-            500
-          );
-        }
-      }
-
-      const freshLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      if (freshLoc && masterMapRef.current) {
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (masterMapRef.current && loc?.coords) {
         masterMapRef.current.animateToRegion(
           {
-            latitude: freshLoc.coords.latitude,
-            longitude: freshLoc.coords.longitude,
-            latitudeDelta: 0.04,
-            longitudeDelta: 0.04,
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+            latitudeDelta: 0.05,
+            longitudeDelta: 0.05,
           },
-          600
+          800
         );
       }
-    } catch (err: any) {
-      console.warn("Locate me error:", err);
+    } catch {
       Alert.alert(
         language === "BM" ? "Ralat Lokasi" : "Location Error",
-        language === "BM" ? "Gagal mengesan lokasi semasa anda." : "Could not determine your current GPS location."
+        language === "BM" ? "Gagal mendapatkan lokasi semasa anda." : "Could not determine your current location."
       );
     } finally {
       setIsLocatingUser(false);
@@ -345,8 +306,24 @@ export default function MasterListingScreen() {
   const [tenureRowWidth, setTenureRowWidth] = useState(0);
   const [lotStatusRowWidth, setLotStatusRowWidth] = useState(0);
 
-  const segmentAnim = useRef(new Animated.Value(1)).current;
   const [segmentBarWidth, setSegmentBarWidth] = useState(0);
+  const segmentTranslateX = useSharedValue(0);
+
+  useEffect(() => {
+    if (segmentBarWidth > 0) {
+      segmentTranslateX.value = withTiming(
+        activeSegment === "mine" ? 0 : segmentBarWidth / 2,
+        {
+          duration: 160,
+          easing: Easing.out(Easing.cubic),
+        }
+      );
+    }
+  }, [activeSegment, segmentBarWidth]);
+
+  const animatedSegmentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: segmentTranslateX.value }],
+  }));
 
   // ScrollView Auto-Scroll Ref & Layout state
   const scrollViewRef = useRef<ScrollView>(null);
@@ -364,11 +341,6 @@ export default function MasterListingScreen() {
       setSelectedMapListing(null);
     }
     Haptics.selectionAsync().catch(() => {});
-    Animated.timing(segmentAnim, {
-      toValue: segment === "mine" ? 0 : 1,
-      duration: 140,
-      useNativeDriver: true,
-    }).start();
   };
 
   const loadRecentSearches = async () => {
@@ -696,6 +668,8 @@ export default function MasterListingScreen() {
     const locText = locInfo.displayLocation || item.alamat || item.negeri || "Malaysia";
     const descSnippet = (item.description || "").trim();
 
+    const webLinkStr = item.id ? `\n🔗 Info Penuh & Foto: https://umiren-d6a66.web.app/listing/${item.id}` : "";
+
     if (isBM) {
       return (
         `🏡 ${cleanTitle}\n\n` +
@@ -708,7 +682,8 @@ export default function MasterListingScreen() {
         `• Status: ${item.pegangan || "Freehold"} (${item.lot || "Bumi Lot"})\n` +
         (item.jenis ? `• Jenis: ${item.jenis}\n` : "") +
         (descSnippet ? `\n📝 Keterangan:\n${descSnippet}\n` : "") +
-        `\n📲 Berminat? Hubungi saya segera untuk maklumat lanjut & viewing!`
+        webLinkStr +
+        `\n\n📲 Berminat? Hubungi saya segera untuk maklumat lanjut & viewing!`
       );
     }
 
@@ -723,7 +698,8 @@ export default function MasterListingScreen() {
       `• Tenure: ${item.pegangan || "Freehold"} (${item.lot || "Bumi Lot"})\n` +
       (item.jenis ? `• Type: ${item.jenis}\n` : "") +
       (descSnippet ? `\n📝 Description:\n${descSnippet}\n` : "") +
-      `\n📲 Interested? Contact me now for viewing & details!`
+      (item.id ? `\n🔗 Full Info & Photos: https://umiren-d6a66.web.app/listing/${item.id}` : "") +
+      `\n\n📲 Interested? Contact me now for viewing & details!`
     );
   };
 
@@ -1421,15 +1397,8 @@ export default function MasterListingScreen() {
                 {
                   width: segmentBarWidth / 2,
                   backgroundColor: themeColors.maroonPrimary,
-                  transform: [
-                    {
-                      translateX: segmentAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: [0, segmentBarWidth / 2],
-                      }),
-                    },
-                  ],
                 },
+                animatedSegmentStyle,
               ]}
             />
           ) : null}
@@ -1704,19 +1673,19 @@ export default function MasterListingScreen() {
           <ListingSkeleton />
         </ScrollView>
       ) : (
-        <FlashList
+        <AnimatedFlashList
           key={`${viewMode}-${activeSegment}`}
           data={sortedListings}
           numColumns={viewMode === "grid" ? 2 : 1}
-          keyExtractor={(item) => item.id}
-          renderItem={viewMode === "grid" ? renderGridCard : renderListingCard}
+          keyExtractor={(item: any) => item.id}
+          renderItem={(viewMode === "grid" ? renderGridCard : renderListingCard) as any}
           style={{ flex: 1, width: "100%" }}
-          onScroll={handleListScroll}
+          onScroll={scrollHandler}
           scrollEventThrottle={16}
           contentContainerStyle={{
             paddingHorizontal: viewMode === "grid" ? 8 : 16,
             paddingTop: 12,
-            paddingBottom: Math.max(insets.bottom, 24) + 140,
+            paddingBottom: Math.max(insets.bottom, 24) + 160,
           }}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -2562,24 +2531,15 @@ export default function MasterListingScreen() {
 
       {!(viewMode === "map" && selectedMapListing) && (
         <Animated.View
-          style={{
-            position: "absolute",
-            right: 20,
-            bottom: (insets.bottom > 0 ? insets.bottom + 12 : 16) + 68,
-            zIndex: 999,
-            transform: [
-              {
-                translateY: fabAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0, 90],
-                }),
-              },
-            ],
-            opacity: fabAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [1, 0],
-            }),
-          }}
+          style={[
+            {
+              position: "absolute",
+              right: 20,
+              bottom: (insets.bottom > 0 ? insets.bottom + 12 : 16) + 68,
+              zIndex: 999,
+            },
+            animatedFabStyle,
+          ]}
         >
           <TouchableOpacity
             activeOpacity={0.88}

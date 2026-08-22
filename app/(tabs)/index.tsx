@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/services/notificationStorage";
 
 import { CaseCard } from "@/components";
-import { deleteCase } from "@/services/storage";
+import { deleteCase, getCaseMetrics } from "@/services/storage";
 import { getCurrentUserProfile } from "@/services/auth";
 import type { PropertyCase, UserProfile } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
@@ -39,7 +39,7 @@ export default function DashboardScreen() {
   const { themeColors, t, language } = useAppSettings();
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [listings, setListings] = useState<PropertyListing[]>([]);
+  const [metrics, setMetrics] = useState({ totalCases: 0, aktif: 0, booking: 0, underLoan: 0, underSpa: 0, sold: 0, expired: 0 });
   const [allCases, setAllCases] = useState<PropertyCase[]>([]);
   const [recentCases, setRecentCases] = useState<PropertyCase[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -113,6 +113,21 @@ export default function DashboardScreen() {
     setDismissedAnnIds(updated);
   };
 
+  const fetchMetricsData = async () => {
+    try {
+      const data = await getCaseMetrics();
+      setMetrics(data);
+    } catch (e) {
+      console.warn("Error fetching metrics", e);
+    }
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchMetricsData();
+    }, [])
+  );
+
   // Fetch Firestore Listings and Cases in Realtime
   useEffect(() => {
     const profile = getCurrentUserProfile();
@@ -138,15 +153,11 @@ export default function DashboardScreen() {
       }
     };
 
-    let unsubListings: (() => void) | null = null;
     let unsubCases: (() => void) | null = null;
     let unsubAnn: (() => void) | null = null;
 
     const attachDashboardListeners = () => {
-      if (unsubListings) {
-        unsubListings();
-        unsubListings = null;
-      }
+
       if (unsubCases) {
         unsubCases();
         unsubCases = null;
@@ -179,28 +190,8 @@ export default function DashboardScreen() {
           }
         );
 
-      // Realtime Listener for Listings
-      unsubListings = firestore()
-        .collection("publicListings")
-        .onSnapshot(
-          (snapshot) => {
-            if (snapshot) {
-              const fetchedListings: PropertyListing[] = snapshot.docs
-                .map((doc) => ({ id: doc.id, ...doc.data() }) as PropertyListing);
-
-              setListings(fetchedListings);
-            }
-            listingsLoaded = true;
-            checkLoadingFinished();
-          },
-          (error) => {
-            console.error("Realtime listings listener error:", error);
-            listingsLoaded = true;
-            checkLoadingFinished();
-          }
-        );
-
-      // Realtime Listener for Cases
+      listingsLoaded = true;
+      checkLoadingFinished();      // Realtime Listener for Cases
       unsubCases = firestore()
         .collection("cases")
         .where("userId", "==", userId)
@@ -232,10 +223,7 @@ export default function DashboardScreen() {
     };
 
     const detachDashboardListeners = () => {
-      if (unsubListings) {
-        unsubListings();
-        unsubListings = null;
-      }
+
       if (unsubCases) {
         unsubCases();
         unsubCases = null;
@@ -267,13 +255,7 @@ export default function DashboardScreen() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      const listSnap = await firestore().collection("publicListings").get();
-      const fetchedListings: PropertyListing[] = listSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as PropertyListing[];
-      setListings(fetchedListings);
-
+      await fetchMetricsData();
       const currentUser = auth().currentUser;
       const caseSnap = await firestore()
         .collection("cases")
@@ -307,70 +289,51 @@ export default function DashboardScreen() {
     }
   };
 
-  // Unified status & record calculation strictly from active Cases
-  const metricAktif = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "viewing" || s === "booking paid" || s === "spa signed" || s === "loan approved";
-  }).length;
+  const metricAktif = metrics.aktif;
+  const metricBooking = metrics.booking;
+  const metricUnderLoan = metrics.underLoan;
+  const metricUnderSpa = metrics.underSpa;
+  const metricSold = metrics.sold;
+  const metricExpired = metrics.expired;
 
-  const metricBooking = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "booking paid";
-  }).length;
+  // Monthly Performance Chart Calculation for selectedYear strictly using Cases (memoized)
+  const { chartPoints, fillPoints, monthlyCounts, totalYearRecords, maxVal } = useMemo(() => {
+    const yearRecords = allCases.filter((c) => {
+      const dateStr = c.createdAt || c.tarikh || "";
+      if (!dateStr) return false;
+      const createdDate = new Date(dateStr);
+      return !isNaN(createdDate.getTime()) && createdDate.getFullYear().toString() === selectedYear;
+    });
 
-  const metricUnderLoan = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    const f = (c.finance || "").toLowerCase().trim();
-    return f === "bank loan" || s === "loan approved";
-  }).length;
-
-  const metricUnderSpa = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "spa signed";
-  }).length;
-
-  const metricSold = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "completed";
-  }).length;
-
-  const metricExpired = allCases.filter((c) => {
-    const s = (c.status || "").toLowerCase().trim();
-    return s === "cancelled";
-  }).length;
-
-  // Monthly Performance Chart Calculation for selectedYear strictly using Cases
-  const yearRecords = allCases.filter((c) => {
-    const dateStr = c.createdAt || c.tarikh || "";
-    if (!dateStr) return false;
-    const createdDate = new Date(dateStr);
-    return !isNaN(createdDate.getTime()) && createdDate.getFullYear().toString() === selectedYear;
-  });
-
-  const monthlyCounts = Array(12).fill(0);
-  yearRecords.forEach((r) => {
-    const createdDate = new Date(r.createdAt);
-    if (!isNaN(createdDate.getTime())) {
-      const month = createdDate.getMonth();
-      if (month >= 0 && month <= 11) {
-        monthlyCounts[month] += 1;
+    const counts = Array(12).fill(0);
+    yearRecords.forEach((r) => {
+      const createdDate = new Date(r.createdAt);
+      if (!isNaN(createdDate.getTime())) {
+        const month = createdDate.getMonth();
+        if (month >= 0 && month <= 11) {
+          counts[month] += 1;
+        }
       }
-    }
-  });
+    });
 
-  const totalYearRecords = yearRecords.length;
-  const maxVal = Math.max(...monthlyCounts, 1);
+    const maxVal = Math.max(...counts, 1);
 
-  // Generate SVG Points for Line Chart
-  const chartPoints = monthlyCounts
-    .map((val, idx) => {
-      const x = (idx / 11) * 300;
-      const y = 110 - (val / maxVal) * 85;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+    const points = counts
+      .map((val, idx) => {
+        const x = (idx / 11) * 300;
+        const y = 110 - (val / maxVal) * 85;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(" ");
 
-  const fillPoints = `0,120 ${chartPoints} 300,120`;
+    return {
+      chartPoints: points,
+      fillPoints: `0,120 ${points} 300,120`,
+      monthlyCounts: counts,
+      totalYearRecords: yearRecords.length,
+      maxVal,
+    };
+  }, [allCases, selectedYear]);
 
   return (
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>

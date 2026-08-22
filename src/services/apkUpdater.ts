@@ -54,11 +54,20 @@ function isSafeDownloadUrl(downloadUrl: string) {
  * Automatically purges all previously downloaded APK files from cache.
  * Keeps user device storage at 0MB occupied.
  */
-export async function cleanupUpdateCache(): Promise<void> {
+export async function cleanupUpdateCache(excludeFilename?: string): Promise<void> {
   try {
     const dirInfo = await FileSystem.getInfoAsync(UPDATE_CACHE_DIR);
-    if (dirInfo.exists) {
+    if (!dirInfo.exists) return;
+
+    if (!excludeFilename) {
       await FileSystem.deleteAsync(UPDATE_CACHE_DIR, { idempotent: true });
+    } else {
+      const files = await FileSystem.readDirectoryAsync(UPDATE_CACHE_DIR);
+      for (const file of files) {
+        if (file !== excludeFilename) {
+          await FileSystem.deleteAsync(`${UPDATE_CACHE_DIR}${file}`, { idempotent: true });
+        }
+      }
     }
   } catch (err) {
     console.warn("[apkUpdater] Cleanup update cache error:", err);
@@ -122,51 +131,83 @@ export async function downloadAndInstallUpdate(
   }
 
   try {
-    // 1. Ensure updates cache directory exists and is clean
-    await cleanupUpdateCache();
+    const expectedFilename = `artha_v${release.versionName}_${release.versionCode}.apk`;
+    const localFileUri = `${UPDATE_CACHE_DIR}${expectedFilename}`;
+
+    // 1. Ensure updates cache directory exists and is clean of OLD versions
     await FileSystem.makeDirectoryAsync(UPDATE_CACHE_DIR, { intermediates: true });
+    await cleanupUpdateCache(expectedFilename);
 
-    const localFileUri = `${UPDATE_CACHE_DIR}artha_v${release.versionName}_${release.versionCode}.apk`;
+    // 2. Check if the target APK is already fully downloaded
+    const fileInfo = await FileSystem.getInfoAsync(localFileUri);
+    let skipDownload = false;
 
-    // 2. Stream download with progress tracking
-    activeDownloadResumable = FileSystem.createDownloadResumable(
-      release.downloadUrl,
-      localFileUri,
-      {},
-      (downloadProgress) => {
-        const totalBytesWritten = downloadProgress.totalBytesWritten;
-        const expected = downloadProgress.totalBytesExpectedToWrite > 0
-          ? downloadProgress.totalBytesExpectedToWrite
-          : (release.fileSizeBytes && release.fileSizeBytes > 0 ? release.fileSizeBytes : 0);
-
-        let percent = 0;
-        if (expected > 0) {
-          percent = Math.min(100, Math.max(0, Math.round((totalBytesWritten / expected) * 100)));
-        } else {
-          // If total size is unknown, estimate based on ~60MB APK or cap at 95% until complete
-          const estimated = 60 * 1024 * 1024;
-          percent = Math.min(95, Math.max(1, Math.round((totalBytesWritten / estimated) * 100)));
-        }
-
-        if (onProgress) {
-          onProgress({
-            totalBytesWritten,
-            totalBytesExpectedToWrite: expected,
-            percent,
-          });
-        }
+    if (fileInfo.exists && typeof fileInfo.size === "number") {
+      if (release.fileSizeBytes && release.fileSizeBytes > 0) {
+        if (fileInfo.size === release.fileSizeBytes) skipDownload = true;
+      } else {
+        // Assume complete if > 15MB (fallback when API doesn't send size)
+        if (fileInfo.size > 15 * 1024 * 1024) skipDownload = true;
       }
-    );
-
-    const downloadResult = await activeDownloadResumable.downloadAsync();
-    activeDownloadResumable = null;
-
-    if (!downloadResult || !downloadResult.uri) {
-      throw new Error("Download completed without valid file URI.");
     }
 
-    // 3. Obtain secure content URI from FileProvider
-    const contentUri = await FileSystem.getContentUriAsync(downloadResult.uri);
+    let targetUri = localFileUri;
+
+    if (!skipDownload) {
+      if (fileInfo.exists) {
+        await FileSystem.deleteAsync(localFileUri, { idempotent: true });
+      }
+
+      // 3. Stream download with progress tracking
+      activeDownloadResumable = FileSystem.createDownloadResumable(
+        release.downloadUrl,
+        localFileUri,
+        {},
+        (downloadProgress) => {
+          const totalBytesWritten = downloadProgress.totalBytesWritten;
+          const expected = downloadProgress.totalBytesExpectedToWrite > 0
+            ? downloadProgress.totalBytesExpectedToWrite
+            : (release.fileSizeBytes && release.fileSizeBytes > 0 ? release.fileSizeBytes : 0);
+
+          let percent = 0;
+          if (expected > 0) {
+            percent = Math.min(100, Math.max(0, Math.round((totalBytesWritten / expected) * 100)));
+          } else {
+            // If total size is unknown, estimate based on ~60MB APK or cap at 95% until complete
+            const estimated = 60 * 1024 * 1024;
+            percent = Math.min(95, Math.max(1, Math.round((totalBytesWritten / estimated) * 100)));
+          }
+
+          if (onProgress) {
+            onProgress({
+              totalBytesWritten,
+              totalBytesExpectedToWrite: expected,
+              percent,
+            });
+          }
+        }
+      );
+
+      const downloadResult = await activeDownloadResumable.downloadAsync();
+      activeDownloadResumable = null;
+
+      if (!downloadResult || !downloadResult.uri) {
+        throw new Error("Download completed without valid file URI.");
+      }
+      targetUri = downloadResult.uri;
+    } else {
+      if (onProgress) {
+        // Instantly report 100% so UI can close modal
+        onProgress({
+          totalBytesWritten: fileInfo.exists && typeof fileInfo.size === "number" ? fileInfo.size : 60 * 1024 * 1024,
+          totalBytesExpectedToWrite: fileInfo.exists && typeof fileInfo.size === "number" ? fileInfo.size : 60 * 1024 * 1024,
+          percent: 100,
+        });
+      }
+    }
+
+    // 4. Obtain secure content URI from FileProvider
+    const contentUri = await FileSystem.getContentUriAsync(targetUri);
 
     // 4. Launch Android Native Package Installer using action.VIEW with package-archive MIME type
     try {

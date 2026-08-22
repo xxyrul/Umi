@@ -56,8 +56,8 @@ export function ScrollAwareBarProvider({ children }: { children: React.ReactNode
       if (accumulatedDelta.value > BAR_HIDE_THRESHOLD) {
         if (delta > 0) {
           // Scrolling DOWN → hide bar (slide down off screen)
-          barTranslateY.value = withTiming(BAR_HEIGHT + 40, {
-            duration: 250,
+          barTranslateY.value = withTiming(120, {
+            duration: 220,
           });
         } else if (delta < 0) {
           // Scrolling UP → show bar (slide back)

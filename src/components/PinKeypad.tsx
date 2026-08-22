@@ -1,5 +1,18 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Pressable,
+} from "react-native";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SPACING } from "@/constants/theme";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -19,138 +32,117 @@ export function PinKeypad({
   subtitle = "Enter your 4-digit PIN to continue",
   onPinComplete,
   onBiometricSuccess,
-  showBiometricOption = true,
+  showBiometricOption = false,
   errorMessage = "",
 }: PinKeypadProps) {
-  const { themeColors } = useAppSettings();
+  const { themeColors, isDark, language } = useAppSettings();
   const [pin, setPin] = useState("");
   const [hasBiometrics, setHasBiometrics] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+
+  const shakeX = useSharedValue(0);
 
   useEffect(() => {
     isBiometricSupported().then(setHasBiometrics);
   }, []);
 
-  const handleKeyPress = (num: string) => {
-    if (pin.length < 4) {
-      const nextPin = pin + num;
-      setPin(nextPin);
-      if (nextPin.length === 4) {
-        setTimeout(() => {
-          onPinComplete(nextPin);
-          setPin("");
-        }, 100);
-      }
-    }
-  };
+  // Automatically focus system keyboard on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
-  const handleBackspace = () => {
-    if (pin.length > 0) {
-      setPin(pin.slice(0, -1));
+  useEffect(() => {
+    if (errorMessage) {
+      shakeX.value = withSequence(
+        withTiming(-12, { duration: 50 }),
+        withTiming(12, { duration: 50 }),
+        withTiming(-8, { duration: 50 }),
+        withTiming(8, { duration: 50 }),
+        withTiming(0, { duration: 50 })
+      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      setPin("");
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [errorMessage]);
+
+  const shakeAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shakeX.value }],
+  }));
+
+  const handleTextChange = (text: string) => {
+    const sanitized = text.replace(/[^0-9]/g, "").slice(0, 4);
+    setPin(sanitized);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+
+    if (sanitized.length === 4) {
+      setTimeout(() => {
+        onPinComplete(sanitized);
+      }, 120);
     }
   };
 
   const handleBiometricPress = async () => {
-    const success = await authenticateBiometric("Unlock Umi CaseFlow");
+    Haptics.selectionAsync().catch(() => {});
+    const success = await authenticateBiometric(
+      language === "BM" ? "Buka Umi CaseFlow" : "Unlock Umi CaseFlow"
+    );
     if (success && onBiometricSuccess) {
       onBiometricSuccess();
     }
   };
 
-  const renderDot = (index: number) => {
-    const isFilled = index < pin.length;
-    const dotColor = errorMessage
-      ? "#EF4444"
-      : isFilled
-      ? themeColors.maroonPrimary
-      : themeColors.borderColor;
-
-    return (
-      <View
-        key={index}
-        style={{
-          width: 16,
-          height: 16,
-          borderRadius: 8,
-          borderWidth: 2,
-          borderColor: dotColor,
-          backgroundColor: isFilled ? dotColor : "transparent",
-          marginHorizontal: 10,
-        }}
-      />
-    );
-  };
-
-  const renderKey = (
-    label: string,
-    value: string,
-    icon?: string,
-    onPressOverride?: () => void
-  ) => {
-    return (
-      <TouchableOpacity
-        key={label}
-        onPress={onPressOverride || (() => handleKeyPress(value))}
-        activeOpacity={0.7}
-        style={{
-          width: 72,
-          height: 72,
-          borderRadius: 36,
-          backgroundColor: themeColors.surfaceContainer,
-          justifyContent: "center",
-          alignItems: "center",
-          margin: 10,
-          borderWidth: 1,
-          borderColor: themeColors.borderColor,
-        }}
-      >
-        {icon ? (
-          <MaterialCommunityIcons
-            name={icon as any}
-            size={28}
-            color={themeColors.textPrimary}
-          />
-        ) : (
-          <Text
-            style={{
-              fontSize: 24,
-              fontWeight: "600",
-              color: themeColors.textPrimary,
-            }}
-          >
-            {label}
-          </Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
   return (
-    <View
+    <Pressable
+      onPress={() => inputRef.current?.focus()}
       style={{
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: SPACING.xl,
-        paddingHorizontal: SPACING.lg,
+        paddingVertical: 12,
+        paddingHorizontal: SPACING.md,
         width: "100%",
       }}
     >
-      {/* Lock Icon */}
+      {/* Hidden system keyboard input */}
+      <TextInput
+        ref={inputRef}
+        value={pin}
+        onChangeText={handleTextChange}
+        keyboardType="number-pad"
+        maxLength={4}
+        autoFocus={true}
+        secureTextEntry={false}
+        caretHidden={true}
+        style={{
+          position: "absolute",
+          width: 1,
+          height: 1,
+          opacity: 0.01,
+        }}
+      />
+
+      {/* Lock Shield Icon */}
       <View
         style={{
-          width: 72,
-          height: 72,
-          borderRadius: 36,
+          width: 52,
+          height: 52,
+          borderRadius: 26,
           backgroundColor: themeColors.maroonLight,
           justifyContent: "center",
           alignItems: "center",
-          marginBottom: SPACING.md,
+          marginBottom: 10,
           borderWidth: 1,
           borderColor: themeColors.maroonBorder,
         }}
       >
         <MaterialCommunityIcons
-          name="lock-outline"
-          size={36}
+          name="shield-lock-outline"
+          size={26}
           color={themeColors.maroonPrimary}
         />
       </View>
@@ -158,10 +150,10 @@ export function PinKeypad({
       {/* Title & Subtitle */}
       <Text
         style={{
-          fontSize: 22,
-          fontWeight: "700",
+          fontSize: 18,
+          fontWeight: "800",
           color: themeColors.textPrimary,
-          marginBottom: 6,
+          marginBottom: 2,
           textAlign: "center",
         }}
       >
@@ -169,19 +161,81 @@ export function PinKeypad({
       </Text>
       <Text
         style={{
-          fontSize: 13,
+          fontSize: 12,
           color: themeColors.textMuted,
-          marginBottom: SPACING.lg,
+          marginBottom: 16,
           textAlign: "center",
         }}
       >
         {subtitle}
       </Text>
 
-      {/* PIN Dots */}
-      <View style={{ flexDirection: "row", marginBottom: SPACING.md }}>
-        {[0, 1, 2, 3].map(renderDot)}
-      </View>
+      {/* 4-Box PIN Display with Shake Animation */}
+      <Animated.View
+        style={[
+          {
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 14,
+            marginBottom: SPACING.lg,
+          },
+          shakeAnimatedStyle,
+        ]}
+      >
+        {[0, 1, 2, 3].map((index) => {
+          const isFilled = index < pin.length;
+          const isCurrent = index === pin.length;
+          const hasError = Boolean(errorMessage);
+
+          let borderColor = themeColors.borderColor;
+          if (hasError) {
+            borderColor = "#EF4444";
+          } else if (isCurrent) {
+            borderColor = themeColors.maroonPrimary;
+          } else if (isFilled) {
+            borderColor = themeColors.maroonPrimary;
+          }
+
+          return (
+            <View
+              key={index}
+              style={{
+                width: 58,
+                height: 64,
+                borderRadius: 16,
+                borderWidth: isCurrent ? 2 : 1.5,
+                borderColor,
+                backgroundColor: isFilled
+                  ? (isDark ? "rgba(255, 178, 184, 0.12)" : "rgba(122, 17, 40, 0.08)")
+                  : themeColors.surfaceContainer,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              {isFilled ? (
+                <Text
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "800",
+                    color: themeColors.maroonPrimary,
+                  }}
+                >
+                  ●
+                </Text>
+              ) : isCurrent ? (
+                <View
+                  style={{
+                    width: 2,
+                    height: 22,
+                    backgroundColor: themeColors.maroonPrimary,
+                    borderRadius: 1,
+                  }}
+                />
+              ) : null}
+            </View>
+          );
+        })}
+      </Animated.View>
 
       {/* Error Message */}
       {errorMessage ? (
@@ -197,36 +251,43 @@ export function PinKeypad({
           {errorMessage}
         </Text>
       ) : (
-        <View style={{ height: SPACING.md + 13 + SPACING.md }} />
+        <View style={{ height: 20, marginBottom: SPACING.md }} />
       )}
 
-      {/* Number Keypad */}
-      <View style={{ width: 280, alignItems: "center" }}>
-        <View style={{ flexDirection: "row" }}>
-          {renderKey("1", "1")}
-          {renderKey("2", "2")}
-          {renderKey("3", "3")}
-        </View>
-        <View style={{ flexDirection: "row" }}>
-          {renderKey("4", "4")}
-          {renderKey("5", "5")}
-          {renderKey("6", "6")}
-        </View>
-        <View style={{ flexDirection: "row" }}>
-          {renderKey("7", "7")}
-          {renderKey("8", "8")}
-          {renderKey("9", "9")}
-        </View>
-        <View style={{ flexDirection: "row" }}>
-          {showBiometricOption && hasBiometrics ? (
-            renderKey("biometric", "", "fingerprint", handleBiometricPress)
-          ) : (
-            <View style={{ width: 72, height: 72, margin: 10 }} />
-          )}
-          {renderKey("0", "0")}
-          {renderKey("backspace", "", "backspace-outline", handleBackspace)}
-        </View>
-      </View>
-    </View>
+      {/* Biometrics Quick Action */}
+      {showBiometricOption && hasBiometrics && (
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={handleBiometricPress}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            backgroundColor: themeColors.surfaceContainer,
+            borderColor: themeColors.borderColor,
+            borderWidth: 1,
+            paddingVertical: 12,
+            paddingHorizontal: 20,
+            borderRadius: 24,
+            marginTop: 8,
+          }}
+        >
+          <MaterialCommunityIcons
+            name="fingerprint"
+            size={22}
+            color={themeColors.maroonPrimary}
+          />
+          <Text
+            style={{
+              color: themeColors.textPrimary,
+              fontSize: 14,
+              fontWeight: "700",
+            }}
+          >
+            {language === "BM" ? "Buka dengan Cap Jari" : "Unlock with Biometrics"}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </Pressable>
   );
 }

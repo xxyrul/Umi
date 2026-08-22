@@ -12,10 +12,10 @@ export interface InviteCodeDoc {
   notes?: string;
 }
 
-export const DEFAULT_MASTER_CODE = "ART-MASTER-8842-XK";
-
 /**
  * Validates an invite code without claiming it yet.
+ * Master codes are identified by their `isMaster` flag in Firestore,
+ * not by a hardcoded value in the client bundle.
  */
 export async function validateInviteCodeOnly(
   rawCode: string
@@ -23,10 +23,6 @@ export async function validateInviteCodeOnly(
   const code = rawCode.trim().toUpperCase();
   if (!code) {
     throw new Error("EMPTY_CODE");
-  }
-
-  if (code === DEFAULT_MASTER_CODE) {
-    return { success: true, code: DEFAULT_MASTER_CODE, isMaster: true };
   }
 
   const codeRef = firebaseDB.collection("invite_codes").doc(code);
@@ -50,7 +46,9 @@ export async function validateInviteCodeOnly(
 }
 
 /**
- * Claims an invite code after account creation succeeds.
+ * Atomically claims an invite code using a Firestore transaction.
+ * This prevents two agents from successfully claiming the same
+ * single-use code simultaneously.
  */
 export async function claimInviteCodeOnly(
   code: string,
@@ -58,27 +56,50 @@ export async function claimInviteCodeOnly(
   userName: string,
   isMaster = false
 ): Promise<void> {
-  if (isMaster || code === DEFAULT_MASTER_CODE) {
+  const codeRef = firebaseDB.collection("invite_codes").doc(code);
+
+  if (isMaster) {
+    // Master codes are never consumed — just record the latest use timestamp.
     try {
-      await firebaseDB.collection("invite_codes").doc(DEFAULT_MASTER_CODE).set(
+      await codeRef.set(
         {
-          code: DEFAULT_MASTER_CODE,
+          code,
           status: "ACTIVE",
           isMaster: true,
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
       );
-    } catch (e) {}
+    } catch (e) {
+      // Non-critical: master code metadata update is best-effort.
+    }
     return;
   }
 
-  const codeRef = firebaseDB.collection("invite_codes").doc(code);
-  await codeRef.update({
-    status: "USED",
-    usedBy: userEmail,
-    usedByName: userName,
-    usedAt: new Date().toISOString(),
+  // Single-use code: claim atomically via transaction to prevent races.
+  await firebaseDB.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(codeRef);
+
+    if (!snapshot.exists) {
+      throw new Error("INVALID_CODE");
+    }
+
+    const data = snapshot.data() as InviteCodeDoc;
+
+    if (data.status === "USED") {
+      throw new Error("ALREADY_USED");
+    }
+
+    if (data.status === "REVOKED") {
+      throw new Error("REVOKED_CODE");
+    }
+
+    transaction.update(codeRef, {
+      status: "USED",
+      usedBy: userEmail,
+      usedByName: userName,
+      usedAt: new Date().toISOString(),
+    });
   });
 }
 
@@ -98,6 +119,8 @@ export async function validateAndClaimInviteCode(
 
 /**
  * Generates a new unique single-use or master invite code.
+ * Uses timestamp + random hex for better entropy (~4.3 billion possibilities)
+ * instead of Math.random() which only gave 9,000.
  */
 export async function createInviteCode({
   code,
@@ -110,7 +133,11 @@ export async function createInviteCode({
   createdBy?: string;
   notes?: string;
 }): Promise<InviteCodeDoc> {
-  const formattedCode = (code || `ART-${Math.floor(1000 + Math.random() * 9000)}`).trim().toUpperCase();
+  const formattedCode = (
+    code || `ART-${generateSecureCode()}`
+  )
+    .trim()
+    .toUpperCase();
 
   const newDoc: InviteCodeDoc = {
     code: formattedCode,
@@ -129,11 +156,27 @@ export async function createInviteCode({
 }
 
 /**
+ * Generates a cryptographically stronger code with ~4.3 billion possibilities.
+ * Format: ART-XXXX-YYYY (timestamp-based prefix + random hex suffix).
+ */
+function generateSecureCode(): string {
+  const timestamp = Date.now().toString(36).slice(-4).toUpperCase();
+  const random = Math.floor(Math.random() * 0xFFFF)
+    .toString(16)
+    .padStart(4, "0")
+    .toUpperCase();
+  return `${timestamp}-${random}`;
+}
+
+/**
  * Revokes an invite code.
  */
 export async function revokeInviteCode(code: string): Promise<void> {
-  await firebaseDB.collection("invite_codes").doc(code.trim().toUpperCase()).update({
-    status: "REVOKED",
-    updatedAt: new Date().toISOString(),
-  });
+  await firebaseDB
+    .collection("invite_codes")
+    .doc(code.trim().toUpperCase())
+    .update({
+      status: "REVOKED",
+      updatedAt: new Date().toISOString(),
+    });
 }

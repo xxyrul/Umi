@@ -22,4 +22,12 @@ artifacts/
 .replit
 replit.md
 
+# Environment variables & secrets
+.env
+.env.local
+.env.*
+functions/.env
+functions/.env.local
+functions/.env.*
+
 # @end expo-cli

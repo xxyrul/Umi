@@ -20,7 +20,15 @@ import { FlashList } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+} from "react-native-reanimated";
+import { useScrollAwareBar } from "@/context/ScrollAwareBarContext";
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SPACING } from "@/constants/theme";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -115,47 +123,16 @@ export default function CasesScreen() {
   const [isStatusModalVisible, setIsStatusModalVisible] = useState(false);
   const [showFullHistory, setShowFullHistory] = useState(false);
 
-  // Smart Auto-Hide FAB on Scroll
-  const fabAnim = useRef(new RNAnimated.Value(0)).current; // 0 = visible, 1 = hidden
-  const lastScrollY = useRef(0);
-  const isFabHidden = useRef(false);
-
-  const showFab = () => {
-    if (isFabHidden.current) {
-      isFabHidden.current = false;
-      RNAnimated.spring(fabAnim, {
-        toValue: 0,
-        friction: 7,
-        tension: 50,
-        useNativeDriver: true,
-      }).start();
-    }
-  };
-
-  const hideFab = () => {
-    if (!isFabHidden.current) {
-      isFabHidden.current = true;
-      RNAnimated.timing(fabAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  };
-
-  const handleListScroll = (event: any) => {
-    const currentY = event.nativeEvent.contentOffset.y;
-    const diff = currentY - lastScrollY.current;
-
-    if (currentY <= 20) {
-      showFab();
-    } else if (diff > 10) {
-      hideFab();
-    } else if (diff < -10) {
-      showFab();
-    }
-    lastScrollY.current = currentY;
-  };
+  // Reanimated 60FPS UI-thread auto-hide FAB synced with floating bar
+  const { barTranslateY, scrollHandler } = useScrollAwareBar();
+  const animatedFabStyle = useAnimatedStyle(() => {
+    const translateY = barTranslateY ? barTranslateY.value : 0;
+    const opacity = interpolate(translateY, [0, 60], [1, 0], Extrapolation.CLAMP);
+    return {
+      transform: [{ translateY }],
+      opacity,
+    };
+  });
 
   // Reminder Scheduling Modal State
   const [isReminderModalVisible, setIsReminderModalVisible] = useState(false);
@@ -632,15 +609,15 @@ export default function CasesScreen() {
           <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
         </View>
       ) : (
-        <FlashList
+        <AnimatedFlashList
           data={filteredCases}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item: any) => item.id}
           style={{ flex: 1, width: "100%" }}
-          onScroll={handleListScroll}
+          onScroll={scrollHandler}
           scrollEventThrottle={16}
           contentContainerStyle={{
             paddingHorizontal: SPACING.lg,
-            paddingBottom: Math.max(insets.bottom, 24) + 104,
+            paddingBottom: Math.max(insets.bottom, 24) + 160,
           }}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -650,9 +627,9 @@ export default function CasesScreen() {
               tintColor={themeColors.maroonPrimary}
             />
           }
-          renderItem={({ item }) => (
+          renderItem={({ item }: { item: any }) => (
             <CaseCard
-              case={item}
+              case={item as PropertyCase}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
                 router.push(`/case/${item.id}` as any);
@@ -704,25 +681,16 @@ export default function CasesScreen() {
 
       </View>
 
-      <RNAnimated.View
-        style={{
-          position: "absolute",
-          right: 20,
-          bottom: Math.max(insets.bottom, 28) + 80,
-          zIndex: 999,
-          transform: [
-            {
-              translateY: fabAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 90],
-              }),
-            },
-          ],
-          opacity: fabAnim.interpolate({
-            inputRange: [0, 1],
-            outputRange: [1, 0],
-          }),
-        }}
+      <Animated.View
+        style={[
+          {
+            position: "absolute",
+            right: 20,
+            bottom: Math.max(insets.bottom, 28) + 80,
+            zIndex: 999,
+          },
+          animatedFabStyle,
+        ]}
       >
         <TouchableOpacity
           onPress={() => router.push("/case/form" as any)}
@@ -743,7 +711,7 @@ export default function CasesScreen() {
         >
           <MaterialCommunityIcons name="plus" size={30} color="#FFF" />
         </TouchableOpacity>
-      </RNAnimated.View>
+      </Animated.View>
 
       <Modal
         visible={isFilterModalVisible}

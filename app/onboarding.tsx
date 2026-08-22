@@ -15,6 +15,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Keyboard,
+  BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -60,12 +61,23 @@ export default function OnboardingScreen() {
     const hideSubscription = Keyboard.addListener("keyboardDidHide", () => {
       setIsKeyboardVisible(false);
     });
-
     return () => {
       showSubscription.remove();
       hideSubscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      if (step > 0) {
+        setStep((prev) => prev - 1);
+        return true;
+      }
+      return false;
+    };
+    const sub = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => sub.remove();
+  }, [step]);
 
   const handleNext = () => {
     if (step === 1) {
@@ -472,6 +484,26 @@ export default function OnboardingScreen() {
                   {isBM ? "Teruskan ke Log Masuk" : "Continue to Login"}
                 </Text>
                 <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+
+              {/* Step 2 Back to Profile button */}
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={handleBack}
+                style={{
+                  marginTop: 16,
+                  paddingVertical: 10,
+                  paddingHorizontal: 20,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexDirection: "row",
+                  gap: 6,
+                }}
+              >
+                <MaterialCommunityIcons name="arrow-left" size={16} color={themeColors.textSecondary} />
+                <Text style={{ color: themeColors.textSecondary, fontSize: 14, fontWeight: "600" }}>
+                  {isBM ? "Kembali ke Profil Ejen" : "Back to Agent Profile"}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
