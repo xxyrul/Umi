@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { PinKeypad } from "@/components";
@@ -318,7 +319,14 @@ export default function SecurityScreen() {
           </Text>
 
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-            <View style={styles.settingRow}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                Haptics.selectionAsync().catch(() => {});
+                toggleAllowScreenshots();
+              }}
+              style={styles.settingRow}
+            >
               <View style={{ flex: 1, paddingRight: 12 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 }}>
                   <MaterialCommunityIcons name="monitor-screenshot" size={20} color={themeColors.maroonPrimary} />
@@ -334,11 +342,14 @@ export default function SecurityScreen() {
               </View>
               <Switch
                 value={allowScreenshots}
-                onValueChange={toggleAllowScreenshots}
+                onValueChange={() => {
+                  Haptics.selectionAsync().catch(() => {});
+                  toggleAllowScreenshots();
+                }}
                 trackColor={{ false: themeColors.borderColor, true: themeColors.maroonPrimary }}
                 thumbColor="#FFF"
               />
-            </View>
+            </TouchableOpacity>
           </View>
         </Animated.View>
 

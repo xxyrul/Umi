@@ -840,10 +840,8 @@ export default function ProfileScreen() {
           {renderOptionRow("account-outline", t("accountSettings"), t("accountSubtitle"), () => setActiveSection("Account"))}
           {renderOptionRow(
             "shield-check-outline",
-            language === "BM" ? "Privasi & Keselamatan" : "Privacy & Security",
-            appLockEnabled
-              ? (language === "BM" ? "Aktif · Dilindungi PIN" : "Active · PIN Protected")
-              : (language === "BM" ? "Kunci PIN & Biometrik" : "PIN, Biometrics & Protection"),
+            t("privacySecurityTitle"),
+            t("privacySecuritySubtitle"),
             () => router.push("/security" as any)
           )}
           {isAdmin &&
