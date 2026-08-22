@@ -57,6 +57,8 @@ export interface PropertyListing {
   images?: string[];
   userId?: string;
   authorName?: string;
+  agentName?: string;
+  agentPhone?: string;
   navLink?: string;
 
   createdAt?: string;

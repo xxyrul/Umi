@@ -599,6 +599,8 @@ export async function createPropertyListing(
       bilUtility: bilUtilityUrl,
       userId,
       authorName,
+      agentName: authorName,
+      agentPhone: currentUser?.phoneNumber || "",
       navLink: listingData.navLink || "",
       createdAt: now,
       updatedAt: now,

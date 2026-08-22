@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Artha (Umi) — Master Listing CRM for Malaysian Real Estate Agents</title>
-  <meta name="description" content="Official APK Download Landing Page & Release History for Artha (Umi) Real Estate Agent CRM.">
+  <title>Artha — Master Listing CRM for Malaysian Real Estate Agents</title>
+  <meta name="description" content="Official APK Download Landing Page & Release History for Artha Real Estate Agent CRM.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -851,7 +851,7 @@
   </main>
 
   <footer>
-    &copy; 2026 Artha (Umi). All Rights Reserved. Built for Malaysian Real Estate Agents.
+    &copy; 2026 Artha. All Rights Reserved. Built for Malaysian Real Estate Agents.
   </footer>
 
   <script>
@@ -859,13 +859,13 @@
 
     const t = {
       en: {
-        badge: '🚀 Latest Release: v1.4.2 (Build 54)',
+        badge: '🚀 Latest Release: v1.4.3 (Build 55)',
         heroTitle: 'Master Listing CRM App<br><span>for Malaysian Real Estate Agents</span>',
         heroSub: 'Manage agency property listings, Vault documents, loan calculators, and case tracking securely from your Android device.',
-        dlBtn: 'Download Official APK (v1.4.2)',
+        dlBtn: 'Download Official APK (v1.4.3)',
         metaAndroid: '📱 Android 8.0+ (Universal APK)',
         metaVerified: '🔒 Verified & Secure (Direct Download)',
-        whatsNew: "✨ What's New in Version 1.4.2:",
+        whatsNew: "✨ What's New in Version 1.4.3:",
         historyTitle: 'Previous Release History & Changelogs',
         feat1Title: 'Master Listing & GPS Mapping',
         feat1Desc: 'Organize agency listings with smart search, instant status filters, and automatic GPS geocoding.',
@@ -873,16 +873,16 @@
         feat2Desc: 'Store land titles, SPA copies, keys, and confidential files securely with offline-first support.',
         feat3Title: 'DSR & Bank Loan Calculator',
         feat3Desc: 'Instantly compute buyer housing loan eligibility and LPPSA margins directly within the app.',
-        footer: '© 2026 Artha (Umi). All Rights Reserved. Built for Malaysian Real Estate Agents.'
+        footer: '© 2026 Artha. All Rights Reserved. Built for Malaysian Real Estate Agents.'
       },
       bm: {
-        badge: '🚀 Versi Terkini: v1.4.2 (Build 54)',
+        badge: '🚀 Versi Terkini: v1.4.3 (Build 55)',
         heroTitle: 'Aplikasi CRM & Master Listing<br><span>Ejen Hartanah Malaysia</span>',
         heroSub: 'Urus listing hartanah, dokumen Peti Besi, kalkulator kelayakan pinjaman, dan status kes transaksi anda dengan pantas & selamat.',
-        dlBtn: 'Muat Turun APK Rasmi (v1.4.2)',
+        dlBtn: 'Muat Turun APK Rasmi (v1.4.3)',
         metaAndroid: '📱 Android 8.0+ (Universal APK)',
         metaVerified: '🔒 Disahkan & Selamat (Direct Download)',
-        whatsNew: '✨ Pembaharuan Dalam Versi 1.4.2:',
+        whatsNew: '✨ Pembaharuan Dalam Versi 1.4.3:',
         historyTitle: 'Sejarah Versi & Log Perubahan Lepas',
         feat1Title: 'Master Listing & Peta GPS',
         feat1Desc: 'Susun database hartanah agensi dengan carian pintar, penapis status segera, dan pengesanan koordinat GPS automatik.',
@@ -890,7 +890,7 @@
         feat2Desc: 'Simpan geran tanah, salinan SPA, kunci, dan dokumen sulit secara berpusat dengan akses luar talian (offline-first).',
         feat3Title: 'Kalkulator DSR & Pinjaman',
         feat3Desc: 'Kira kelayakan pinjaman perumahan bank dan LPPSA pembeli dalam beberapa saat terus dari dalam aplikasi.',
-        footer: '© 2026 Artha (Umi). Hak Cipta Terpelihara. Khusus untuk Ejen Hartanah Malaysia.'
+        footer: '© 2026 Artha. Hak Cipta Terpelihara. Khusus untuk Ejen Hartanah Malaysia.'
       }
     };
 
@@ -1021,8 +1021,9 @@
       const tenure = f.pegangan?.stringValue || 'Freehold';
       const lot = f.lot?.stringValue || '';
       const type = f.jenis?.stringValue || 'Commercial / Land';
-      let agentName = (f.agentName?.stringValue || f.namaOwner?.stringValue || '').trim();
-      let agentPhone = (f.agentPhone?.stringValue || f.telOwner?.stringValue || '').trim();
+      const isBM = (lang === 'bm');
+      let agentName = (f.agentName?.stringValue || f.authorName?.stringValue || f.createdByName?.stringValue || '').trim();
+      let agentPhone = (f.agentPhone?.stringValue || f.authorPhone?.stringValue || f.createdByPhone?.stringValue || f.telOwner?.stringValue || '').trim();
 
       // Smart title & description parser:
       // If title is multi-line or very long, separate headline from description body
@@ -1040,21 +1041,22 @@
       }
 
       if (!cleanDesc) {
-        cleanDesc = lang === 'bm' ? 'Sila hubungi ejen untuk maklumat lanjut dan temujanji viewing.' : 'Please contact the agent for further details and viewing appointment.';
+        cleanDesc = isBM ? 'Sila hubungi ejen untuk maklumat lanjut dan temujanji viewing.' : 'Please contact the agent for further details and viewing appointment.';
       }
 
-      // If agentName is missing or just phone digits, try extracting name from description e.g. "Lela Farisha | 018-9851700"
+      // If agentName is missing or just phone digits, try extracting name from description e.g. "Arul | 012-3456789"
       if (!agentName || /^\+?[0-9\s-]+$/.test(agentName)) {
         const fullText = rawTitle + '\n' + cleanDesc;
-        const agentMatch = fullText.match(/(?:📲|📞|Hubungi|Contact|PM\/WhatsApp|PM)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[|–-]\s*(\d[\d\s-]{8,14})/);
+        const agentMatch = fullText.match(/(?:📲|📞|Hubungi|Contact|PM\/WhatsApp|PM)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*[|–-]\s*(\d[\d\s-]{8,14})/);
         if (agentMatch) {
           agentName = agentMatch[1].trim();
           if (!agentPhone) agentPhone = agentMatch[2].replace(/[\s-]/g, '');
-        } else if (!agentName) {
-          agentName = 'Lela Farisha';
         }
       }
-      if (!agentPhone) agentPhone = '0189851700';
+
+      if (!agentName) {
+        agentName = (f.authorName?.stringValue || (isBM ? 'Ejen Hartanah' : 'Real Estate Agent')).trim();
+      }
 
       // Try auto-extracting size if empty
       if (!size) {
@@ -1170,7 +1172,8 @@
       }
 
       // WhatsApp & Call Buttons
-      const cleanPhone = String(agentPhone).replace(/[^0-9]/g, '');
+      const cleanPhone = String(agentPhone || '').replace(/[^0-9]/g, '');
+      const hasPhone = cleanPhone.length >= 8;
       const waPhone = cleanPhone.startsWith('60') ? cleanPhone : (cleanPhone.startsWith('0') ? '6' + cleanPhone : '60' + cleanPhone);
       const waMsg = encodeURIComponent(
         isBM
@@ -1179,12 +1182,22 @@
       );
 
       const waBtn = document.getElementById('btn-agent-wa');
-      waBtn.href = `https://wa.me/${waPhone}?text=${waMsg}`;
-      waBtn.innerHTML = `<span>💬 ${isBM ? 'WhatsApp Ejen' : 'WhatsApp Agent'}</span>`;
-
       const callBtn = document.getElementById('btn-agent-call');
-      callBtn.href = `tel:+${waPhone}`;
-      callBtn.innerHTML = `<span>📞 ${isBM ? 'Hubungi' : 'Call'}</span>`;
+
+      if (hasPhone) {
+        waBtn.href = `https://wa.me/${waPhone}?text=${waMsg}`;
+        waBtn.innerHTML = `<span>💬 ${isBM ? 'WhatsApp Ejen' : 'WhatsApp Agent'}</span>`;
+        waBtn.style.display = 'flex';
+
+        callBtn.href = `tel:+${waPhone}`;
+        callBtn.innerHTML = `<span>📞 ${isBM ? 'Hubungi' : 'Call'}</span>`;
+        callBtn.style.display = 'flex';
+      } else {
+        waBtn.href = '/';
+        waBtn.innerHTML = `<span>💬 ${isBM ? 'Hubungi Melalui Aplikasi' : 'Contact via App'}</span>`;
+        waBtn.style.display = 'flex';
+        callBtn.style.display = 'none';
+      }
 
       document.getElementById('listing-loading').style.display = 'none';
       document.getElementById('listing-card').style.display = 'block';

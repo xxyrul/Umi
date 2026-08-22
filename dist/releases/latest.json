@@ -1,12 +1,15 @@
 {
-  "versionName": "1.4.2",
-  "versionCode": 54,
+  "versionName": "1.4.3",
+  "versionCode": 55,
   "packageName": "com.umi.caseflow",
-  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.2.apk",
+  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.3.apk",
   "releaseDate": "2026-08-22",
   "releaseNotes": [
-    "🔔 Smarter Notification Inbox: Notifications you've already read or cleared stay cleared on your account, even if you reinstall the app or clear data.",
-    "⚡ Real-Time In-App Sync: New announcements and release notes now appear instantly in your Notification Inbox without refreshing.",
-    "📲 Direct Notification Routing: Tapping any update or announcement notification opens your Notification Inbox directly."
+    "🚀 Lightning Fast Dashboard: Your dashboard metrics now load instantly and use significantly less internet data.",
+    "💾 Smart Data Caching: Navigating between tabs is incredibly smooth! The app now intelligently remembers your listings.",
+    "📸 Anti-Screenshot Protection: You can now toggle a setting in your Profile to block screenshots or screen-recordings.",
+    "🌐 Offline Awareness: A sleek new 'No internet connection' banner floats at the top if you lose cell signal.",
+    "📱 Smarter App Updates: Fixed updater caching logic.",
+    "🔒 Fortified Cloud Security: Strengthened database rules for strict privacy."
   ]
 }
