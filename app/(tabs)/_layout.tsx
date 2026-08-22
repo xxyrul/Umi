@@ -43,7 +43,7 @@ function TabItemButton({
   }));
 
   const handlePress = () => {
-    Haptics.selectionAsync().catch(() => {});
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     onPress();
   };
 
