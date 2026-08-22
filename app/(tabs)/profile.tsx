@@ -14,11 +14,12 @@ import {
   Linking,
   Share,
   KeyboardAvoidingView,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeInDown, FadeIn, FadeOut } from "react-native-reanimated";
 import { router, useFocusEffect } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
 import { fetchReleaseManifest, NativeAppRelease } from "@/services/apkUpdater";
@@ -624,7 +625,7 @@ export default function ProfileScreen() {
           activeOpacity={0.7}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-            setShowTopMenu(!showTopMenu);
+            setShowTopMenu(true);
           }}
           style={{
             width: 38,
@@ -636,51 +637,63 @@ export default function ProfileScreen() {
         >
           <MaterialCommunityIcons name="dots-vertical" size={24} color={themeColors.textPrimary} />
         </TouchableOpacity>
-
-        {/* 3-Dots Dropdown Menu */}
-        {showTopMenu && (
-          <View
-            style={{
-              position: "absolute",
-              top: 44,
-              right: 20,
-              backgroundColor: themeColors.cardBackground,
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: themeColors.borderColor,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.2,
-              shadowRadius: 12,
-              elevation: 8,
-              zIndex: 999,
-              minWidth: 150,
-              overflow: "hidden",
-            }}
-          >
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={() => {
-                setShowTopMenu(false);
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                handleSignOut();
-              }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                paddingVertical: 12,
-                paddingHorizontal: 16,
-              }}
-            >
-              <MaterialCommunityIcons name="logout" size={18} color="#EF4444" />
-              <Text style={{ fontSize: 14, fontWeight: "600", color: "#EF4444" }}>
-                {t("logout")}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
+
+      {/* 3-Dots Dropdown Modal with Smooth Animation and Outside Tap Dismissal */}
+      <Modal
+        visible={showTopMenu}
+        transparent={true}
+        animationType="none"
+        onRequestClose={() => setShowTopMenu(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowTopMenu(false)}>
+          <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.15)" }}>
+            <TouchableWithoutFeedback>
+              <Animated.View
+                entering={FadeIn.duration(150)}
+                exiting={FadeOut.duration(100)}
+                style={{
+                  position: "absolute",
+                  top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 44,
+                  right: 16,
+                  backgroundColor: isDark ? "#1E2022" : "#FFFFFF",
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 16,
+                  elevation: 12,
+                  minWidth: 160,
+                  overflow: "hidden",
+                }}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    setShowTopMenu(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    handleSignOut();
+                  }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    paddingVertical: 14,
+                    paddingHorizontal: 18,
+                  }}
+                >
+                  <MaterialCommunityIcons name="logout" size={20} color="#EF4444" />
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: "#EF4444" }}>
+                    {t("logout")}
+                  </Text>
+                </TouchableOpacity>
+              </Animated.View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
       <ScrollView
         style={{ flex: 1, width: "100%" }}
@@ -1049,7 +1062,7 @@ export default function ProfileScreen() {
             borderWidth: 1,
             borderColor: themeColors.borderColor,
             overflow: "hidden",
-            marginBottom: SPACING.lg,
+            marginBottom: SPACING.xl,
           }}
         >
           {renderOptionRow(
@@ -1067,56 +1080,6 @@ export default function ProfileScreen() {
             "#6366F1",
             true
           )}
-        </Animated.View>
-
-        {/* Group 4: Sign Out */}
-        <Animated.View
-          entering={FadeInDown.delay(200).duration(200)}
-          style={{
-            width: "100%",
-            backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: themeColors.borderColor,
-            overflow: "hidden",
-            marginBottom: SPACING.xl,
-          }}
-        >
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              handleSignOut();
-            }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingVertical: 14,
-              paddingHorizontal: 16,
-            }}
-          >
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
-                backgroundColor: "rgba(239, 68, 68, 0.12)",
-                justifyContent: "center",
-                alignItems: "center",
-                marginRight: 14,
-              }}
-            >
-              <MaterialCommunityIcons name="logout" size={20} color="#EF4444" />
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: "#EF4444" }}>
-                {t("logout")}
-              </Text>
-            </View>
-
-            <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
-          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
 
