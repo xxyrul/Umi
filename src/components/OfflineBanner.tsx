@@ -32,7 +32,7 @@ export function OfflineBanner() {
         styles.container,
         {
           top: Math.max(insets.top, Platform.OS === "android" ? 24 : 16) + 6,
-          backgroundColor: themeColors.errorText || "#DC2626",
+          backgroundColor: "#DC2626",
         },
       ]}
     >

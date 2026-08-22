@@ -59,9 +59,11 @@ export async function syncNotificationStateWithCloud(targetUid?: string): Promis
     const cloudLastSeen: string | null =
       typeof data?.lastSeenNotificationsAt === "string" ? data.lastSeenNotificationsAt : null;
 
-    // 3. Merge unique IDs
-    const mergedReadIds = Array.from(new Set([...localReadIds, ...cloudReadIds]));
-    const mergedDismissedIds = Array.from(new Set([...localDismissedIds, ...cloudDismissedIds]));
+    // 3. Merge unique IDs (Capped to prevent unbounded growth)
+    const MAX_READ_IDS = 200;
+    const MAX_DISMISSED_IDS = 100;
+    const mergedReadIds = Array.from(new Set([...localReadIds, ...cloudReadIds])).slice(-MAX_READ_IDS);
+    const mergedDismissedIds = Array.from(new Set([...localDismissedIds, ...cloudDismissedIds])).slice(-MAX_DISMISSED_IDS);
 
     // Pick latest timestamp
     let mergedLastSeen = localLastSeen;

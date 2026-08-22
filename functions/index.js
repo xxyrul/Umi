@@ -323,6 +323,21 @@ exports.verifyAdminAccessCode = onRequest(
         clientIp: req.ip || "unknown",
       }).catch(e => logger.warn("Session logging warning:", e.message));
 
+      // Generate a Firebase Auth Custom Token with admin claims
+      const firebaseCustomToken = await admin.auth().createCustomToken("super_admin_web_portal", {
+        role: "admin",
+        admin: true,
+        isSuperAdmin: true,
+      });
+
+      // Ensure user document exists with admin role
+      await db.collection("users").doc("super_admin_web_portal").set({
+        role: "admin",
+        displayName: "Super Admin",
+        email: "admin@drtmasterlisting.com",
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+
       logger.info("Admin access code verified successfully.");
       res.json({
         success: true,
@@ -330,10 +345,57 @@ exports.verifyAdminAccessCode = onRequest(
         sessionId,
         role: "admin",
         displayName: "Super Admin",
+        firebaseCustomToken,
       });
     } catch (error) {
       logger.error("verifyAdminAccessCode error:", error);
       res.status(500).json({ error: "Authentication failed. Please try again." });
+    }
+  }
+);
+
+/**
+ * Server-side Admin Endpoint for Listing Status Updates.
+ * Acts as an authorized backup to client-side Firestore updates.
+ */
+exports.adminUpdateListingStatus = onRequest(
+  { cors: true },
+  async (req, res) => {
+    try {
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method not allowed. Use POST." });
+        return;
+      }
+
+      let body = req.body;
+      if (typeof body === "string") {
+        try { body = JSON.parse(body); } catch (e) {}
+      }
+
+      const { listingId, status } = body || {};
+      if (!listingId || !status) {
+        res.status(400).json({ error: "listingId and status are required." });
+        return;
+      }
+
+      const db = admin.firestore();
+      const now = new Date().toISOString();
+
+      await db.collection("publicListings").doc(listingId).set(
+        { status, updatedAt: now },
+        { merge: true }
+      );
+
+      await db.collection("listings").doc(listingId).set(
+        { status, updatedAt: now },
+        { merge: true }
+      ).catch(() => {});
+
+      logger.info(`Admin updated listing ${listingId} to status '${status}'`);
+      res.json({ success: true, listingId, status, updatedAt: now });
+    } catch (error) {
+      logger.error("adminUpdateListingStatus error:", error);
+      res.status(500).json({ error: error.message });
     }
   }
 );

@@ -53,6 +53,8 @@ import { useAppSettings } from "@/context/AppSettingsContext";
 import { ListingSkeleton } from "@/components/ListingSkeleton";
 import { cleanListingTitle, calculateMortgage } from "@/utils/loanCalculator";
 import { resolveListingLocation, getSmartListingCoordinates } from "@/utils/locationDetector";
+import { ListingFilterSheet } from "@/components/listings/ListingFilterSheet";
+import { ListingMapView } from "@/components/listings/ListingMapView";
 
 function formatCompactPrice(value: string | number | undefined): string {
   const parsed = parsePriceNumber(value);
@@ -214,8 +216,8 @@ export default function MasterListingScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearch = useDebounce(searchQuery, 250);
-  const [activeFilter, setActiveFilter] = useState("Aktif");
-  const [activeSegment, setActiveSegment] = useState<ListingSegment>("all");
+  const [activeFilter, setActiveFilter] = useState("Semua");
+  const [activeSegment, setActiveSegment] = useState<ListingSegment>("mine");
   const [sortOption, setSortOption] = useState<ListingSortOption>("newest");
   const [isSortModalVisible, setIsSortModalVisible] = useState(false);
   const [statusModalListing, setStatusModalListing] = useState<{ id: string; currentStatus: string; tajuk: string } | null>(null);
@@ -532,10 +534,10 @@ export default function MasterListingScreen() {
     [listings]
   );
 
-  // Compute active filter count for badge (Aktif is the natural default, so count is 0)
+  // Compute active filter count for badge (Semua is the default, so count is 0)
   const activeFilterCount = useMemo(() => {
     let count = 0;
-    if (activeFilter !== "Aktif") count++;
+    if (activeFilter !== "Semua") count++;
     if (categoryFilter !== "Semua") count++;
     if (criteriaLocation.trim()) count++;
     if (criteriaMinPrice.trim() || criteriaMaxPrice.trim()) count++;
@@ -550,7 +552,7 @@ export default function MasterListingScreen() {
   const clearAllFilters = () => {
     resetCriteria();
     setSearchQuery("");
-    setActiveFilter("Aktif");
+    setActiveFilter("Semua");
     setCategoryFilter("Semua");
   };
 
@@ -1529,142 +1531,21 @@ export default function MasterListingScreen() {
 
       {/* Main Content Area: Map View OR FlashList */}
       {viewMode === "map" ? (
-        <View style={{ flex: 1, width: "100%", position: "relative" }}>
-          <MapView
-            ref={masterMapRef}
-            style={{ flex: 1, width: "100%" }}
-            provider={PROVIDER_GOOGLE}
-            toolbarEnabled={false}
-            showsUserLocation={true}
-            showsMyLocationButton={false}
-            mapPadding={{ bottom: Math.max(insets.bottom, 24) + 140, top: 0, right: 0, left: 0 }}
-            initialRegion={{
-              latitude: 3.8,
-              longitude: 101.9,
-              latitudeDelta: 4.5,
-              longitudeDelta: 4.5,
-            }}
-          >
-            {sortedListings.map((item, idx) => {
-              const coords = getSmartListingCoordinates(item, idx);
-              const isSelected = selectedMapListing?.id === item.id;
-              return (
-                <Marker
-                  key={`map-pin-${item.id}`}
-                  coordinate={coords}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setSelectedMapListing(item);
-                  }}
-                  tracksViewChanges={false}
-                >
-                  <View
-                    style={[
-                      styles.mapPriceMarker,
-                      {
-                        backgroundColor: isSelected ? "#FF3B5C" : themeColors.maroonPrimary,
-                        borderColor: "#FFF",
-                        transform: [{ scale: isSelected ? 1.15 : 1 }],
-                      },
-                    ]}
-                  >
-                    <Text style={styles.mapPriceMarkerText}>
-                      {formatCompactPrice(item.harga)}
-                    </Text>
-                  </View>
-                </Marker>
-              );
-            })}
-          </MapView>
-
-          {/* Floating Locate Me GPS Button */}
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={handleLocateMeOnMasterMap}
-            disabled={isLocatingUser}
-            style={[
-              styles.locateMeFab,
-              {
-                backgroundColor: themeColors.cardBackground,
-                borderColor: themeColors.borderColor,
-                top: 14,
-                right: 16,
-              },
-            ]}
-          >
-            {isLocatingUser ? (
-              <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
-            ) : (
-              <MaterialCommunityIcons name="crosshairs-gps" size={22} color={themeColors.maroonPrimary} />
-            )}
-          </TouchableOpacity>
-
-          {/* Floating Selected Listing Bottom Preview Card */}
-          {selectedMapListing && (
-            <View
-              style={[
-                styles.mapBottomCardWrap,
-                {
-                  bottom: Math.max(insets.bottom, 28) + 88,
-                  zIndex: 999,
-                  elevation: 10,
-                  backgroundColor: themeColors.cardBackground,
-                  borderColor: themeColors.borderColor,
-                },
-              ]}
-            >
-              <TouchableOpacity
-                activeOpacity={0.92}
-                onPress={() => {
-                  if (!selectedMapListing?.id) return;
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                  router.push(`/listing/${selectedMapListing.id}` as any);
-                }}
-                style={styles.mapCardInner}
-              >
-                {/* Thumbnail */}
-                {getListingImageUri(selectedMapListing) ? (
-                  <ExpoImage
-                    source={{ uri: getListingImageUri(selectedMapListing)! }}
-                    style={styles.mapCardThumb}
-                    contentFit="cover"
-                    transition={150}
-                  />
-                ) : (
-                  <View style={[styles.mapCardThumbPlaceholder, { backgroundColor: themeColors.maroonLight }]}>
-                    <MaterialCommunityIcons name="home-city" size={24} color={themeColors.maroonPrimary} />
-                  </View>
-                )}
-
-                <View style={styles.mapCardDetails}>
-                  <Text style={[styles.mapCardPrice, { color: themeColors.maroonPrimary }]} numberOfLines={1}>
-                    {formatPriceLabel(selectedMapListing.harga)}
-                  </Text>
-                  <Text style={[styles.mapCardTitle, { color: themeColors.textPrimary }]} numberOfLines={1}>
-                    {cleanListingTitle(selectedMapListing.tajuk)}
-                  </Text>
-                  <Text style={[styles.mapCardLocation, { color: themeColors.textMuted }]} numberOfLines={1}>
-                    📍 {resolveListingLocation(selectedMapListing).displayLocation}
-                  </Text>
-                  {(selectedMapListing.bilikTidur || selectedMapListing.bilikAir) ? (
-                    <Text style={[styles.mapCardSpecs, { color: themeColors.textSecondary }]}>
-                      🛏️ {selectedMapListing.bilikTidur || 0}  🚿 {selectedMapListing.bilikAir || 0}
-                    </Text>
-                  ) : null}
-                </View>
-
-                {/* Close Button */}
-                <TouchableOpacity
-                  onPress={() => setSelectedMapListing(null)}
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                  style={styles.mapCardCloseBtn}
-                >
-                  <MaterialCommunityIcons name="close" size={18} color={themeColors.textMuted} />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
+        <ListingMapView
+          masterMapRef={masterMapRef}
+          sortedListings={sortedListings}
+          selectedMapListing={selectedMapListing}
+          setSelectedMapListing={setSelectedMapListing}
+          getSmartListingCoordinates={getSmartListingCoordinates}
+          formatCompactPrice={formatCompactPrice}
+          formatPriceLabel={formatPriceLabel}
+          cleanListingTitle={cleanListingTitle}
+          getListingImageUri={getListingImageUri}
+          resolveListingLocation={resolveListingLocation}
+          handleLocateMeOnMasterMap={handleLocateMeOnMasterMap}
+          isLocatingUser={isLocatingUser}
+          onNavigateToDetail={(id) => router.push(`/listing/${id}` as any)}
+        />
       ) : isLoading ? (
         <ScrollView style={{ flex: 1, width: "100%", paddingHorizontal: viewMode === "grid" ? 8 : 16, paddingTop: 12 }}>
           <ListingSkeleton />
@@ -1795,286 +1676,33 @@ export default function MasterListingScreen() {
       </Modal>
 
       {/* ========== Unified Filter Bottom Sheet Modal ========== */}
-      <Modal
+      <ListingFilterSheet
         visible={isFilterModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsFilterModalVisible(false)}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={() => setIsFilterModalVisible(false)}
-          style={styles.sortModalOverlay}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={{
-              backgroundColor: themeColors.cardBackground,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              paddingHorizontal: 18,
-              paddingTop: 12,
-              paddingBottom: Math.max(insets.bottom, 28) + 20,
-              maxHeight: "85%",
-            }}
-          >
-            <View style={[styles.sortModalHandle, { backgroundColor: themeColors.borderColor }]} />
-            <Text style={[styles.sortModalTitle, { color: themeColors.textPrimary }]}>
-              {language === "BM" ? "Tapis Listing" : "Filter Listings"}
-            </Text>
-
-            {renderFilterContent ? (
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                nestedScrollEnabled={true}
-              >
-              {/* Status Filter */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Status" : "Status"}
-                </Text>
-                <View style={styles.filterModalPillRow}>
-                  {filterChips.map((chip) => {
-                    const active = activeFilter === chip.id;
-                    return (
-                      <TouchableOpacity
-                        key={chip.id}
-                        activeOpacity={0.7}
-                        onPress={() => setActiveFilter(chip.id)}
-                        style={[
-                          styles.filterModalPill,
-                          {
-                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
-                          {chip.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Category Filter */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Jenis Hartanah" : "Property Category"}
-                </Text>
-                <View style={styles.filterModalPillRow}>
-                  {[
-                    { id: "Semua", label: language === "BM" ? "Semua" : "All", icon: "view-grid" as const },
-                    { id: "Landed", label: "Landed", icon: "home" as const },
-                    { id: "High-Rise", label: "High-Rise", icon: "office-building" as const },
-                    { id: "Commercial", label: "Komersial", icon: "store" as const },
-                    { id: "Tanah", label: "Tanah", icon: "terrain" as const },
-                    { id: "Industri", label: "Industri", icon: "factory" as const },
-                    { id: "Sewa", label: "Sewa", icon: "key-variant" as const },
-                  ].map((cat) => {
-                    const active = categoryFilter === cat.id;
-                    return (
-                      <TouchableOpacity
-                        key={cat.id}
-                        activeOpacity={0.7}
-                        onPress={() => setCategoryFilter(cat.id)}
-                        style={[
-                          styles.filterModalPill,
-                          {
-                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                          },
-                        ]}
-                      >
-                        <MaterialCommunityIcons name={cat.icon} size={13} color={active ? "#FFF" : themeColors.textMuted} />
-                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
-                          {cat.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Location */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Lokasi" : "Location"}
-                </Text>
-                <TextInput
-                  style={[styles.criteriaInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                  placeholder={language === "BM" ? "Cari lokasi..." : "Search location..."}
-                  placeholderTextColor={themeColors.textMuted}
-                  value={criteriaLocation}
-                  onChangeText={setCriteriaLocation}
-                />
-              </View>
-
-              {/* Price Range */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Julat Harga" : "Price Range"}
-                </Text>
-                <View style={styles.criteriaPriceRow}>
-                  <TextInput
-                    style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                    placeholder="Min RM"
-                    placeholderTextColor={themeColors.textMuted}
-                    keyboardType="numeric"
-                    value={criteriaMinPrice}
-                    onChangeText={setCriteriaMinPrice}
-                  />
-                  <TextInput
-                    style={[styles.criteriaInput, styles.criteriaHalfInput, { borderColor: themeColors.borderColor, color: themeColors.textPrimary, backgroundColor: themeColors.surfaceContainer }]}
-                    placeholder="Max RM"
-                    placeholderTextColor={themeColors.textMuted}
-                    keyboardType="numeric"
-                    value={criteriaMaxPrice}
-                    onChangeText={setCriteriaMaxPrice}
-                  />
-                </View>
-              </View>
-
-              {/* Property Type */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Jenis Kediaman" : "Property Type"}
-                </Text>
-                <View style={styles.filterModalPillRow}>
-                  {propertyTypeOptions.map((option) => {
-                    const active = criteriaPropertyType === option;
-                    return (
-                      <TouchableOpacity
-                        key={`ptype-${option}`}
-                        activeOpacity={0.7}
-                        onPress={() => handlePropertyTypeSelect(option)}
-                        style={[
-                          styles.filterModalPill,
-                          {
-                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Tenure */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Jenis Pegangan" : "Tenure Type"}
-                </Text>
-                <View style={styles.filterModalPillRow}>
-                  {tenureOptions.map((option) => {
-                    const active = criteriaTenure === option;
-                    return (
-                      <TouchableOpacity
-                        key={`tenure-${option}`}
-                        activeOpacity={0.7}
-                        onPress={() => handleTenureSelect(option)}
-                        style={[
-                          styles.filterModalPill,
-                          {
-                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Lot Status */}
-              <View style={styles.filterModalSection}>
-                <Text style={[styles.filterModalLabel, { color: themeColors.textPrimary }]}>
-                  {language === "BM" ? "Status Lot" : "Lot Status"}
-                </Text>
-                <View style={styles.filterModalPillRow}>
-                  {lotStatusOptions.map((option) => {
-                    const active = criteriaLotStatus === option;
-                    return (
-                      <TouchableOpacity
-                        key={`lot-${option}`}
-                        activeOpacity={0.7}
-                        onPress={() => handleLotStatusSelect(option)}
-                        style={[
-                          styles.filterModalPill,
-                          {
-                            backgroundColor: active ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                            borderColor: active ? themeColors.maroonPrimary : themeColors.borderColor,
-                          },
-                        ]}
-                      >
-                        <Text style={[styles.filterModalPillText, { color: active ? "#FFF" : themeColors.textSecondary }]}>
-                          {option}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                  </View>
-                </View>
-              </ScrollView>
-            ) : (
-              <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
-                <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
-              </View>
-            )}
-
-            {/* Bottom Action Bar */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, gap: 12 }}>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  clearAllFilters();
-                }}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: themeColors.borderColor,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textSecondary }}>
-                  {language === "BM" ? "Reset Semua" : "Reset All"}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => setIsFilterModalVisible(false)}
-                style={{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  backgroundColor: themeColors.maroonPrimary,
-                  alignItems: "center",
-                }}
-              >
-                <Text style={{ fontSize: 14, fontWeight: "700", color: "#FFFFFF" }}>
-                  {activeFilterCount > 0
-                    ? `${language === "BM" ? "Tapis" : "Apply"} (${activeFilterCount})`
-                    : language === "BM" ? "Tutup" : "Done"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setIsFilterModalVisible(false)}
+        renderFilterContent={renderFilterContent}
+        filterChips={filterChips}
+        activeFilter={activeFilter}
+        setActiveFilter={setActiveFilter}
+        categoryFilter={categoryFilter}
+        setCategoryFilter={setCategoryFilter}
+        criteriaLocation={criteriaLocation}
+        setCriteriaLocation={setCriteriaLocation}
+        criteriaMinPrice={criteriaMinPrice}
+        setCriteriaMinPrice={setCriteriaMinPrice}
+        criteriaMaxPrice={criteriaMaxPrice}
+        setCriteriaMaxPrice={setCriteriaMaxPrice}
+        criteriaPropertyType={criteriaPropertyType}
+        handlePropertyTypeSelect={handlePropertyTypeSelect}
+        propertyTypeOptions={propertyTypeOptions}
+        criteriaTenure={criteriaTenure}
+        handleTenureSelect={handleTenureSelect}
+        tenureOptions={tenureOptions}
+        criteriaLotStatus={criteriaLotStatus}
+        handleLotStatusSelect={handleLotStatusSelect}
+        lotStatusOptions={lotStatusOptions}
+        clearAllFilters={clearAllFilters}
+        activeFilterCount={activeFilterCount}
+      />
 
       {/* Quick Status Update Bottom Sheet Modal */}
       <Modal
@@ -3040,6 +2668,8 @@ const styles = StyleSheet.create({
   },
   gridCardBody: {
     padding: 10,
+    flex: 1,
+    justifyContent: "space-between",
   },
   gridCardPrice: {
     fontSize: 15,
@@ -3049,6 +2679,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     lineHeight: 18,
+    minHeight: 36,
     marginTop: 3,
   },
   gridLocationRow: {
@@ -3064,6 +2695,7 @@ const styles = StyleSheet.create({
   gridSpecsRow: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 18,
     marginTop: 6,
   },
   gridSpecText: {

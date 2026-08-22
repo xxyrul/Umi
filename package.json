@@ -1,10 +1,11 @@
 {
-  "version": "1.4.2",
+  "version": "1.5.0",
   "name": "umi",
   "description": "Premium real estate case tracking SaaS for property agents",
   "scripts": {
     "build": "expo export --platform web",
     "lint": "tsc --noEmit",
+    "test": "node scripts/test-core.js",
     "ios": "expo run:ios",
     "web": "expo start --web",
     "android": "expo run:android",

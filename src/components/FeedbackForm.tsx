@@ -11,9 +11,12 @@ import {
   Image,
   Platform,
   StyleSheet,
+  KeyboardAvoidingView,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import { SPACING } from "@/constants/theme";
 import { firestore, auth } from "@/services/firebase";
 import storage from "@react-native-firebase/storage";
@@ -59,6 +62,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   caseId,
   caseName,
 }) => {
+  const insets = useSafeAreaInsets();
   const { themeColors, language } = useAppSettings();
   const currentUser = auth().currentUser;
 
@@ -187,26 +191,47 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false}>
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: themeColors.canvasBackground,
-          paddingTop: Platform.OS === "ios" ? 60 : 40,
-        }}
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}
       >
         {/* Header */}
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: "space-between",
-            paddingHorizontal: SPACING.lg,
-            paddingBottom: SPACING.md,
+            paddingHorizontal: 16,
+            paddingTop: insets.top + 8,
+            paddingBottom: 16,
             borderBottomWidth: 1,
             borderBottomColor: themeColors.borderColor,
+            backgroundColor: themeColors.cardBackground,
           }}
         >
+          <TouchableOpacity
+            onPress={() => {
+              Haptics.selectionAsync().catch(() => {});
+              onClose();
+            }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 12,
+              backgroundColor: themeColors.surfaceContainer,
+              alignItems: "center",
+              justifyContent: "center",
+              marginRight: 12,
+            }}
+          >
+            <MaterialCommunityIcons name="arrow-left" size={22} color={themeColors.textPrimary} />
+          </TouchableOpacity>
           <Text
             style={{
               fontSize: 18,
@@ -216,20 +241,14 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
           >
             {language === "BM" ? "Hantar Maklum Balas" : "Send Feedback"}
           </Text>
-          <TouchableOpacity onPress={onClose} disabled={isSubmitting}>
-            <MaterialCommunityIcons
-              name="close"
-              size={24}
-              color={themeColors.textMuted}
-            />
-          </TouchableOpacity>
         </View>
 
         <ScrollView
           contentContainerStyle={{
             padding: SPACING.lg,
-            paddingBottom: SPACING.xl,
+            paddingBottom: insets.bottom + 40,
           }}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* Feedback Type Selector */}
@@ -604,7 +623,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
             </Text>
           </TouchableOpacity>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

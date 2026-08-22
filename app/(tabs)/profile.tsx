@@ -384,7 +384,7 @@ export default function ProfileScreen() {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          paddingVertical: 13,
+          paddingVertical: 10.5,
           paddingHorizontal: 16,
           borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
           borderBottomColor: themeColors.borderColor,
@@ -392,30 +392,30 @@ export default function ProfileScreen() {
       >
         <View
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
+            width: 32,
+            height: 32,
+            borderRadius: 9,
             backgroundColor: badgeColor || themeColors.maroonPrimary,
             justifyContent: "center",
             alignItems: "center",
-            marginRight: 14,
+            marginRight: 12,
           }}
         >
-          <MaterialCommunityIcons name={icon as any} size={20} color="#FFFFFF" />
+          <MaterialCommunityIcons name={icon as any} size={18} color="#FFFFFF" />
         </View>
 
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+          <Text style={{ fontSize: 14.5, fontWeight: "600", color: themeColors.textPrimary }}>
             {title}
           </Text>
           {subtitle && (
-            <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
+            <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 1 }}>
               {subtitle}
             </Text>
           )}
         </View>
 
-        <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+        <MaterialCommunityIcons name="chevron-right" size={18} color={themeColors.textMuted} />
       </TouchableOpacity>
     );
   };
@@ -712,23 +712,23 @@ export default function ProfileScreen() {
           style={{
             alignItems: "center",
             width: "100%",
-            paddingVertical: SPACING.lg,
-            marginBottom: SPACING.md,
+            paddingVertical: 10,
+            marginBottom: 8,
           }}
         >
           <TouchableOpacity
             activeOpacity={0.8}
-            onPress={() => setActiveSection("Account")}
-            style={{ position: "relative", marginBottom: SPACING.md }}
+            onPress={() => router.push("/account" as any)}
+            style={{ position: "relative", marginBottom: 8 }}
           >
             {profile?.photoURL ? (
               <ExpoImage
                 source={{ uri: profile.photoURL }}
                 style={{
-                  width: 88,
-                  height: 88,
-                  borderRadius: 44,
-                  borderWidth: 2.5,
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
+                  borderWidth: 2,
                   borderColor: themeColors.maroonPrimary,
                 }}
                 contentFit="cover"
@@ -738,19 +738,19 @@ export default function ProfileScreen() {
             ) : (
               <View
                 style={{
-                  width: 88,
-                  height: 88,
-                  borderRadius: 44,
+                  width: 80,
+                  height: 80,
+                  borderRadius: 40,
                   backgroundColor: themeColors.maroonLight,
                   justifyContent: "center",
                   alignItems: "center",
-                  borderWidth: 2.5,
+                  borderWidth: 2,
                   borderColor: themeColors.maroonPrimary,
                 }}
               >
                 <Text
                   style={{
-                    fontSize: 32,
+                    fontSize: 28,
                     fontWeight: "700",
                     color: themeColors.maroonPrimary,
                   }}
@@ -767,36 +767,36 @@ export default function ProfileScreen() {
                 bottom: 0,
                 right: 0,
                 backgroundColor: "#3B82F6",
-                width: 28,
-                height: 28,
-                borderRadius: 14,
+                width: 26,
+                height: 26,
+                borderRadius: 13,
                 justifyContent: "center",
                 alignItems: "center",
                 borderWidth: 2,
                 borderColor: themeColors.canvasBackground,
               }}
             >
-              <MaterialCommunityIcons name="camera" size={15} color="#FFFFFF" />
+              <MaterialCommunityIcons name="camera" size={14} color="#FFFFFF" />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => setActiveSection("Account")}
+            onPress={() => router.push("/account" as any)}
             style={{ alignItems: "center" }}
           >
             <Text
               style={{
-                fontSize: 22,
+                fontSize: 20,
                 fontWeight: "700",
                 color: themeColors.textPrimary,
-                marginBottom: 4,
+                marginBottom: 2,
               }}
             >
               {profile?.displayName || "Agent"}
             </Text>
 
-            <Text style={{ fontSize: 13.5, color: themeColors.textMuted, textAlign: "center" }}>
+            <Text style={{ fontSize: 13, color: themeColors.textMuted, textAlign: "center" }}>
               {phoneInput || profile?.phoneNumber
                 ? `${phoneInput || profile?.phoneNumber}  •  ${profile?.email || "ejen@drtmasterlisting.com"}`
                 : profile?.email || "ejen@drtmasterlisting.com"}
@@ -810,18 +810,18 @@ export default function ProfileScreen() {
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: themeColors.borderColor,
             overflow: "hidden",
-            marginBottom: SPACING.md,
+            marginBottom: 10,
           }}
         >
           {renderOptionRow(
             "account-outline",
             t("accountSettings"),
             t("accountSubtitle"),
-            () => setActiveSection("Account"),
+            () => router.push("/account" as any),
             "#3B82F6",
             !isAdmin
           )}
@@ -842,11 +842,11 @@ export default function ProfileScreen() {
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: themeColors.borderColor,
             overflow: "hidden",
-            marginBottom: SPACING.md,
+            marginBottom: 10,
           }}
         >
           {/* Theme Row with inline Segmented Switch */}
@@ -854,7 +854,7 @@ export default function ProfileScreen() {
             style={{
               flexDirection: "row",
               alignItems: "center",
-              paddingVertical: 11,
+              paddingVertical: 9.5,
               paddingHorizontal: 16,
               borderBottomWidth: StyleSheet.hairlineWidth,
               borderBottomColor: themeColors.borderColor,
@@ -862,27 +862,27 @@ export default function ProfileScreen() {
           >
             <View
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
+                width: 32,
+                height: 32,
+                borderRadius: 9,
                 backgroundColor: "#F97316",
                 justifyContent: "center",
                 alignItems: "center",
-                marginRight: 14,
+                marginRight: 12,
               }}
             >
               <MaterialCommunityIcons
                 name={theme === "system" ? "cellphone-cog" : isDark ? "weather-night" : "weather-sunny"}
-                size={20}
+                size={18}
                 color="#FFFFFF"
               />
             </View>
 
             <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+              <Text style={{ fontSize: 14.5, fontWeight: "600", color: themeColors.textPrimary }}>
                 {t("themeLabel")}
               </Text>
-              <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 1 }}>
+              <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 1 }}>
                 {theme === "system"
                   ? `Auto (${isDark ? "Dark" : "Light"})`
                   : isDark ? "Dark Mode" : "Light Mode"}
@@ -903,7 +903,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.segmentText,
-                    { color: theme === "system" ? "#FFF" : themeColors.textMuted, fontSize: 12 },
+                    { color: theme === "system" ? "#FFF" : themeColors.textMuted, fontSize: 11.5 },
                   ]}
                 >
                   Auto
@@ -922,7 +922,7 @@ export default function ProfileScreen() {
               >
                 <MaterialCommunityIcons
                   name="weather-sunny"
-                  size={14}
+                  size={13}
                   color={theme === "light" ? "#FFF" : themeColors.textMuted}
                 />
               </TouchableOpacity>
@@ -939,7 +939,7 @@ export default function ProfileScreen() {
               >
                 <MaterialCommunityIcons
                   name="weather-night"
-                  size={14}
+                  size={13}
                   color={theme === "dark" ? "#FFF" : themeColors.textMuted}
                 />
               </TouchableOpacity>
@@ -951,7 +951,7 @@ export default function ProfileScreen() {
             style={{
               flexDirection: "row",
               alignItems: "center",
-              paddingVertical: 11,
+              paddingVertical: 9.5,
               paddingHorizontal: 16,
               borderBottomWidth: StyleSheet.hairlineWidth,
               borderBottomColor: themeColors.borderColor,
@@ -959,23 +959,23 @@ export default function ProfileScreen() {
           >
             <View
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 10,
+                width: 32,
+                height: 32,
+                borderRadius: 9,
                 backgroundColor: "#8B5CF6",
                 justifyContent: "center",
                 alignItems: "center",
-                marginRight: 14,
+                marginRight: 12,
               }}
             >
-              <MaterialCommunityIcons name="translate" size={20} color="#FFFFFF" />
+              <MaterialCommunityIcons name="translate" size={18} color="#FFFFFF" />
             </View>
 
             <View style={{ flex: 1, paddingRight: 8 }}>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+              <Text style={{ fontSize: 14.5, fontWeight: "600", color: themeColors.textPrimary }}>
                 {t("languageLabel")}
               </Text>
-              <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 1 }}>
+              <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 1 }}>
                 {language === "BM" ? t("bahasaMelayu") : t("english")}
               </Text>
             </View>
@@ -994,7 +994,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.segmentText,
-                    { color: language === "BM" ? "#FFF" : themeColors.textMuted, fontSize: 12 },
+                    { color: language === "BM" ? "#FFF" : themeColors.textMuted, fontSize: 11.5 },
                   ]}
                 >
                   BM
@@ -1014,7 +1014,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.segmentText,
-                    { color: language === "EN" ? "#FFF" : themeColors.textMuted, fontSize: 12 },
+                    { color: language === "EN" ? "#FFF" : themeColors.textMuted, fontSize: 11.5 },
                   ]}
                 >
                   EN
@@ -1037,7 +1037,7 @@ export default function ProfileScreen() {
             "bell-ring-outline",
             t("notifications"),
             t("notifSubtitle"),
-            () => setActiveSection("Notifications"),
+            () => router.push("/notification-settings" as any),
             "#EF4444"
           )}
 
@@ -1058,11 +1058,11 @@ export default function ProfileScreen() {
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
+            borderRadius: 14,
             borderWidth: 1,
             borderColor: themeColors.borderColor,
             overflow: "hidden",
-            marginBottom: SPACING.xl,
+            marginBottom: SPACING.lg,
           }}
         >
           {renderOptionRow(
@@ -1076,299 +1076,12 @@ export default function ProfileScreen() {
             "help-circle-outline",
             t("helpFeedback"),
             t("helpSubtitle"),
-            () => setActiveSection("Help"),
+            () => router.push("/help" as any),
             "#6366F1",
             true
           )}
         </Animated.View>
       </ScrollView>
-
-      {/* Settings Modal Sheet */}
-      <Modal
-        visible={activeSection !== null}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setActiveSection(null)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0, 0, 0, 0.6)",
-            justifyContent: "flex-end",
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: isDark ? "#1E1E1E" : themeColors.cardBackground,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              borderWidth: 1,
-              borderColor: isDark ? "rgba(255, 255, 255, 0.08)" : themeColors.borderColor,
-              padding: SPACING.lg,
-              paddingBottom: Math.max(insets.bottom, 28) + 20,
-              maxHeight: "85%",
-              minHeight: "45%",
-            }}
-          >
-            {/* Header */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: SPACING.lg,
-                borderBottomWidth: 1,
-                borderBottomColor: themeColors.borderColor,
-                paddingBottom: SPACING.md,
-              }}
-            >
-              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
-                {activeSection === "Account"
-                  ? t("accountSettings")
-                  : activeSection === "Notifications"
-                  ? t("notifications")
-                  : activeSection === "Help"
-                  ? t("helpFeedback")
-                  : activeSection}
-              </Text>
-              <TouchableOpacity onPress={() => setActiveSection(null)}>
-                <MaterialCommunityIcons name="close" size={24} color={themeColors.textMuted} />
-              </TouchableOpacity>
-            </View>
-
-            {/* Modal Scroll Content */}
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: SPACING.xl }}>
-              {activeSection === "Account" && (
-                <View style={{ gap: SPACING.md }}>
-                  <View>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.maroonPrimary, textTransform: "uppercase", marginBottom: 6 }}>
-                      {t("displayName")}
-                    </Text>
-                    <TextInput
-                      value={displayNameInput}
-                      onChangeText={setDisplayNameInput}
-                      placeholder={t("displayNamePlaceholder")}
-                      placeholderTextColor={themeColors.textMuted}
-                      autoFocus={activeSection === "Account"}
-                      style={{
-                        fontSize: 15,
-                        color: themeColors.textPrimary,
-                        backgroundColor: themeColors.canvasBackground,
-                        padding: SPACING.md,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: themeColors.borderColor,
-                      }}
-                    />
-                  </View>
-
-                  <View>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.maroonPrimary, textTransform: "uppercase", marginBottom: 6 }}>
-                      {language === "BM" ? "No. Telefon (WhatsApp)" : "Phone Number (WhatsApp)"}
-                    </Text>
-                    <TextInput
-                      value={phoneInput}
-                      onChangeText={setPhoneInput}
-                      placeholder={language === "BM" ? "Cth: 012-3456789" : "E.g.: 012-3456789"}
-                      placeholderTextColor={themeColors.textMuted}
-                      keyboardType="phone-pad"
-                      style={{
-                        fontSize: 15,
-                        color: themeColors.textPrimary,
-                        backgroundColor: themeColors.canvasBackground,
-                        padding: SPACING.md,
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: themeColors.borderColor,
-                      }}
-                    />
-                  </View>
-
-                  <View>
-                    <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.maroonPrimary, textTransform: "uppercase", marginBottom: 6 }}>
-                      {t("email")}
-                    </Text>
-                    <Text style={{ fontSize: 15, color: themeColors.textMuted, backgroundColor: themeColors.canvasBackground, padding: SPACING.md, borderRadius: 10, borderWidth: 1, borderColor: themeColors.borderColor }}>
-                      {profile?.email || "ejen@drtmasterlisting.com"}
-                    </Text>
-                  </View>
-
-                  <Button
-                    label={t("saveInfo")}
-                    variant="primary"
-                    icon="content-save-outline"
-                    loading={isSavingAccount}
-                    onPress={handleSaveAccount}
-                    style={{ marginTop: SPACING.md, backgroundColor: themeColors.maroonPrimary }}
-                  />
-                </View>
-              )}
-
-              {activeSection === "Notifications" && (
-                <View style={{ gap: SPACING.lg }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                        {language === "BM" ? "Notifikasi Push" : "Push Notifications"}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {language === "BM" ? "Terima amaran segera pada peranti" : "Receive instant alerts on your device"}
-                      </Text>
-                    </View>
-                    <Switch value={pushEnabled} onValueChange={setPushEnabled} trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }} thumbColor={pushEnabled ? "#FFFFFF" : "#F3F4F6"} />
-                  </View>
-
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                        {language === "BM" ? "Peringatan Kes & Temujanji" : "Case & Appointment Alerts"}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {language === "BM" ? "Peringatan automatik susulan pembeli / vendor" : "Auto-reminders for buyer / vendor follow-ups"}
-                      </Text>
-                    </View>
-                    <Switch value={caseAlertsEnabled} onValueChange={setCaseAlertsEnabled} trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }} thumbColor={caseAlertsEnabled ? "#FFFFFF" : "#F3F4F6"} />
-                  </View>
-
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                        {language === "BM" ? "Makluman Versi Baharu" : "New Version Alerts"}
-                      </Text>
-                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {language === "BM"
-                          ? "Beritahu saya apabila kemas kini aplikasi dikeluarkan"
-                          : "Notify me when an app update is released"}
-                      </Text>
-                    </View>
-                    <Switch
-                      value={updateAlertsEnabled}
-                      onValueChange={handleToggleUpdateAlerts}
-                      disabled={isSavingUpdateAlerts}
-                      trackColor={{ false: "#D1D5DB", true: themeColors.maroonPrimary }}
-                      thumbColor={updateAlertsEnabled ? "#FFFFFF" : "#F3F4F6"}
-                    />
-                  </View>
-
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", opacity: 0.65 }}>
-                    <View style={{ flex: 1, paddingRight: SPACING.md }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
-                          {language === "BM" ? "Ringkasan E-mel Mingguan" : "Weekly Email Digest"}
-                        </Text>
-                        <View style={{ backgroundColor: "rgba(255, 180, 180, 0.15)", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                          <Text style={{ fontSize: 10, fontWeight: "700", color: "#FFB4B4" }}>
-                            {language === "BM" ? "AKAN DATANG" : "COMING SOON"}
-                          </Text>
-                        </View>
-                      </View>
-                      <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
-                        {language === "BM" ? "Laporan prestasi harta dihantar ke e-mel secara automatik." : "Automated property performance digest sent to email."}
-                      </Text>
-                    </View>
-                    <Switch value={false} disabled={true} trackColor={{ false: "#4B5563", true: themeColors.maroonPrimary }} thumbColor="#9CA3AF" />
-                  </View>
-
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => {
-                      setActiveSection(null);
-                      router.push("/notifications" as any);
-                    }}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 8,
-                      backgroundColor: themeColors.surfaceContainer,
-                      paddingVertical: 12,
-                      borderRadius: 10,
-                      marginTop: SPACING.sm,
-                      borderWidth: 1,
-                      borderColor: themeColors.borderColor,
-                    }}
-                  >
-                    <MaterialCommunityIcons name="history" size={18} color={themeColors.maroonPrimary} />
-                    <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
-                      {language === "BM" ? "Buka Peti Notifikasi" : "Open Notifications Inbox"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-
-              {activeSection === "Help" && (
-                <View style={{ gap: SPACING.md }}>
-                  <Text style={{ fontSize: 14, color: themeColors.textSecondary, marginBottom: 4 }}>
-                    {language === "BM"
-                      ? "Memerlukan bantuan teknikal atau ingin melaporkan maklum balas berkenaan aplikasi DRT Master Listing?"
-                      : "Need technical support or want to report feedback regarding DRT Master Listing CRM?"}
-                  </Text>
-
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      setActiveSection(null);
-                      setIsFeedbackFormVisible(true);
-                    }}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: themeColors.maroonPrimary,
-                      borderRadius: 12,
-                      padding: 14,
-                      gap: 12,
-                    }}
-                  >
-                    <MaterialCommunityIcons name="comment-multiple-outline" size={24} color="#FFF" />
-                    <Text style={{ color: "#FFF", fontSize: 15, fontWeight: "700" }}>
-                      {language === "BM" ? "Hantar Maklum Balas" : "Send Feedback"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => Linking.openURL("https://wa.me/601114190091?text=Hello%20Artha%20Master%20Listing%20Support")}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: "#10B981",
-                      borderRadius: 12,
-                      padding: 14,
-                      gap: 12,
-                    }}
-                  >
-                    <MaterialCommunityIcons name="whatsapp" size={24} color="#FFF" />
-                    <Text style={{ color: "#FFF", fontSize: 15, fontWeight: "700" }}>
-                      {language === "BM" ? "Sembang Bantuan WhatsApp" : "WhatsApp Support Chat"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    onPress={() => Linking.openURL("mailto:azrul.baharum@proton.me?subject=Support%20Request%20-%20Artha%20Master%20Listing")}
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      backgroundColor: themeColors.surfaceContainer,
-                      borderColor: themeColors.borderColor,
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      padding: 14,
-                      gap: 12,
-                    }}
-                  >
-                    <MaterialCommunityIcons name="email-outline" size={24} color={themeColors.maroonPrimary} />
-                    <Text style={{ color: themeColors.textPrimary, fontSize: 15, fontWeight: "700" }}>
-                      {language === "BM" ? "Hantar E-mel Sokongan" : "Email Customer Support"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </ScrollView>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* App Lock Management Modal */}
       <Modal
@@ -1652,16 +1365,16 @@ const styles = StyleSheet.create({
   },
   segmentContainer: {
     flexDirection: "row",
-    borderRadius: 8,
-    padding: 3,
+    borderRadius: 7,
+    padding: 2,
   },
   segmentOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 4.5,
+    borderRadius: 5,
   },
   segmentText: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: "700",
   },
 });

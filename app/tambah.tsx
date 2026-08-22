@@ -49,16 +49,10 @@ import { resolveLocationWithGoogleLearning, initLearnedLocationCache } from "@/s
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { SPACING } from "@/constants/theme";
 
-const NEGERI_LIST = [
-  "Selangor", "Kuala Lumpur", "Johor", "Penang", "Perak", "Kedah", "Pahang",
-  "Negeri Sembilan", "Melaka", "Kelantan", "Terengganu", "Sabah", "Sarawak",
-  "Perlis", "Putrajaya",
-];
-
-const JENIS_LIST = [
-  "Residential / Teres", "Condominium / Apartment", "Bungalow / Semi-D",
-  "Commercial / Shoplot", "Factory / Warehouse", "Agricultural Land",
-];
+import { BasicInfoStep, JENIS_LIST } from "@/components/listing-form/BasicInfoStep";
+import { LocationSpecsStep, NEGERI_LIST } from "@/components/listing-form/LocationSpecsStep";
+import { MediaDocsStep } from "@/components/listing-form/MediaDocsStep";
+import { MapPickerModal } from "@/components/listing-form/MapPickerModal";
 
 const STATE_COORDINATES: Record<string, { latitude: number; longitude: number }> = {
   "kuala lumpur": { latitude: 3.139, longitude: 101.6869 },
@@ -799,368 +793,6 @@ export default function TambahScreen() {
   const headerPaddingTop = Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 12;
 
   const isMovingForward = currentStep >= prevStep;
-  const stepEntering = isMovingForward ? SlideInRight.duration(240) : SlideInLeft.duration(240);
-  const stepExiting = isMovingForward ? SlideOutLeft.duration(240) : SlideOutRight.duration(240);
-
-  const renderStep1 = () => (
-    <Animated.View key={`step-${currentStep}`} entering={stepEntering} exiting={stepExiting} style={styles.stepContainer}>
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{t("basicInfo")}</Text>
-      <TextInput placeholder={t("titlePlaceholder")} placeholderTextColor={themeColors.textMuted} value={tajuk} onChangeText={setTajuk} onFocus={handleInputFocus} style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]} />
-
-      <View style={[styles.priceInputContainer, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-        <Text style={[styles.pricePrefix, { color: themeColors.textPrimary }]}>RM</Text>
-        <TextInput placeholder={t("pricePlaceholder")} placeholderTextColor={themeColors.textMuted} value={harga.replace(/\B(?=(\d{3})+(?!\d))/g, ",")} onChangeText={(v) => setHarga(v.replace(/,/g, "").replace(/\D/g, ""))} keyboardType="numeric" onFocus={handleInputFocus} style={[styles.priceInput, { color: themeColors.textPrimary }]} />
-      </View>
-
-      {/* Property Type Dropdown Trigger */}
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{t("propertyType") || "Jenis Hartanah"}</Text>
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => setIsPropertyTypeModalVisible(true)}
-        style={[styles.selectTrigger, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
-          <MaterialCommunityIcons name="home-city-outline" size={20} color={themeColors.maroonPrimary} />
-          <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
-            {jenis}
-          </Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-down" size={20} color={themeColors.textMuted} />
-      </TouchableOpacity>
-
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{t("specsTitle")}</Text>
-      
-      {/* Tenure (Freehold / Leasehold) */}
-      <View style={{ marginBottom: SPACING.md }}>
-        <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 8 }]}>{t("tenure")}</Text>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          {["Freehold", "Leasehold"].map((ten) => (
-            <TouchableOpacity key={ten} onPress={() => setPegangan(ten as any)} style={[styles.gridChip, { flex: 1, alignItems: "center", justifyContent: "center", height: 46, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }, pegangan === ten && { borderColor: themeColors.maroonPrimary, backgroundColor: themeColors.maroonPrimary }]}>
-              <Text style={{ color: pegangan === ten ? themeColors.canvasBackground : themeColors.textPrimary, fontWeight: "700", fontSize: 14 }}>{ten}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Lot Status (Bumi / Non-Bumi) */}
-      <View style={{ marginBottom: SPACING.md }}>
-        <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 8 }]}>{t("lotStatus")}</Text>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          {["Bumi", "Non-Bumi"].map((l) => {
-            const label = l === "Bumi" ? "Bumi Lot" : "Non-Bumi Lot";
-            return (
-              <TouchableOpacity key={l} onPress={() => setLot(label as any)} style={[styles.gridChip, { flex: 1, alignItems: "center", justifyContent: "center", height: 46, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }, lot === label && { borderColor: themeColors.maroonPrimary, backgroundColor: themeColors.maroonPrimary }]}>
-                <Text style={{ color: lot === label ? themeColors.canvasBackground : themeColors.textPrimary, fontWeight: "700", fontSize: 14 }}>{l === "Bumi" ? "Bumi Lot" : "Non-Bumi Lot"}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-
-      {/* Bedrooms & Bathrooms Steppers */}
-      <View style={{ flexDirection: "row", gap: 12, marginBottom: SPACING.md }}>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 8 }]}>{t("bedrooms")}</Text>
-          <View style={[styles.stepperContainer, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
-            <TouchableOpacity onPress={decrementBilikTidur} style={styles.stepperBtn}><MaterialCommunityIcons name="minus" size={24} color={themeColors.textPrimary} /></TouchableOpacity>
-            <Animated.Text style={[styles.stepperValue, { color: themeColors.textPrimary }, bedAnimatedStyle]}>{bilikTidur}</Animated.Text>
-            <TouchableOpacity onPress={incrementBilikTidur} style={styles.stepperBtn}><MaterialCommunityIcons name="plus" size={24} color={themeColors.textPrimary} /></TouchableOpacity>
-          </View>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 8 }]}>{t("bathrooms")}</Text>
-          <View style={[styles.stepperContainer, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
-            <TouchableOpacity onPress={decrementBilikAir} style={styles.stepperBtn}><MaterialCommunityIcons name="minus" size={24} color={themeColors.textPrimary} /></TouchableOpacity>
-            <Animated.Text style={[styles.stepperValue, { color: themeColors.textPrimary }, bathAnimatedStyle]}>{bilikAir}</Animated.Text>
-            <TouchableOpacity onPress={incrementBilikAir} style={styles.stepperBtn}><MaterialCommunityIcons name="plus" size={24} color={themeColors.textPrimary} /></TouchableOpacity>
-          </View>
-        </View>
-      </View>
-
-      <TextInput placeholder={language === "BM" ? "Keluasan (sqft)" : "Size (sqft)"} placeholderTextColor={themeColors.textMuted} value={keluasan} onChangeText={setKeluasan} keyboardType="default" onFocus={handleInputFocus} style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]} />
-
-      {/* Description / Keterangan (Pilihan) */}
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary, marginTop: SPACING.md }]}>
-        {language === "BM" ? "Keterangan / Penerangan (Pilihan)" : "Description / Details (Optional)"}
-      </Text>
-      <TextInput
-        placeholder={language === "BM" ? "Salin/tampal maklumat penuh hartanah, kemudahan berdekatan, atau nota tambahan di sini..." : "Paste full property copywriting, nearby amenities, or additional notes here..."}
-        placeholderTextColor={themeColors.textMuted}
-        value={description}
-        onChangeText={setDescription}
-        multiline
-        numberOfLines={4}
-        textAlignVertical="top"
-        onFocus={handleInputFocus}
-        style={[
-          styles.input,
-          {
-            color: themeColors.textPrimary,
-            backgroundColor: themeColors.cardBackground,
-            borderColor: themeColors.borderColor,
-            minHeight: 90,
-            paddingTop: 12,
-          },
-        ]}
-      />
-    </Animated.View>
-  );
-
-  const renderStep2 = () => (
-    <Animated.View key={`step-${currentStep}`} entering={stepEntering} exiting={stepExiting} style={styles.stepContainer}>
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{language === "BM" ? "Lokasi Hartanah" : "Property Location"}</Text>
-      
-      {/* 2-Button Choice: Pick on Map OR Pin GPS */}
-      <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handleOpenMapPicker}
-          style={[
-            styles.locationChoiceBtn,
-            {
-              flex: 1,
-              backgroundColor: themeColors.maroonPrimary,
-              borderColor: themeColors.maroonPrimary,
-            },
-          ]}
-        >
-          <MaterialCommunityIcons name="map-marker-outline" size={20} color="#FFFFFF" />
-          <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
-            {language === "BM" ? "Pilih di Peta" : "Pick on Map"}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={handlePinLocation}
-          disabled={isFetchingLocation}
-          style={[
-            styles.locationChoiceBtn,
-            {
-              flex: 1,
-              backgroundColor: themeColors.surfaceContainer,
-              borderColor: themeColors.borderColor,
-            },
-          ]}
-        >
-          {isFetchingLocation ? (
-            <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
-          ) : (
-            <>
-              <MaterialCommunityIcons name="crosshairs-gps" size={18} color={themeColors.textPrimary} />
-              <Text style={{ color: themeColors.textPrimary, fontWeight: "700", fontSize: 13 }}>
-                {language === "BM" ? "GPS Terkini" : "Current GPS"}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Confirmed GPS Location Badge */}
-      {location ? (
-        <View
-          style={[
-            styles.confirmedLocationCard,
-            {
-              backgroundColor: `${themeColors.maroonPrimary}12`,
-              borderColor: `${themeColors.maroonPrimary}30`,
-            },
-          ]}
-        >
-          <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
-              {language === "BM" ? "Koordinat GPS Disahkan" : "GPS Coordinates Set"}
-            </Text>
-            <Text style={{ fontSize: 11, color: themeColors.textMuted }}>
-              {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-            </Text>
-          </View>
-          <TouchableOpacity
-            onPress={handleOpenMapPicker}
-            style={{
-              paddingHorizontal: 10,
-              paddingVertical: 5,
-              borderRadius: 6,
-              backgroundColor: themeColors.maroonPrimary,
-            }}
-          >
-            <Text style={{ color: "#FFF", fontSize: 11, fontWeight: "700" }}>
-              {language === "BM" ? "Ubah" : "Change"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {/* State (Negeri) Dropdown Trigger */}
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6, marginTop: 4 }}>
-        <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 0 }]}>
-          {language === "BM" ? "Negeri" : "State"}
-        </Text>
-        {autoDetectedStateInfo ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: `${themeColors.maroonPrimary}15`, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: `${themeColors.maroonPrimary}30` }}>
-            <MaterialCommunityIcons name="auto-fix" size={12} color={themeColors.maroonPrimary} />
-            <Text style={{ fontSize: 11, fontWeight: "600", color: themeColors.maroonPrimary }}>
-              {language === "BM" ? `Dikesan: ${autoDetectedStateInfo.keyword}` : `Detected: ${autoDetectedStateInfo.keyword}`}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => setIsStateModalVisible(true)}
-        style={[styles.selectTrigger, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, marginBottom: SPACING.sm }]}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flex: 1 }}>
-          <MaterialCommunityIcons name="map-marker-radius-outline" size={20} color={themeColors.maroonPrimary} />
-          <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
-            {negeri}
-          </Text>
-        </View>
-        <MaterialCommunityIcons name="chevron-down" size={20} color={themeColors.textMuted} />
-      </TouchableOpacity>
-
-      {/* Full Property Address */}
-      <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 6 }]}>
-        {t("addressPlaceholder") || "Alamat Penuh"}
-      </Text>
-      <TextInput
-        placeholder={t("addressPlaceholder") || "Alamat penuh hartanah (cth: No 12, Jalan ABC...)"}
-        placeholderTextColor={themeColors.textMuted}
-        value={alamat}
-        onChangeText={setAlamat}
-        onBlur={handleAddressBlur}
-        multiline
-        numberOfLines={3}
-        onFocus={handleInputFocus}
-        style={[styles.input, styles.multilineInput, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-      />
-
-      {/* Navigation Link (Auto-generates or manual paste) */}
-      <Text style={[styles.subLabel, { color: themeColors.textSecondary, marginBottom: 6, marginTop: 4 }]}>
-        {language === "BM" ? "Pautan Navigasi (Google Maps / Waze)" : "Navigation Link (Google Maps / Waze)"}
-      </Text>
-      <TextInput
-        placeholder={language === "BM" ? "Pautan Google Maps / Waze (Auto-isi dari peta)" : "Google Maps / Waze Link (Auto-fills from map)"}
-        placeholderTextColor={themeColors.textMuted}
-        value={navLink}
-        onChangeText={handleNavLinkChange}
-        onFocus={handleInputFocus}
-        style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-      />
-
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{language === "BM" ? "Status Listing" : "Listing Status"}</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-        {([{ value: "Aktif", label: language === "BM" ? "Aktif" : "Active", icon: "check-circle", color: "#10B981" }, { value: "Booking", label: "Booking", icon: "clock-outline", color: "#F59E0B" }, { value: "Sold", label: language === "BM" ? "Terjual" : "Sold", icon: "tag-check", color: "#3B82F6" }, { value: "Draft", label: "Draft", icon: "pencil-outline", color: "#6B7280" }] as const).map((opt) => {
-          const isActive = listingStatus === opt.value;
-          return (
-            <TouchableOpacity key={opt.value} onPress={() => setListingStatus(opt.value)} style={[{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 10, borderWidth: 2, flex: 1, minWidth: "45%", justifyContent: "center", borderColor: isActive ? opt.color : themeColors.borderColor, backgroundColor: isActive ? `${opt.color}18` : themeColors.cardBackground }]}>
-              <MaterialCommunityIcons name={opt.icon as any} size={18} color={isActive ? opt.color : themeColors.textMuted} />
-              <Text style={{ fontWeight: "700", fontSize: 14, color: isActive ? opt.color : themeColors.textSecondary }}>{opt.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{t("ownerDetails")}</Text>
-      <TextInput placeholder={t("ownerNamePlaceholder") || "Nama Ejen"} placeholderTextColor={themeColors.textMuted} value={namaOwner} onChangeText={setNamaOwner} onFocus={handleInputFocus} style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]} />
-      <TextInput placeholder={t("ownerPhonePlaceholder") || "No. Telefon Ejen"} placeholderTextColor={themeColors.textMuted} value={telOwner} onChangeText={setTelOwner} keyboardType="phone-pad" onFocus={handleInputFocus} style={[styles.input, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]} />
-    </Animated.View>
-  );
-
-  const renderStep3 = () => (
-    <Animated.View entering={SlideInRight} exiting={SlideOutLeft} style={styles.stepContainer}>
-      <Text style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>{language === "BM" ? "Media & Dokumen" : "Media & Documents"}</Text>
-
-      <View style={styles.imageGrid}>
-        {gambar.map((uri, idx) => (
-          <Animated.View entering={FadeInDown} key={idx} style={styles.imageWrapper}>
-            <Image source={{ uri }} style={styles.gridImage} resizeMode="cover" />
-            {idx === 0 ? (
-              <View style={styles.coverBadge}>
-                <MaterialCommunityIcons name="star" size={9} color="#FFF" />
-                <Text style={styles.coverBadgeText} numberOfLines={1}>Cover</Text>
-              </View>
-            ) : (
-              <TouchableOpacity
-                onPress={() => handleSetCoverImage(idx)}
-                style={styles.setCoverBtn}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-              >
-                <Text style={styles.setCoverBtnText} numberOfLines={1}>Cover</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              onPress={() => handleRemoveImage(idx)}
-              style={styles.removeGridBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <MaterialCommunityIcons name="close" size={12} color="#FFF" />
-            </TouchableOpacity>
-            {gambar.length > 1 && (
-              <View style={styles.reorderControls}>
-                {idx > 0 && (
-                  <TouchableOpacity
-                    onPress={() => handleMoveImage(idx, "left")}
-                    style={styles.reorderBtn}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <MaterialCommunityIcons name="chevron-left" size={13} color="#FFF" />
-                  </TouchableOpacity>
-                )}
-                {idx < gambar.length - 1 && (
-                  <TouchableOpacity
-                    onPress={() => handleMoveImage(idx, "right")}
-                    style={[styles.reorderBtn, { marginLeft: "auto" }]}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <MaterialCommunityIcons name="chevron-right" size={13} color="#FFF" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </Animated.View>
-        ))}
-        <TouchableOpacity
-          onPress={handlePickImages}
-          style={[styles.imageWrapper, styles.uploadGridBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}
-          activeOpacity={0.7}
-        >
-          <MaterialCommunityIcons name="camera-plus-outline" size={24} color={themeColors.textMuted} />
-          <Text style={{ fontSize: 11, fontWeight: "600", color: themeColors.textMuted, marginTop: 4 }}>+ Foto</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={{ gap: SPACING.sm, marginTop: 10 }}>
-        <TouchableOpacity onPress={() => handlePickDocument("geran")} style={[styles.docBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
-          <MaterialCommunityIcons name="file-document-outline" size={22} color={geran ? themeColors.maroonPrimary : themeColors.textMuted} />
-          <Text style={[styles.docBtnText, { color: themeColors.textPrimary }]} numberOfLines={1}>{geranName ? `${t("geranCopy")}: ${geranName}` : t("geranCopy")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handlePickDocument("spa")} style={[styles.docBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
-          <MaterialCommunityIcons name="file-sign" size={22} color={spa ? themeColors.maroonPrimary : themeColors.textMuted} />
-          <Text style={[styles.docBtnText, { color: themeColors.textPrimary }]} numberOfLines={1}>{spaName ? `${t("spaCopy")}: ${spaName}` : t("spaCopy")}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handlePickDocument("icOwner")} style={[styles.docBtn, { borderColor: themeColors.borderColor, backgroundColor: themeColors.cardBackground }]}>
-          <MaterialCommunityIcons name="card-account-details-outline" size={22} color={icOwner ? themeColors.maroonPrimary : themeColors.textMuted} />
-          <Text style={[styles.docBtnText, { color: themeColors.textPrimary }]} numberOfLines={1}>{icOwnerName ? `${t("ownerIcCopyFull")}: ${icOwnerName}` : t("ownerIcCopyFull")}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Review Summary */}
-      <View style={[styles.reviewContainer, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor, marginTop: SPACING.lg }]}>
-        <Text style={{ fontWeight: '700', color: themeColors.textPrimary, marginBottom: 8 }}>{language === "BM" ? "Ringkasan Listing" : "Review Listing"}</Text>
-        <Text style={{ color: themeColors.textSecondary }} numberOfLines={2}>Title: {tajuk || "-"}</Text>
-        <Text style={{ color: themeColors.textSecondary }}>Price: RM{harga ? Number(harga).toLocaleString() : "-"}</Text>
-        <Text style={{ color: themeColors.textSecondary }}>State: {negeri}</Text>
-        <Text style={{ color: themeColors.textSecondary }}>Images: {gambar.length}</Text>
-        <Text style={{ color: themeColors.textSecondary }}>Documents: {[geran, spa, icOwner].filter(Boolean).length}</Text>
-      </View>
-
-      <TouchableOpacity onPress={handleSubmitListing} disabled={isSubmitting} style={[styles.submitBtn, { backgroundColor: themeColors.maroonPrimary }]}>
-        {isSubmitting ? <ActivityIndicator color="#FFF" /> : <Text style={[styles.submitBtnText, { color: themeColors.canvasBackground }]}>{isEditMode ? (language === "BM" ? "Simpan Perubahan" : "Save Changes") : (language === "BM" ? "Tambah Listing" : "Create Listing")}</Text>}
-      </TouchableOpacity>
-    </Animated.View>
-  );
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: themeColors.canvasBackground }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -1186,9 +818,86 @@ export default function TambahScreen() {
           paddingBottom: Math.max(insets.bottom, 28) + 120,
         }}
       >
-        {currentStep === 1 && renderStep1()}
-        {currentStep === 2 && renderStep2()}
-        {currentStep === 3 && renderStep3()}
+        {currentStep === 1 && (
+          <BasicInfoStep
+            tajuk={tajuk}
+            setTajuk={setTajuk}
+            harga={harga}
+            setHarga={setHarga}
+            jenis={jenis}
+            setJenis={setJenis}
+            pegangan={pegangan}
+            setPegangan={setPegangan}
+            lot={lot}
+            setLot={setLot}
+            bilikTidur={bilikTidur}
+            incrementBilikTidur={incrementBilikTidur}
+            decrementBilikTidur={decrementBilikTidur}
+            bilikAir={bilikAir}
+            incrementBilikAir={incrementBilikAir}
+            decrementBilikAir={decrementBilikAir}
+            keluasan={keluasan}
+            setKeluasan={setKeluasan}
+            description={description}
+            setDescription={setDescription}
+            isPropertyTypeModalVisible={isPropertyTypeModalVisible}
+            setIsPropertyTypeModalVisible={setIsPropertyTypeModalVisible}
+            isMovingForward={isMovingForward}
+            currentStep={currentStep}
+            handleInputFocus={handleInputFocus}
+            bedAnimatedStyle={bedAnimatedStyle}
+            bathAnimatedStyle={bathAnimatedStyle}
+          />
+        )}
+
+        {currentStep === 2 && (
+          <LocationSpecsStep
+            location={location}
+            negeri={negeri}
+            autoDetectedStateInfo={autoDetectedStateInfo}
+            alamat={alamat}
+            setAlamat={setAlamat}
+            navLink={navLink}
+            handleNavLinkChange={handleNavLinkChange}
+            listingStatus={listingStatus}
+            setListingStatus={setListingStatus}
+            namaOwner={namaOwner}
+            setNamaOwner={setNamaOwner}
+            telOwner={telOwner}
+            setTelOwner={setTelOwner}
+            isFetchingLocation={isFetchingLocation}
+            handleOpenMapPicker={handleOpenMapPicker}
+            handlePinLocation={handlePinLocation}
+            setIsStateModalVisible={setIsStateModalVisible}
+            handleAddressBlur={handleAddressBlur}
+            handleInputFocus={handleInputFocus}
+            isMovingForward={isMovingForward}
+            currentStep={currentStep}
+          />
+        )}
+
+        {currentStep === 3 && (
+          <MediaDocsStep
+            gambar={gambar}
+            handlePickImages={handlePickImages}
+            handleSetCoverImage={handleSetCoverImage}
+            handleRemoveImage={handleRemoveImage}
+            handleMoveImage={handleMoveImage}
+            handlePickDocument={handlePickDocument}
+            geran={geran}
+            geranName={geranName}
+            spa={spa}
+            spaName={spaName}
+            icOwner={icOwner}
+            icOwnerName={icOwnerName}
+            tajuk={tajuk}
+            harga={harga}
+            negeri={negeri}
+            handleSubmitListing={handleSubmitListing}
+            isSubmitting={isSubmitting}
+            isEditMode={isEditMode}
+          />
+        )}
         
         {/* Navigation Buttons */}
         <View style={styles.navRow}>
@@ -1199,241 +908,30 @@ export default function TambahScreen() {
           )}
           {currentStep < 3 && (
             <TouchableOpacity onPress={() => goToStep(currentStep + 1)} style={[styles.navBtn, { backgroundColor: themeColors.maroonPrimary, marginLeft: 'auto' }]}>
-              <Text style={{ color: themeColors.canvasBackground, fontWeight: "600" }}>{language === "BM" ? "Seterusnya" : "Next"}</Text>
+              <Text style={{ color: "#FFFFFF", fontWeight: "600" }}>{language === "BM" ? "Seterusnya" : "Next"}</Text>
             </TouchableOpacity>
           )}
         </View>
       </ScrollView>
 
       {/* ========== Interactive Map Location Picker Modal ========== */}
-      <Modal
+      <MapPickerModal
         visible={isMapPickerVisible}
-        animationType="slide"
-        onRequestClose={() => setIsMapPickerVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
-          {/* Modal Header */}
-          <View
-            style={{
-              paddingTop: Math.max(insets.top, 16),
-              paddingHorizontal: 16,
-              paddingBottom: 12,
-              flexDirection: "row",
-              alignItems: "center",
-              borderBottomWidth: 1,
-              borderBottomColor: themeColors.borderColor,
-              backgroundColor: themeColors.cardBackground,
-              gap: 12,
-            }}
-          >
-            <TouchableOpacity
-              onPress={() => setIsMapPickerVisible(false)}
-              style={{
-                padding: 6,
-                borderRadius: 20,
-                backgroundColor: themeColors.surfaceContainer,
-              }}
-            >
-              <MaterialCommunityIcons name="close" size={22} color={themeColors.textPrimary} />
-            </TouchableOpacity>
-            <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary, flex: 1 }}>
-              {language === "BM" ? "Pilih Lokasi Hartanah" : "Pin Property Location"}
-            </Text>
-          </View>
-
-          {/* Map View Area with Overlay Search */}
-          <View style={{ flex: 1, position: "relative" }}>
-            <MapView
-              ref={pickerMapRef}
-              style={{ flex: 1, width: "100%" }}
-              provider={PROVIDER_GOOGLE}
-              toolbarEnabled={false}
-              showsUserLocation={true}
-              showsMyLocationButton={true}
-              mapPadding={{ bottom: Math.max(insets.bottom, 28) + 120, top: 70, right: 0, left: 0 }}
-              initialRegion={{
-                latitude: pickerCoords.latitude,
-                longitude: pickerCoords.longitude,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
-              }}
-              onRegionChangeComplete={(region) => {
-                setPickerCoords({ latitude: region.latitude, longitude: region.longitude });
-                updatePickerAddress(region.latitude, region.longitude);
-              }}
-            />
-
-            {/* Fixed Center Pin */}
-            <View style={{ position: "absolute", top: "50%", left: "50%", marginTop: -36, marginLeft: -16, alignItems: "center", pointerEvents: "none" }}>
-              <MaterialCommunityIcons name="map-marker" size={40} color={themeColors.maroonPrimary} />
-            </View>
-
-            {/* Instruction Tip */}
-            {pickerSuggestions.length === 0 && (
-              <View
-                style={{
-                  position: "absolute",
-                  top: 75,
-                  alignSelf: "center",
-                  backgroundColor: "rgba(0,0,0,0.75)",
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  borderRadius: 20,
-                  pointerEvents: "none",
-                }}
-              >
-                <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "600" }}>
-                  {language === "BM" ? "👉 Ketik atau seret pin ke lokasi tepat" : "👉 Tap or drag pin to exact location"}
-                </Text>
-              </View>
-            )}
-
-            {/* Floating Search Bar & Full-Touch Suggestions Overlay */}
-            <View
-              style={{
-                position: "absolute",
-                top: 12,
-                left: 12,
-                right: 12,
-                zIndex: 9999,
-                elevation: 9999,
-              }}
-            >
-              {/* Search Input Box */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: themeColors.borderColor,
-                  backgroundColor: themeColors.cardBackground,
-                  gap: 8,
-                  shadowColor: "#000",
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.2,
-                  shadowRadius: 4,
-                  elevation: 6,
-                }}
-              >
-                <MaterialCommunityIcons name="magnify" size={20} color={themeColors.textMuted} />
-                <TextInput
-                  placeholder={language === "BM" ? "Cari jalan / kawasan / bandar..." : "Search road / area / city..."}
-                  placeholderTextColor={themeColors.textMuted}
-                  value={pickerSearchQuery}
-                  onChangeText={setPickerSearchQuery}
-                  onSubmitEditing={handleSearchSubmit}
-                  returnKeyType="search"
-                  style={{ flex: 1, fontSize: 14, color: themeColors.textPrimary }}
-                />
-                {isSearchingMap ? (
-                  <ActivityIndicator size="small" color={themeColors.maroonPrimary} />
-                ) : pickerSearchQuery.length > 0 ? (
-                  <TouchableOpacity onPress={() => { setPickerSearchQuery(""); setPickerSuggestions([]); }}>
-                    <MaterialCommunityIcons name="close-circle" size={18} color={themeColors.textMuted} />
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-
-              {/* Suggestions List */}
-              {pickerSuggestions.length > 0 && (
-                <View
-                  style={{
-                    marginTop: 6,
-                    backgroundColor: themeColors.cardBackground,
-                    borderRadius: 12,
-                    borderWidth: 1,
-                    borderColor: themeColors.borderColor,
-                    maxHeight: 240,
-                    shadowColor: "#000",
-                    shadowOffset: { width: 0, height: 4 },
-                    shadowOpacity: 0.3,
-                    shadowRadius: 6,
-                    elevation: 12,
-                    overflow: "hidden",
-                  }}
-                >
-                  <ScrollView
-                    keyboardShouldPersistTaps="always"
-                    nestedScrollEnabled={true}
-                    showsVerticalScrollIndicator={true}
-                    style={{ maxHeight: 240 }}
-                  >
-                    {pickerSuggestions.map((item, index) => (
-                      <TouchableOpacity
-                        key={item.id || `place-${index}`}
-                        activeOpacity={0.7}
-                        style={{
-                          paddingHorizontal: 14,
-                          paddingVertical: 12,
-                          borderBottomWidth: index === pickerSuggestions.length - 1 ? 0 : 1,
-                          borderBottomColor: themeColors.borderColor,
-                        }}
-                        onPress={() => handleSelectSuggestion(item)}
-                      >
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                          <MaterialCommunityIcons name="map-marker-outline" size={20} color={themeColors.maroonPrimary} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ color: themeColors.textPrimary, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
-                              {item.title}
-                            </Text>
-                            {item.subtitle ? (
-                              <Text style={{ color: themeColors.textSecondary, fontSize: 12, marginTop: 2 }} numberOfLines={2}>
-                                {item.subtitle}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-            </View>
-          </View>
-
-          {/* Bottom Confirmation Bar */}
-          <View
-            style={{
-              padding: 16,
-              paddingBottom: Math.max(insets.bottom, 28) + 16,
-              backgroundColor: themeColors.cardBackground,
-              borderTopWidth: 1,
-              borderTopColor: themeColors.borderColor,
-              gap: 12,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <MaterialCommunityIcons name="map-marker-check" size={22} color={themeColors.maroonPrimary} />
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }} numberOfLines={2}>
-                  {pickerAddressPreview}
-                </Text>
-                <Text style={{ fontSize: 11, color: themeColors.textMuted }}>
-                  {pickerCoords.latitude.toFixed(6)}, {pickerCoords.longitude.toFixed(6)}
-                </Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleConfirmMapPicker}
-              style={{
-                backgroundColor: themeColors.maroonPrimary,
-                paddingVertical: 14,
-                borderRadius: 12,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 16 }}>
-                {language === "BM" ? "Sahkan Lokasi Ini" : "Confirm This Location"}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setIsMapPickerVisible(false)}
+        pickerMapRef={pickerMapRef}
+        pickerCoords={pickerCoords}
+        setPickerCoords={setPickerCoords}
+        updatePickerAddress={updatePickerAddress}
+        pickerSuggestions={pickerSuggestions}
+        setPickerSuggestions={setPickerSuggestions}
+        pickerSearchQuery={pickerSearchQuery}
+        setPickerSearchQuery={setPickerSearchQuery}
+        handleSearchSubmit={handleSearchSubmit}
+        handleSelectSuggestion={handleSelectSuggestion}
+        isSearchingMap={isSearchingMap}
+        pickerAddressPreview={pickerAddressPreview}
+        handleConfirmMapPicker={handleConfirmMapPicker}
+      />
 
       {/* Property Type Bottom Sheet Modal */}
       <Modal

@@ -92,6 +92,14 @@ async function unlockWithPasscode() {
     // Strict sessionStorage: Persists on page refresh, automatically wiped on browser/tab close
     sessionStorage.setItem('artha_admin_unlocked', 'true');
     sessionStorage.setItem('artha_admin_session_token', data.sessionToken);
+    if (data.firebaseCustomToken) {
+      sessionStorage.setItem('artha_admin_custom_token', data.firebaseCustomToken);
+      try {
+        await auth.signInWithCustomToken(data.firebaseCustomToken);
+      } catch (authErr) {
+        console.warn('Custom token sign-in warning:', authErr);
+      }
+    }
     try {
       localStorage.removeItem('artha_admin_unlocked');
       localStorage.removeItem('artha_admin_session_token');
@@ -119,6 +127,10 @@ if (sessionStorage.getItem('artha_admin_unlocked') === 'true') {
   document.documentElement.classList.add('artha-unlocked');
   document.getElementById('auth-nav').style.display = 'block';
   document.getElementById('user-email-display').textContent = 'Super Admin';
+  const savedToken = sessionStorage.getItem('artha_admin_custom_token');
+  if (savedToken && !auth.currentUser) {
+    auth.signInWithCustomToken(savedToken).catch(() => {});
+  }
   showView('view-dashboard');
   restoreActiveTab();
   startRealtimeListeners();
@@ -832,10 +844,30 @@ function getAllImages(l) {
 async function handleQuickStatusChange(listingId, newStatus) {
   try {
     const now = new Date().toISOString();
-    await db.collection('publicListings').doc(listingId).update({ status: newStatus, updatedAt: now });
+    let updated = false;
+
+    // 1. Try server-side admin endpoint (bypasses rules using Admin SDK)
     try {
-      await db.collection('listings').doc(listingId).update({ status: newStatus, updatedAt: now });
-    } catch(e) {}
+      const res = await fetch('https://us-central1-umiren-d6a66.cloudfunctions.net/adminUpdateListingStatus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listingId, status: newStatus })
+      });
+      if (res.ok) {
+        updated = true;
+      }
+    } catch(fetchErr) {
+      console.warn("Direct function endpoint warning, attempting client SDK:", fetchErr);
+    }
+
+    // 2. Client SDK update (if server endpoint unavailable or as complementary sync)
+    if (!updated) {
+      await db.collection('publicListings').doc(listingId).update({ status: newStatus, updatedAt: now });
+      try {
+        await db.collection('listings').doc(listingId).update({ status: newStatus, updatedAt: now });
+      } catch(e) {}
+    }
+
     showToast("Listing status updated to " + newStatus);
   } catch (err) {
     alert("Failed to update status: " + err.message);

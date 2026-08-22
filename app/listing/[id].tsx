@@ -33,6 +33,9 @@ import * as Clipboard from "expo-clipboard";
 import { addEventToNativeCalendar } from "@/services/calendar";
 import { calculateMortgage, extractSquareFootage, parseListingTitleAndDescription } from "@/utils/loanCalculator";
 import { resolveListingLocation } from "@/utils/locationDetector";
+import { HeroCarousel } from "@/components/listing-detail/HeroCarousel";
+import { FullscreenGallery } from "@/components/listing-detail/FullscreenGallery";
+import { MortgageCalculatorModal } from "@/components/listing-detail/MortgageCalculatorModal";
 
 function getListingImagesList(listing: any): string[] {
   if (!listing) return [];
@@ -798,147 +801,28 @@ export default function PropertyDetailScreen() {
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 28) + 60 }}
       >
         {/* HERO IMAGE CONTAINER */}
-        <View style={[styles.heroContainer, { backgroundColor: themeColors.maroonLight }]}>
-          {hasImages ? (
-            <>
-              <FlatList
-                ref={heroGalleryRef}
-                data={allImages}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                initialNumToRender={2}
-                maxToRenderPerBatch={2}
-                windowSize={3}
-                removeClippedSubviews={Platform.OS === "android"}
-                getItemLayout={(_, index) => ({
-                  length: screenWidth,
-                  offset: screenWidth * index,
-                  index,
-                })}
-                keyExtractor={(_, idx) => `hero-img-${idx}`}
-                onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
-                  setActiveImageIndex(idx);
-                }}
-                renderItem={({ item: imgUri, index: idx }) => (
-                  <TouchableOpacity
-                    activeOpacity={0.95}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setActiveImageIndex(idx);
-                      setIsGalleryOpen(true);
-                    }}
-                    style={{ width: screenWidth, height: 240 }}
-                  >
-                    <ExpoImage
-                      source={{ uri: imgUri }}
-                      style={styles.heroImage}
-                      contentFit="cover"
-                      transition={150}
-                      cachePolicy="memory-disk"
-                      recyclingKey={imgUri}
-                    />
-                  </TouchableOpacity>
-                )}
-              />
-
-              {allImages.length > 1 && (
-                <View style={styles.slideHintWrap}>
-                  <MaterialCommunityIcons name="camera" size={13} color="#FFFFFF" />
-                  <Text style={styles.slideHintText}>{activeImageIndex + 1} / {allImages.length}</Text>
-                </View>
-              )}
-            </>
-          ) : (
-            <View style={[styles.heroPlaceholder, { borderBottomColor: themeColors.maroonBorder }]}>
-              <MaterialCommunityIcons name="home-city-outline" size={64} color={themeColors.maroonPrimary} />
-              <Text style={[styles.heroPlaceholderText, { color: themeColors.maroonPrimary }]}>{t("noImage")}</Text>
-            </View>
-          )}
-
-          {/* Floating Back Button */}
-          <TouchableOpacity
-            style={[styles.floatingBackButton, { top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6 }]}
-            onPress={handleBackToListings}
-          >
-            <MaterialCommunityIcons name="arrow-left" size={22} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          {/* Floating Delete Button */}
-          {isCreator && (
-            <TouchableOpacity
-              style={[
-                styles.floatingShareButton,
-                {
-                  right: 112,
-                  top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6,
-                },
-              ]}
-              onPress={handleDeleteListing}
-            >
-              <MaterialCommunityIcons name="delete-outline" size={20} color="#FF6B6B" />
-            </TouchableOpacity>
-          )}
-
-          {/* Floating Edit Button */}
-          {isCreator && (
-            <TouchableOpacity
-              style={[
-                styles.floatingShareButton,
-                {
-                  right: 64,
-                  top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6,
-                },
-              ]}
-              onPress={() => router.push(`/listing/edit/${listing.id}` as any)}
-            >
-              <MaterialCommunityIcons name="pencil-outline" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-
-          {/* Floating Share Button */}
-          <TouchableOpacity
-            style={[styles.floatingShareButton, { top: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 24) : 16) + 6 }]}
-            onPress={handleShare}
-          >
-            <MaterialCommunityIcons name="share-variant" size={20} color="#FFFFFF" />
-          </TouchableOpacity>
-
-          {/* Image Gallery Strip Indicators */}
-          {hasImages && allImages.length > 1 && (
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.galleryStrip}
-              data={allImages}
-              keyExtractor={(_, idx) => `thumb-${idx}`}
-              initialNumToRender={6}
-              maxToRenderPerBatch={4}
-              windowSize={3}
-              removeClippedSubviews={Platform.OS === "android"}
-              renderItem={({ item: imgUri, index: idx }) => (
-                <TouchableOpacity
-                  activeOpacity={0.8}
-                  onPress={() => goToImage(idx, allImages)}
-                  style={[
-                    styles.galleryThumbContainer,
-                    activeImageIndex === idx && { borderColor: themeColors.maroonPrimary },
-                  ]}
-                >
-                  <ExpoImage
-                    source={{ uri: imgUri }}
-                    style={styles.galleryThumb}
-                    contentFit="cover"
-                    transition={100}
-                    cachePolicy="memory-disk"
-                    recyclingKey={imgUri}
-                  />
-                </TouchableOpacity>
-              )}
-            />
-          )}
-        </View>
+        <HeroCarousel
+          hasImages={hasImages}
+          allImages={allImages}
+          activeImageIndex={activeImageIndex}
+          heroGalleryRef={heroGalleryRef}
+          themeColors={themeColors}
+          isCreator={isCreator}
+          t={t}
+          onGoToImage={(idx) => goToImage(idx, allImages)}
+          onOpenGallery={() => {
+            Haptics.selectionAsync().catch(() => {});
+            setIsGalleryOpen(true);
+          }}
+          onBack={handleBackToListings}
+          onEdit={() => router.push(`/listing/edit/${listing.id}` as any)}
+          onDelete={handleDeleteListing}
+          onShare={handleShare}
+          onMomentumScrollEnd={(e) => {
+            const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
+            setActiveImageIndex(idx);
+          }}
+        />
 
         <View style={styles.contentContainer}>
           {/* HEADER SECTION */}
@@ -1318,113 +1202,19 @@ export default function PropertyDetailScreen() {
       </ScrollView>
 
       {/* Native 100% Opaque Fullscreen Photo Gallery */}
-      <Modal
+      <FullscreenGallery
         visible={isGalleryOpen}
-        transparent={false}
-        animationType="fade"
-        statusBarTranslucent={true}
-        onRequestClose={() => setIsGalleryOpen(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: "#000000" }}>
-          <StatusBar barStyle="light-content" backgroundColor="#000000" />
-          
-          {/* Top Bar Header */}
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              zIndex: 10,
-              paddingTop: Math.max(insets.top, Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 20) + 12,
-              paddingHorizontal: 20,
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <View
-              style={{
-                backgroundColor: "rgba(30,30,30,0.85)",
-                paddingHorizontal: 14,
-                paddingVertical: 6,
-                borderRadius: 20,
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.15)",
-              }}
-            >
-              <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>
-                {activeImageIndex + 1} / {allImages.length}
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={() => setIsGalleryOpen(false)}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 21,
-                backgroundColor: "rgba(30,30,30,0.85)",
-                justifyContent: "center",
-                alignItems: "center",
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.2)",
-              }}
-            >
-              <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          {/* High Performance 60FPS Virtualized Fullscreen Swiper */}
-          <FlatList
-            ref={fullScreenGalleryRef}
-            data={allImages}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={activeImageIndex}
-            getItemLayout={(_, index) => ({
-              length: screenWidth,
-              offset: screenWidth * index,
-              index,
-            })}
-            keyExtractor={(_, index) => `fs-img-${index}`}
-            windowSize={3}
-            maxToRenderPerBatch={2}
-            initialNumToRender={2}
-            removeClippedSubviews={Platform.OS === "android"}
-            onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / Math.max(1, screenWidth));
-              setActiveImageIndex(idx);
-              try {
-                heroGalleryRef.current?.scrollToIndex({ index: idx, animated: false });
-              } catch (_) {}
-            }}
-            renderItem={({ item: imgUri }) => (
-              <View
-                style={{
-                  width: screenWidth,
-                  height: screenHeight,
-                  justifyContent: "center",
-                  alignItems: "center",
-                  backgroundColor: "#000000",
-                }}
-              >
-                <ExpoImage
-                  source={{ uri: imgUri }}
-                  style={{ width: screenWidth, height: "100%" }}
-                  contentFit="contain"
-                  cachePolicy="memory-disk"
-                  transition={100}
-                  recyclingKey={imgUri}
-                />
-              </View>
-            )}
-            style={{ flex: 1, backgroundColor: "#000000" }}
-          />
-        </View>
-      </Modal>
+        onClose={() => setIsGalleryOpen(false)}
+        images={allImages}
+        activeImageIndex={activeImageIndex}
+        setActiveImageIndex={setActiveImageIndex}
+        fullScreenGalleryRef={fullScreenGalleryRef}
+        onSyncHeroIndex={(idx) => {
+          try {
+            heroGalleryRef.current?.scrollToIndex({ index: idx, animated: false });
+          } catch (_) {}
+        }}
+      />
 
       {/* Share Options Bottom Sheet Modal */}
       <Modal
@@ -1701,301 +1491,17 @@ export default function PropertyDetailScreen() {
       </Modal>
 
       {/* HOME LOAN CALCULATOR MODAL */}
-      <Modal
+      <MortgageCalculatorModal
         visible={isLoanCalcVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsLoanCalcVisible(false)}
-      >
-        <TouchableOpacity
-          style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.65)", justifyContent: "flex-end" }}
-          activeOpacity={1}
-          onPress={() => setIsLoanCalcVisible(false)}
-        >
-          <TouchableOpacity
-            activeOpacity={1}
-            style={{
-              backgroundColor: themeColors.cardBackground,
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              borderWidth: 1,
-              borderColor: themeColors.borderColor,
-              maxHeight: screenHeight * 0.90,
-            }}
-          >
-            {/* Sheet Drag Handle */}
-            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: themeColors.textMuted, alignSelf: "center", marginTop: 10, opacity: 0.4 }} />
-
-            {/* Header */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 12, paddingBottom: 14, borderBottomColor: themeColors.borderColor, borderBottomWidth: 1 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <MaterialCommunityIcons name="calculator-variant" size={22} color={themeColors.maroonPrimary} />
-                <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
-                  {language === "BM" ? "Kalkulator Ansuran Bank" : "Home Loan Calculator"}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => setIsLoanCalcVisible(false)}
-                style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: themeColors.surfaceContainer, alignItems: "center", justifyContent: "center" }}
-              >
-                <MaterialCommunityIcons name="close" size={18} color={themeColors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: Math.max(insets.bottom, 20) + 16 }}>
-              {/* Monthly Installment Result Card */}
-              <View
-                style={{
-                  backgroundColor: `${themeColors.maroonPrimary}12`,
-                  borderColor: `${themeColors.maroonPrimary}40`,
-                  borderWidth: 1.5,
-                  borderRadius: 16,
-                  padding: 16,
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 }}>
-                  {language === "BM" ? "Anggaran Bayaran Bulanan" : "Estimated Monthly Payment"}
-                </Text>
-                <Text style={{ fontSize: 30, fontWeight: "800", color: themeColors.maroonPrimary }}>
-                  RM {mortgageEstimate.monthlyInstallment.toLocaleString()}
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: themeColors.textSecondary }}> / {language === "BM" ? "bulan" : "mo"}</Text>
-                </Text>
-                <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 2 }}>
-                  {language === "BM"
-                    ? `Pinjaman: RM ${mortgageEstimate.loanAmount.toLocaleString()} (${100 - downPaymentPercent}% Loan)`
-                    : `Loan: RM ${mortgageEstimate.loanAmount.toLocaleString()} (${100 - downPaymentPercent}% Financing)`}
-                </Text>
-              </View>
-
-              {/* Downpayment Selector */}
-              <View style={{ gap: 8 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
-                    {language === "BM" ? "Deposit / Wang Pendahuluan" : "Down Payment"}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.maroonPrimary }}>
-                    {downPaymentPercent}% (RM {mortgageEstimate.downPaymentAmount.toLocaleString()})
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  {[
-                    { label: "0%", sub: "Full Loan", val: 0 },
-                    { label: "10%", sub: "Standard", val: 10 },
-                    { label: "15%", sub: "", val: 15 },
-                    { label: "20%", sub: "", val: 20 },
-                  ].map((item) => (
-                    <TouchableOpacity
-                      key={`dp-${item.val}`}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setDownPaymentPercent(item.val);
-                      }}
-                      style={{
-                        flex: 1,
-                        paddingVertical: 8,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        backgroundColor: downPaymentPercent === item.val ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                        borderColor: downPaymentPercent === item.val ? themeColors.maroonPrimary : themeColors.borderColor,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "700",
-                          color: downPaymentPercent === item.val ? "#FFFFFF" : themeColors.textPrimary,
-                        }}
-                      >
-                        {item.label}
-                      </Text>
-                      {item.sub ? (
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: "500",
-                            marginTop: 1,
-                            color: downPaymentPercent === item.val ? "rgba(255,255,255,0.85)" : themeColors.textMuted,
-                          }}
-                        >
-                          {item.sub}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Loan Tenure Selector */}
-              <View style={{ gap: 8 }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
-                    {language === "BM" ? "Tempoh Pembiayaan" : "Loan Tenure"}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.maroonPrimary }}>
-                    {loanTenure} {language === "BM" ? "Tahun" : "Years"}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  {[20, 25, 30, 35].map((yrs) => (
-                    <TouchableOpacity
-                      key={`tenure-${yrs}`}
-                      onPress={() => {
-                        Haptics.selectionAsync().catch(() => {});
-                        setLoanTenure(yrs);
-                      }}
-                      style={{
-                        flex: 1,
-                        paddingVertical: 10,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        backgroundColor: loanTenure === yrs ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                        borderColor: loanTenure === yrs ? themeColors.maroonPrimary : themeColors.borderColor,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          fontSize: 13,
-                          fontWeight: "700",
-                          color: loanTenure === yrs ? "#FFFFFF" : themeColors.textPrimary,
-                        }}
-                      >
-                        {yrs} {language === "BM" ? "Thn" : "Yrs"}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Interest Rate Stepper */}
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 2 }}>
-                <View>
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
-                    {language === "BM" ? "Kadar Faedah Bank" : "Interest Rate"}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: themeColors.textMuted }}>
-                    {language === "BM" ? "Purata bank semasa (BR/SBR)" : "Current market average"}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: themeColors.surfaceContainer, paddingHorizontal: 6, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: themeColors.borderColor }}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setInterestRate((prev) => Math.max(2.5, Math.round((prev - 0.1) * 10) / 10));
-                    }}
-                    style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: themeColors.cardBackground, alignItems: "center", justifyContent: "center" }}
-                  >
-                    <MaterialCommunityIcons name="minus" size={18} color={themeColors.textPrimary} />
-                  </TouchableOpacity>
-                  <Text style={{ fontSize: 15, fontWeight: "800", color: themeColors.textPrimary, minWidth: 44, textAlign: "center" }}>
-                    {interestRate.toFixed(1)}%
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {});
-                      setInterestRate((prev) => Math.min(8.0, Math.round((prev + 0.1) * 10) / 10));
-                    }}
-                    style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: themeColors.cardBackground, alignItems: "center", justifyContent: "center" }}
-                  >
-                    <MaterialCommunityIcons name="plus" size={18} color={themeColors.textPrimary} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Entry Cost Breakdown */}
-              <View style={{ backgroundColor: themeColors.surfaceContainer, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: themeColors.borderColor, gap: 10 }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 2 }}>
-                  {language === "BM" ? "Perincian Kos Permulaan (Anggaran)" : "Estimated Entry Cost Breakdown"}
-                </Text>
-
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 13, color: themeColors.textSecondary }}>
-                    {language === "BM" ? "Duti Setem MOT (SPA)" : "Stamp Duty (SPA)"}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textPrimary }}>
-                    RM {mortgageEstimate.stampDuty.toLocaleString()}
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 13, color: themeColors.textSecondary }}>
-                    {language === "BM" ? "Yuran Guaman SPA & Loan" : "Legal Fees (SPA & Loan)"}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textPrimary }}>
-                    RM {mortgageEstimate.legalFees.toLocaleString()}
-                  </Text>
-                </View>
-
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 13, color: themeColors.textSecondary }}>
-                    {language === "BM" ? "Yuran Penilaian (Valuation)" : "Valuation Fee"}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textPrimary }}>
-                    RM {mortgageEstimate.valuationFee.toLocaleString()}
-                  </Text>
-                </View>
-
-                {/* Highlighted Total Upfront Needed Container */}
-                <View
-                  style={{
-                    backgroundColor: `${themeColors.maroonPrimary}15`,
-                    borderColor: `${themeColors.maroonPrimary}35`,
-                    borderWidth: 1,
-                    borderRadius: 10,
-                    padding: 12,
-                    marginTop: 2,
-                  }}
-                >
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }}>
-                      {language === "BM" ? "Jumlah Kos Masuk (Tunai)" : "Total Upfront Cash Needed"}
-                    </Text>
-                    <Text style={{ fontSize: 15, fontWeight: "800", color: themeColors.maroonPrimary }}>
-                      RM {mortgageEstimate.totalUpfront.toLocaleString()}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 2 }}>
-                    {language === "BM" ? "Termasuk deposit, duti setem MOT, yuran guaman & penilaian" : "Includes deposit, MOT stamp duty, legal & valuation fees"}
-                  </Text>
-                </View>
-
-                {/* Recommended Net Salary Row */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    backgroundColor: "#10B98114",
-                    borderColor: "#10B98135",
-                    borderWidth: 1,
-                    borderRadius: 10,
-                    paddingHorizontal: 12,
-                    paddingVertical: 8,
-                    marginTop: 2,
-                  }}
-                >
-                  <View style={{ flex: 1, marginRight: 8 }}>
-                    <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
-                      {language === "BM" ? "Gaji Bersih Disyorkan" : "Min. Recommended Net Salary"}
-                    </Text>
-                    <Text style={{ fontSize: 10, color: themeColors.textMuted }}>
-                      {language === "BM" ? "Kelayakan DSR bank ~45%" : "Bank DSR requirement ~45%"}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 13, fontWeight: "800", color: "#10B981" }}>
-                    ~RM {mortgageEstimate.recommendedIncome.toLocaleString()} / {language === "BM" ? "bln" : "mo"}
-                  </Text>
-                </View>
-              </View>
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onClose={() => setIsLoanCalcVisible(false)}
+        mortgageEstimate={mortgageEstimate}
+        downPaymentPercent={downPaymentPercent}
+        setDownPaymentPercent={setDownPaymentPercent}
+        loanTenure={loanTenure}
+        setLoanTenure={setLoanTenure}
+        interestRate={interestRate}
+        setInterestRate={setInterestRate}
+      />
     </View>
   );
 }

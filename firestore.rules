@@ -5,6 +5,18 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthed() && (
+        request.auth.token.role == 'admin' ||
+        request.auth.token.admin == true ||
+        request.auth.token.isSuperAdmin == true ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        )
+      );
+    }
+
     function isListingOwner(data) {
       return isAuthed() && (
         data.userId == request.auth.uid ||
@@ -33,14 +45,12 @@ service cloud.firestore {
       // the "uploaded by" attribution on shared public listings.
       allow read: if isAuthed();
 
-      // Users may only create or modify their own profile document.
-      allow write: if isAuthed() && request.auth.uid == userId;
+      // Users may modify their own profile, or admins may manage agent profiles (suspend, change role).
+      allow write: if isAuthed() && (request.auth.uid == userId || isAdmin());
 
-      // Push registrations for update notifications. Each signed-in user may
-      // only read or modify the devices recorded under their own account, so a
-      // token can never be listed or harvested by another agent.
+      // Push registrations for update notifications.
       match /devices/{deviceId} {
-        allow read, write: if isAuthed() && request.auth.uid == userId;
+        allow read, write: if isAuthed() && (request.auth.uid == userId || isAdmin());
       }
     }
 
@@ -48,89 +58,89 @@ service cloud.firestore {
       // Unauthenticated read is required because email registration validates
       // the invite code BEFORE creating the Firebase Auth account.
       allow read: if true;
-      // Agents can update codes to claim them (status → USED) after signing in.
-      // Creating new codes or deleting codes is restricted to admin/Cloud Functions.
+      // Agents can update codes to claim them (status → USED) after signing in,
+      // and admins can update, create, or delete invite codes.
       allow update: if isAuthed();
-      allow create, delete: if false;
+      allow create, delete: if isAdmin();
     }
 
     match /inviteCodes/{code} {
       allow read: if true;
       allow update: if isAuthed();
-      allow create, delete: if false;
+      allow create, delete: if isAdmin();
     }
 
     match /announcements/{annId} {
       // All authenticated agents can read announcements.
       allow read: if isAuthed();
-      // Only Cloud Functions (service account) can create/modify announcements.
-      // The admin dashboard creates announcements via the sendBroadcastPush
-      // Cloud Function which bypasses these rules.
-      allow write: if false;
+      // Admin dashboard and Cloud Functions can create/modify announcements.
+      allow write: if isAdmin();
     }
 
     // Agent feedback submissions (bug reports, feature requests).
-    // Agents can submit feedback; only Cloud Functions / admin can read it.
     match /feedback/{docId} {
       allow create: if isAuthed();
-      allow read, update, delete: if false;
+      allow read, update, delete: if isAdmin();
     }
 
     // Self-learning geocoding cache populated by the location service.
     // Any authenticated agent can read cached locations and contribute new ones.
     match /locationKnowledgeBase/{docId} {
       allow read, create, update: if isAuthed();
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     match /cases/{caseId} {
-      // Reads and deletes: existing document must belong to the caller.
+      // Reads and deletes: existing document must belong to the caller or admin.
       allow read, delete: if isAuthed()
-        && resource.data.userId == request.auth.uid;
+        && (resource.data.userId == request.auth.uid || isAdmin());
 
-      // Creates: the new document must claim the caller's UID as owner.
+      // Creates: the new document must claim the caller's UID as owner (or admin creating for an agent).
       allow create: if isAuthed()
-        && request.resource.data.userId == request.auth.uid;
+        && (request.resource.data.userId == request.auth.uid || isAdmin());
 
-      // Updates: the existing document must already belong to the caller,
-      // and the incoming data must not transfer ownership to another UID.
+      // Updates: the existing document must belong to the caller (or admin).
       allow update: if isAuthed()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == request.auth.uid;
+        && ((resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) || isAdmin());
     }
 
     match /listings/{listingId} {
-      // Only the listing owner (agentId or userId) may read a listing.
-      // This prevents other authenticated agents from accessing sensitive
-      // owner documents (IC, geran, SPA, utility bills) embedded in the record.
-      allow read: if isListingOwner(resource.data);
+      // Only the listing owner (agentId or userId) or admin may read/update/delete.
+      allow read: if isListingOwner(resource.data) || isAdmin();
       allow create: if isAuthed()
-        && isListingOwner(request.resource.data)
+        && (isListingOwner(request.resource.data) || isAdmin())
         && hasValidListingStatus();
       allow update: if isAuthed()
-        && isListingOwner(resource.data)
-        && isListingOwner(request.resource.data)
+        && (
+          (isListingOwner(resource.data) && isListingOwner(request.resource.data)) ||
+          isAdmin()
+        )
         && hasValidListingStatus();
-      allow delete: if isAuthed() && isListingOwner(resource.data);
+      allow delete: if isAuthed() && (isListingOwner(resource.data) || isAdmin());
     }
 
     match /publicListings/{listingId} {
       // Safe listing projection (no owner IC/documents) accessible for mobile agents and web portal
       allow read: if true;
       allow create: if isAuthed()
-        && request.resource.data.agentId == request.auth.uid;
-      allow update: if isAuthed()
-        && resource.data.agentId == request.auth.uid
-        && request.resource.data.agentId == request.auth.uid;
+        && (request.resource.data.agentId == request.auth.uid || isAdmin());
+      allow update: if (
+          isAuthed() && (
+            (resource.data.agentId == request.auth.uid && request.resource.data.agentId == request.auth.uid) ||
+            isAdmin()
+          )
+        ) || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+          hasValidListingStatus()
+        );
       allow delete: if isAuthed()
-        && resource.data.agentId == request.auth.uid;
+        && (resource.data.agentId == request.auth.uid || isAdmin());
     }
 
-    // Release announcement bookkeeping is written only by the trusted
-    // server-side release notifier, which uses a service account and bypasses
-    // these rules. Clients get no access.
+    // Release announcement bookkeeping
     match /appReleaseNotifications/{releaseId} {
-      allow read, write: if false;
+      allow read: if isAuthed();
+      allow write: if isAdmin();
     }
   }
 }
