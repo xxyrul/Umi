@@ -71,11 +71,9 @@ export default function SecurityScreen() {
     setPinError("");
     setTempPin("");
     if (val) {
-      // Enabling App Lock -> Set PIN
       setPinStep("set_new");
       setIsPinModalVisible(true);
     } else {
-      // Disabling App Lock -> Verify PIN first
       setPinStep("verify_for_disable");
       setIsPinModalVisible(true);
     }
@@ -410,6 +408,7 @@ export default function SecurityScreen() {
             </View>
 
             <PinKeypad
+              key={pinStep}
               title=""
               subtitle={
                 pinStep === "verify_for_disable"

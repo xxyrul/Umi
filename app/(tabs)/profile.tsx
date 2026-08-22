@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { checkForAppUpdates } from "@/services/updater";
 import { fetchReleaseManifest, NativeAppRelease } from "@/services/apkUpdater";
 import {
@@ -112,13 +112,13 @@ export default function ProfileScreen() {
       isBiometricSupported()
         .then(setHasBiometrics)
         .catch(() => {});
-      getAppLockTimeout()
-        .then(setAppLockTimeoutState)
-        .catch(() => {});
-    } catch (e) {
-      console.warn("Profile load error:", e);
-    }
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getAppLockEnabled().then(setAppLockState).catch(() => {});
+      getBiometricsEnabled().then(setBiometricsState).catch(() => {});
+      getAppLockTimeout().then(setAppLockTimeoutState).catch(() => {});
+    }, [])
+  );
 
   // App Lock PIN & Biometrics State
   const [appLockEnabled, setAppLockState] = useState(false);
@@ -837,8 +837,8 @@ export default function ProfileScreen() {
             "shield-check-outline",
             language === "BM" ? "Privasi & Keselamatan" : "Privacy & Security",
             appLockEnabled
-              ? (language === "BM" ? "Dilindungi PIN" : "PIN Protected")
-              : (language === "BM" ? "Kunci Mati" : "Standard"),
+              ? (language === "BM" ? "Aktif · Dilindungi PIN" : "Active · PIN Protected")
+              : (language === "BM" ? "Kunci PIN & Biometrik" : "PIN, Biometrics & Protection"),
             () => router.push("/security" as any)
           )}
           {isAdmin &&

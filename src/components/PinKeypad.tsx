@@ -58,6 +58,16 @@ export function PinKeypad({
     };
   }, []);
 
+  // Clear PIN and refocus whenever step/title/subtitle changes
+  useEffect(() => {
+    setPin("");
+    inputRef.current?.clear();
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [title, subtitle]);
+
   useEffect(() => {
     if (errorMessage) {
       shakeX.value = withSequence(
