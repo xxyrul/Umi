@@ -367,36 +367,42 @@ export default function ProfileScreen() {
     icon: string,
     title: string,
     subtitle?: string,
-    onPress?: () => void
+    onPress?: () => void,
+    badgeColor?: string,
+    isLast?: boolean
   ) => {
     return (
       <TouchableOpacity
-        onPress={onPress}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+          onPress?.();
+        }}
         activeOpacity={0.7}
         style={{
           flexDirection: "row",
           alignItems: "center",
-          paddingVertical: SPACING.md,
-          borderBottomWidth: 1,
+          paddingVertical: 13,
+          paddingHorizontal: 16,
+          borderBottomWidth: isLast ? 0 : StyleSheet.hairlineWidth,
           borderBottomColor: themeColors.borderColor,
         }}
       >
         <View
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 8,
-            backgroundColor: themeColors.surfaceContainer,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            backgroundColor: badgeColor || themeColors.maroonPrimary,
             justifyContent: "center",
             alignItems: "center",
-            marginRight: SPACING.md,
+            marginRight: 14,
           }}
         >
-          <MaterialCommunityIcons name={icon as any} size={22} color={themeColors.maroonPrimary} />
+          <MaterialCommunityIcons name={icon as any} size={20} color="#FFFFFF" />
         </View>
 
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: "600", color: themeColors.textPrimary }}>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
             {title}
           </Text>
           {subtitle && (
@@ -611,118 +617,195 @@ export default function ProfileScreen() {
         scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 140 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Profile Info Card */}
+        {/* Telegram-style Centered Profile Header */}
         <Animated.View
           entering={FadeInDown.duration(180)}
           style={{
             alignItems: "center",
             width: "100%",
-            backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: themeColors.borderColor,
-            padding: SPACING.xl,
-            marginBottom: SPACING.lg,
+            paddingVertical: SPACING.lg,
+            marginBottom: SPACING.md,
           }}
         >
-          {profile?.photoURL ? (
-            <ExpoImage
-              source={{ uri: profile.photoURL }}
-              style={{
-                width: 96,
-                height: 96,
-                borderRadius: 48,
-                borderWidth: 3,
-                borderColor: themeColors.maroonPrimary,
-                marginBottom: SPACING.md,
-              }}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={200}
-            />
-          ) : (
-            <View
-              style={{
-                width: 96,
-                height: 96,
-                borderRadius: 48,
-                backgroundColor: themeColors.maroonLight,
-                justifyContent: "center",
-                alignItems: "center",
-                borderWidth: 3,
-                borderColor: themeColors.maroonPrimary,
-                marginBottom: SPACING.md,
-              }}
-            >
-              <Text
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => setActiveSection("Account")}
+            style={{ position: "relative", marginBottom: SPACING.md }}
+          >
+            {profile?.photoURL ? (
+              <ExpoImage
+                source={{ uri: profile.photoURL }}
                 style={{
-                  fontSize: 36,
-                  fontWeight: "700",
-                  color: themeColors.maroonPrimary,
+                  width: 88,
+                  height: 88,
+                  borderRadius: 44,
+                  borderWidth: 2.5,
+                  borderColor: themeColors.maroonPrimary,
+                }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            ) : (
+              <View
+                style={{
+                  width: 88,
+                  height: 88,
+                  borderRadius: 44,
+                  backgroundColor: themeColors.maroonLight,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  borderWidth: 2.5,
+                  borderColor: themeColors.maroonPrimary,
                 }}
               >
-                {getUserInitials(profile?.displayName || "Agent")}
-              </Text>
+                <Text
+                  style={{
+                    fontSize: 32,
+                    fontWeight: "700",
+                    color: themeColors.maroonPrimary,
+                  }}
+                >
+                  {getUserInitials(profile?.displayName || "Agent")}
+                </Text>
+              </View>
+            )}
+
+            {/* Telegram-style Camera Edit Badge */}
+            <View
+              style={{
+                position: "absolute",
+                bottom: 0,
+                right: 0,
+                backgroundColor: "#3B82F6",
+                width: 28,
+                height: 28,
+                borderRadius: 14,
+                justifyContent: "center",
+                alignItems: "center",
+                borderWidth: 2,
+                borderColor: themeColors.canvasBackground,
+              }}
+            >
+              <MaterialCommunityIcons name="camera" size={15} color="#FFFFFF" />
             </View>
-          )}
+          </TouchableOpacity>
 
-          <Text
-            style={{
-              fontSize: 22,
-              fontWeight: "700",
-              color: themeColors.textPrimary,
-              marginBottom: 4,
-            }}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => setActiveSection("Account")}
+            style={{ alignItems: "center" }}
           >
-            {profile?.displayName || "Agent"}
-          </Text>
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: themeColors.textPrimary,
+                marginBottom: 4,
+              }}
+            >
+              {profile?.displayName || "Agent"}
+            </Text>
 
-          <Text style={{ fontSize: 14, color: themeColors.textMuted }}>
-            {profile?.email || "ejen@drtmasterlisting.com"}
-          </Text>
+            <Text style={{ fontSize: 13.5, color: themeColors.textMuted, textAlign: "center" }}>
+              {phoneInput || profile?.phoneNumber
+                ? `${phoneInput || profile?.phoneNumber}  •  ${profile?.email || "ejen@drtmasterlisting.com"}`
+                : profile?.email || "ejen@drtmasterlisting.com"}
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
 
-        {/* Quick App Preferences Card (Theme & Language Switchers) */}
+        {/* Group 1: Account & Identity */}
         <Animated.View
-          entering={FadeInDown.duration(200)}
+          entering={FadeInDown.delay(50).duration(200)}
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
             borderRadius: 16,
             borderWidth: 1,
             borderColor: themeColors.borderColor,
-            padding: SPACING.lg,
-            marginBottom: SPACING.lg,
-            gap: 16,
+            overflow: "hidden",
+            marginBottom: SPACING.md,
           }}
         >
-          <Text style={{ fontSize: 16, fontWeight: "700", color: themeColors.maroonPrimary }}>
-            {t("settingsTitle")}
-          </Text>
+          {renderOptionRow(
+            "account-outline",
+            t("accountSettings"),
+            t("accountSubtitle"),
+            () => setActiveSection("Account"),
+            "#3B82F6",
+            !isAdmin
+          )}
+          {isAdmin &&
+            renderOptionRow(
+              "shield-crown-outline",
+              t("adminPortalTitle"),
+              t("adminPortalSub"),
+              () => Linking.openURL("https://umiren-d6a66.web.app/admin").catch(() => {}),
+              "#F59E0B",
+              true
+            )}
+        </Animated.View>
 
-          {/* Theme Mode Selector (Auto / Light / Dark) */}
-          <View style={styles.preferenceRow}>
-            <View style={styles.preferenceInfo}>
+        {/* Group 2: Settings & Preferences */}
+        <Animated.View
+          entering={FadeInDown.delay(100).duration(200)}
+          style={{
+            width: "100%",
+            backgroundColor: themeColors.cardBackground,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: themeColors.borderColor,
+            overflow: "hidden",
+            marginBottom: SPACING.md,
+          }}
+        >
+          {/* Theme Row with inline Segmented Switch */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 11,
+              paddingHorizontal: 16,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: themeColors.borderColor,
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: "#F97316",
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 14,
+              }}
+            >
               <MaterialCommunityIcons
                 name={theme === "system" ? "cellphone-cog" : isDark ? "weather-night" : "weather-sunny"}
-                size={22}
-                color={themeColors.maroonPrimary}
+                size={20}
+                color="#FFFFFF"
               />
-              <View>
-                <Text style={[styles.preferenceTitle, { color: themeColors.textPrimary }]}>
-                  {t("themeLabel")}
-                </Text>
-                <Text style={[styles.preferenceSubtitle, { color: themeColors.textMuted }]}>
-                  {theme === "system"
-                    ? `Auto (${isDark ? "Dark" : "Light"})`
-                    : isDark ? "Dark Mode" : "Light Mode"}
-                </Text>
-              </View>
+            </View>
+
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+                {t("themeLabel")}
+              </Text>
+              <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 1 }}>
+                {theme === "system"
+                  ? `Auto (${isDark ? "Dark" : "Light"})`
+                  : isDark ? "Dark Mode" : "Light Mode"}
+              </Text>
             </View>
 
             <View style={[styles.segmentContainer, { backgroundColor: themeColors.surfaceContainer }]}>
               <TouchableOpacity
-                onPress={() => setTheme("system")}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setTheme("system");
+                }}
                 style={[
                   styles.segmentOption,
                   theme === "system" && { backgroundColor: themeColors.maroonPrimary },
@@ -731,7 +814,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.segmentText,
-                    { color: theme === "system" ? "#FFF" : themeColors.textMuted },
+                    { color: theme === "system" ? "#FFF" : themeColors.textMuted, fontSize: 12 },
                   ]}
                 >
                   Auto
@@ -739,7 +822,10 @@ export default function ProfileScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setTheme("light")}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setTheme("light");
+                }}
                 style={[
                   styles.segmentOption,
                   theme === "light" && { backgroundColor: themeColors.maroonPrimary },
@@ -747,13 +833,16 @@ export default function ProfileScreen() {
               >
                 <MaterialCommunityIcons
                   name="weather-sunny"
-                  size={15}
+                  size={14}
                   color={theme === "light" ? "#FFF" : themeColors.textMuted}
                 />
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setTheme("dark")}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setTheme("dark");
+                }}
                 style={[
                   styles.segmentOption,
                   theme === "dark" && { backgroundColor: themeColors.maroonPrimary },
@@ -761,34 +850,53 @@ export default function ProfileScreen() {
               >
                 <MaterialCommunityIcons
                   name="weather-night"
-                  size={15}
+                  size={14}
                   color={theme === "dark" ? "#FFF" : themeColors.textMuted}
                 />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Language Switcher (BM / EN) */}
-          <View style={styles.preferenceRow}>
-            <View style={styles.preferenceInfo}>
-              <MaterialCommunityIcons
-                name="translate"
-                size={22}
-                color={themeColors.maroonPrimary}
-              />
-              <View>
-                <Text style={[styles.preferenceTitle, { color: themeColors.textPrimary }]}>
-                  {t("languageLabel")}
-                </Text>
-                <Text style={[styles.preferenceSubtitle, { color: themeColors.textMuted }]}>
-                  {language === "BM" ? t("bahasaMelayu") : t("english")}
-                </Text>
-              </View>
+          {/* Language Row with inline Segmented Switch */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 11,
+              paddingHorizontal: 16,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: themeColors.borderColor,
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: "#8B5CF6",
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 14,
+              }}
+            >
+              <MaterialCommunityIcons name="translate" size={20} color="#FFFFFF" />
+            </View>
+
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+                {t("languageLabel")}
+              </Text>
+              <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 1 }}>
+                {language === "BM" ? t("bahasaMelayu") : t("english")}
+              </Text>
             </View>
 
             <View style={[styles.segmentContainer, { backgroundColor: themeColors.surfaceContainer }]}>
               <TouchableOpacity
-                onPress={() => setLanguage("BM")}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setLanguage("BM");
+                }}
                 style={[
                   styles.segmentOption,
                   language === "BM" && { backgroundColor: themeColors.maroonPrimary },
@@ -797,7 +905,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.segmentText,
-                    { color: language === "BM" ? "#FFF" : themeColors.textMuted },
+                    { color: language === "BM" ? "#FFF" : themeColors.textMuted, fontSize: 12 },
                   ]}
                 >
                   BM
@@ -805,7 +913,10 @@ export default function ProfileScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => setLanguage("EN")}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  setLanguage("EN");
+                }}
                 style={[
                   styles.segmentOption,
                   language === "EN" && { backgroundColor: themeColors.maroonPrimary },
@@ -814,7 +925,7 @@ export default function ProfileScreen() {
                 <Text
                   style={[
                     styles.segmentText,
-                    { color: language === "EN" ? "#FFF" : themeColors.textMuted },
+                    { color: language === "EN" ? "#FFF" : themeColors.textMuted, fontSize: 12 },
                   ]}
                 >
                   EN
@@ -822,68 +933,115 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Privacy & Security */}
+          {renderOptionRow(
+            "shield-check-outline",
+            t("privacySecurityTitle"),
+            t("privacySecuritySubtitle"),
+            () => router.push("/security" as any),
+            "#10B981"
+          )}
+
+          {/* Notifications */}
+          {renderOptionRow(
+            "bell-ring-outline",
+            t("notifications"),
+            t("notifSubtitle"),
+            () => setActiveSection("Notifications"),
+            "#EF4444"
+          )}
+
+          {/* Export Report */}
+          {renderOptionRow(
+            "file-table-outline",
+            t("exportReport"),
+            t("exportSubtitle"),
+            handleExportReport,
+            "#06B6D4",
+            true
+          )}
         </Animated.View>
 
-        {/* Detailed Settings Card */}
-        <View
+        {/* Group 3: Support & App Version */}
+        <Animated.View
+          entering={FadeInDown.delay(150).duration(200)}
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
             borderRadius: 16,
             borderWidth: 1,
             borderColor: themeColors.borderColor,
-            paddingHorizontal: SPACING.lg,
-            paddingVertical: SPACING.sm,
-            marginBottom: SPACING.xl,
+            overflow: "hidden",
+            marginBottom: SPACING.lg,
           }}
         >
-          {renderOptionRow("account-outline", t("accountSettings"), t("accountSubtitle"), () => setActiveSection("Account"))}
-          {renderOptionRow(
-            "shield-check-outline",
-            t("privacySecurityTitle"),
-            t("privacySecuritySubtitle"),
-            () => router.push("/security" as any)
-          )}
-          {isAdmin &&
-            renderOptionRow(
-              "shield-crown-outline",
-              t("adminPortalTitle"),
-              t("adminPortalSub"),
-              () => Linking.openURL("https://umiren-d6a66.web.app/admin").catch(() => {})
-            )}
-          {renderOptionRow("file-export-outline", t("exportReport"), t("exportSubtitle"), handleExportReport)}
-          {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
           {renderOptionRow(
             "information-outline",
             t("appVersion"),
             `v${Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "?"} · ${t("checkForUpdates")}`,
-            () => router.push("/updates" as any)
+            () => router.push("/updates" as any),
+            "#64748B"
           )}
-          {renderOptionRow("help-circle-outline", t("helpFeedback"), t("helpSubtitle"), () => setActiveSection("Help"))}
-        </View>
+          {renderOptionRow(
+            "help-circle-outline",
+            t("helpFeedback"),
+            t("helpSubtitle"),
+            () => setActiveSection("Help"),
+            "#6366F1",
+            true
+          )}
+        </Animated.View>
 
-        {/* Sign Out Button */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleSignOut}
+        {/* Group 4: Sign Out */}
+        <Animated.View
+          entering={FadeInDown.delay(200).duration(200)}
           style={{
             width: "100%",
             backgroundColor: themeColors.cardBackground,
+            borderRadius: 16,
             borderWidth: 1,
-            borderColor: "#EF4444",
-            borderRadius: 12,
-            paddingVertical: 14,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 8,
+            borderColor: themeColors.borderColor,
+            overflow: "hidden",
+            marginBottom: SPACING.xl,
           }}
         >
-          <MaterialCommunityIcons name="logout" size={20} color="#EF4444" />
-          <Text style={{ color: "#EF4444", fontSize: 15, fontWeight: "700" }}>
-            {t("logout")}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              handleSignOut();
+            }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 14,
+              paddingHorizontal: 16,
+            }}
+          >
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: "rgba(239, 68, 68, 0.12)",
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 14,
+              }}
+            >
+              <MaterialCommunityIcons name="logout" size={20} color="#EF4444" />
+            </View>
+
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: "600", color: "#EF4444" }}>
+                {t("logout")}
+              </Text>
+            </View>
+
+            <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+          </TouchableOpacity>
+        </Animated.View>
       </ScrollView>
 
       {/* Settings Modal Sheet */}
