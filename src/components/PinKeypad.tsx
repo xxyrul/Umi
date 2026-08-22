@@ -126,7 +126,7 @@ export function PinKeypad({
         position: "relative",
       }}
     >
-      {/* Invisible full-area system keyboard input */}
+      {/* Full-area system keyboard input */}
       <TextInput
         ref={inputRef}
         value={pin}
@@ -136,14 +136,16 @@ export function PinKeypad({
         autoFocus={true}
         showSoftInputOnFocus={true}
         secureTextEntry={false}
-        caretHidden={true}
+        cursorColor="transparent"
+        selectionColor="transparent"
         style={{
           position: "absolute",
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          opacity: 0.01,
+          opacity: 0.02,
+          color: "transparent",
           zIndex: 10,
         }}
       />

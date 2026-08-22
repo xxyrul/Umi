@@ -384,8 +384,10 @@ export default function SecurityScreen() {
       <Modal
         visible={isPinModalVisible}
         transparent
-        animationType="slide"
-        onShow={() => setPinFocusTick(Date.now())}
+        animationType="fade"
+        onShow={() => {
+          setPinFocusTick(Date.now());
+        }}
         onRequestClose={() => setIsPinModalVisible(false)}
       >
         <KeyboardAvoidingView
