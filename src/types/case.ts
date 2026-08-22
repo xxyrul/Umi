@@ -59,6 +59,8 @@ export interface UserProfile {
   email: string;
   displayName: string;
   photoURL?: string;
+  phoneNumber?: string;
+  phone?: string;
 }
 
 export interface CaseMetrics {

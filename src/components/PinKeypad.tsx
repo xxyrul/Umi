@@ -46,12 +46,16 @@ export function PinKeypad({
     isBiometricSupported().then(setHasBiometrics);
   }, []);
 
-  // Automatically focus system keyboard on mount
+  // Automatically focus system keyboard on mount with staggered retries for modals
   useEffect(() => {
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-    }, 200);
-    return () => clearTimeout(timer);
+    const t1 = setTimeout(() => inputRef.current?.focus(), 100);
+    const t2 = setTimeout(() => inputRef.current?.focus(), 300);
+    const t3 = setTimeout(() => inputRef.current?.focus(), 600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
   }, []);
 
   useEffect(() => {
@@ -67,7 +71,7 @@ export function PinKeypad({
       setPin("");
       setTimeout(() => {
         inputRef.current?.focus();
-      }, 100);
+      }, 150);
     }
   }, [errorMessage]);
 
@@ -90,7 +94,7 @@ export function PinKeypad({
   const handleBiometricPress = async () => {
     Haptics.selectionAsync().catch(() => {});
     const success = await authenticateBiometric(
-      language === "BM" ? "Buka Umi CaseFlow" : "Unlock Umi CaseFlow"
+      language === "BM" ? "Buka artha" : "Unlock artha"
     );
     if (success && onBiometricSuccess) {
       onBiometricSuccess();
@@ -106,9 +110,10 @@ export function PinKeypad({
         paddingVertical: 12,
         paddingHorizontal: SPACING.md,
         width: "100%",
+        position: "relative",
       }}
     >
-      {/* Hidden system keyboard input */}
+      {/* Invisible full-area system keyboard input */}
       <TextInput
         ref={inputRef}
         value={pin}
@@ -116,13 +121,17 @@ export function PinKeypad({
         keyboardType="number-pad"
         maxLength={4}
         autoFocus={true}
+        showSoftInputOnFocus={true}
         secureTextEntry={false}
         caretHidden={true}
         style={{
           position: "absolute",
-          width: 1,
-          height: 1,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           opacity: 0.01,
+          zIndex: 10,
         }}
       />
 

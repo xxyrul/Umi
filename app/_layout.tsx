@@ -350,6 +350,7 @@ function RootLayoutInner({
           <Stack.Screen name="listing/[id]" options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="case/[id]" options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="case/form" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="security" options={{ animation: "slide_from_right" }} />
         </Stack>
       </View>
 

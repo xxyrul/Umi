@@ -43,7 +43,8 @@ import {
   isBiometricSupported,
 } from "@/services/security";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { firestore } from "@/services/firebase";
+import { firestore, auth } from "@/services/firebase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -74,6 +75,7 @@ export default function ProfileScreen() {
 
   // Interactive Account Settings State
   const [displayNameInput, setDisplayNameInput] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
   const [isSavingAccount, setIsSavingAccount] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -84,6 +86,17 @@ export default function ProfileScreen() {
       if (user?.displayName) {
         setDisplayNameInput(user.displayName);
       }
+      AsyncStorage.getItem("@artha_agent_phone").then((savedPhone) => {
+        if (savedPhone) {
+          setPhoneInput(savedPhone);
+          if (user) {
+            user.phoneNumber = savedPhone;
+            user.phone = savedPhone;
+          }
+        } else if (user?.phoneNumber) {
+          setPhoneInput(user.phoneNumber);
+        }
+      }).catch(() => {});
       if (user?.uid) {
         getUserRole(user.uid).then((r) => setIsAdmin(r === "admin")).catch(() => {});
       }
@@ -259,10 +272,42 @@ export default function ProfileScreen() {
     }
     try {
       setIsSavingAccount(true);
-      if (profile) {
-        profile.displayName = displayNameInput.trim();
-      }
-      Alert.alert(t("profileUpdated"), t("profileUpdatedMsg"));
+      const cleanName = displayNameInput.trim();
+      const cleanPhone = phoneInput.trim();
+
+      await Promise.all([
+        auth().currentUser?.updateProfile({ displayName: cleanName }).catch(() => {}),
+        AsyncStorage.setItem("@artha_agent_phone", cleanPhone),
+        auth().currentUser?.uid
+          ? firestore().collection("users").doc(auth().currentUser!.uid).set(
+              {
+                displayName: cleanName,
+                phoneNumber: cleanPhone,
+                phone: cleanPhone,
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            ).catch(() => {})
+          : Promise.resolve(),
+      ]);
+
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              displayName: cleanName,
+              phoneNumber: cleanPhone,
+              phone: cleanPhone,
+            }
+          : null
+      );
+      Alert.alert(
+        language === "BM" ? "Profil Dikemaskini" : "Profile Updated",
+        language === "BM"
+          ? "Maklumat nama dan nombor WhatsApp anda berjaya disimpan."
+          : "Your name and WhatsApp number have been saved successfully."
+      );
+      setActiveSection(null);
     } catch (error) {
       Alert.alert(t("errorTitle"), t("failUpdateProfile"));
     } finally {
@@ -555,10 +600,10 @@ export default function ProfileScreen() {
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
           paddingVertical: SPACING.xl,
-          paddingBottom: Math.max(insets.bottom, 24) + 104,
+          paddingBottom: Math.max(insets.bottom, 24) + 140,
           alignItems: "center",
         }}
-        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
+        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 140 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Info Card */}
@@ -788,6 +833,14 @@ export default function ProfileScreen() {
           }}
         >
           {renderOptionRow("account-outline", t("accountSettings"), t("accountSubtitle"), () => setActiveSection("Account"))}
+          {renderOptionRow(
+            "shield-check-outline",
+            language === "BM" ? "Privasi & Keselamatan" : "Privacy & Security",
+            appLockEnabled
+              ? (language === "BM" ? "Dilindungi PIN" : "PIN Protected")
+              : (language === "BM" ? "Kunci Mati" : "Standard"),
+            () => router.push("/security" as any)
+          )}
           {isAdmin &&
             renderOptionRow(
               "shield-crown-outline",
@@ -796,31 +849,6 @@ export default function ProfileScreen() {
               () => Linking.openURL("https://umiren-d6a66.web.app/admin").catch(() => {})
             )}
           {renderOptionRow("file-export-outline", t("exportReport"), t("exportSubtitle"), handleExportReport)}
-          {renderOptionRow(
-            "shield-lock-outline",
-            language === "BM" ? "Kunci Aplikasi (PIN)" : "App Lock (PIN)",
-            appLockEnabled
-              ? (language === "BM" ? "Aktif · Dilindungi PIN" : "Active · PIN Protected")
-              : (language === "BM" ? "Tidak Aktif" : "Disabled"),
-            () => {
-              if (appLockEnabled) {
-                setAppLockStep("menu");
-              } else {
-                setAppLockStep("set_new");
-              }
-              setPinError("");
-              setTempPin("");
-              setIsAppLockModalVisible(true);
-            }
-          )}
-          {renderOptionRow(
-            "monitor-screenshot",
-            language === "BM" ? "Tangkapan Skrin" : "Allow Screenshots",
-            allowScreenshots
-              ? (language === "BM" ? "Dibenarkan" : "Allowed")
-              : (language === "BM" ? "Disekat" : "Blocked"),
-            toggleAllowScreenshots
-          )}
           {renderOptionRow("bell-ring-outline", t("notifications"), t("notifSubtitle"), () => setActiveSection("Notifications"))}
           {renderOptionRow(
             "information-outline",
@@ -923,6 +951,28 @@ export default function ProfileScreen() {
                       placeholder={t("displayNamePlaceholder")}
                       placeholderTextColor={themeColors.textMuted}
                       autoFocus={activeSection === "Account"}
+                      style={{
+                        fontSize: 15,
+                        color: themeColors.textPrimary,
+                        backgroundColor: themeColors.canvasBackground,
+                        padding: SPACING.md,
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: themeColors.borderColor,
+                      }}
+                    />
+                  </View>
+
+                  <View>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.maroonPrimary, textTransform: "uppercase", marginBottom: 6 }}>
+                      {language === "BM" ? "No. Telefon (WhatsApp)" : "Phone Number (WhatsApp)"}
+                    </Text>
+                    <TextInput
+                      value={phoneInput}
+                      onChangeText={setPhoneInput}
+                      placeholder={language === "BM" ? "Cth: 012-3456789" : "E.g.: 012-3456789"}
+                      placeholderTextColor={themeColors.textMuted}
+                      keyboardType="phone-pad"
                       style={{
                         fontSize: 15,
                         color: themeColors.textPrimary,
