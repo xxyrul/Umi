@@ -45,8 +45,9 @@ export default function SecurityScreen() {
   // PIN Keypad Setup Modal State
   const [isPinModalVisible, setIsPinModalVisible] = useState(false);
   const [pinStep, setPinStep] = useState<"verify_for_disable" | "verify_for_change" | "set_new" | "confirm_new">("set_new");
-  const [tempPin, setTempPin] = useState("");
   const [pinError, setPinError] = useState("");
+  const [tempPin, setTempPin] = useState("");
+  const [pinFocusTick, setPinFocusTick] = useState(0);
 
   useEffect(() => {
     async function loadSecuritySettings() {
@@ -384,6 +385,7 @@ export default function SecurityScreen() {
         visible={isPinModalVisible}
         transparent
         animationType="slide"
+        onShow={() => setPinFocusTick(Date.now())}
         onRequestClose={() => setIsPinModalVisible(false)}
       >
         <KeyboardAvoidingView
@@ -419,7 +421,6 @@ export default function SecurityScreen() {
             </View>
 
             <PinKeypad
-              key={pinStep}
               title=""
               subtitle={
                 pinStep === "verify_for_disable"
@@ -433,6 +434,7 @@ export default function SecurityScreen() {
               onPinComplete={handlePinCompleted}
               showBiometricOption={false}
               errorMessage={pinError}
+              focusTick={pinFocusTick}
             />
           </View>
         </KeyboardAvoidingView>

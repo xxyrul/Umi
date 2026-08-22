@@ -25,6 +25,7 @@ interface PinKeypadProps {
   onBiometricSuccess?: () => void;
   showBiometricOption?: boolean;
   errorMessage?: string;
+  focusTick?: number;
 }
 
 export function PinKeypad({
@@ -34,6 +35,7 @@ export function PinKeypad({
   onBiometricSuccess,
   showBiometricOption = false,
   errorMessage = "",
+  focusTick,
 }: PinKeypadProps) {
   const { themeColors, isDark, language } = useAppSettings();
   const [pin, setPin] = useState("");
@@ -46,8 +48,9 @@ export function PinKeypad({
     isBiometricSupported().then(setHasBiometrics);
   }, []);
 
-  // Automatically focus system keyboard on mount with staggered retries for modals
+  // Automatically focus system keyboard on mount and on focusTick trigger
   useEffect(() => {
+    inputRef.current?.focus();
     const t1 = setTimeout(() => inputRef.current?.focus(), 100);
     const t2 = setTimeout(() => inputRef.current?.focus(), 300);
     const t3 = setTimeout(() => inputRef.current?.focus(), 600);
@@ -56,7 +59,7 @@ export function PinKeypad({
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, []);
+  }, [focusTick]);
 
   // Clear PIN and refocus whenever step/title/subtitle changes
   useEffect(() => {
