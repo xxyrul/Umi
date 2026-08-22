@@ -50,14 +50,19 @@ export function PinKeypad({
 
   // Automatically focus system keyboard on mount and on focusTick trigger
   useEffect(() => {
-    inputRef.current?.focus();
-    const t1 = setTimeout(() => inputRef.current?.focus(), 100);
-    const t2 = setTimeout(() => inputRef.current?.focus(), 300);
-    const t3 = setTimeout(() => inputRef.current?.focus(), 600);
+    const focus = () => {
+      inputRef.current?.focus();
+    };
+    focus();
+    const t1 = setTimeout(focus, 50);
+    const t2 = setTimeout(focus, 150);
+    const t3 = setTimeout(focus, 300);
+    const t4 = setTimeout(focus, 600);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
+      clearTimeout(t4);
     };
   }, [focusTick]);
 
@@ -126,7 +131,7 @@ export function PinKeypad({
         position: "relative",
       }}
     >
-      {/* Full-area system keyboard input */}
+      {/* Real-focus system keyboard input */}
       <TextInput
         ref={inputRef}
         value={pin}
@@ -142,11 +147,11 @@ export function PinKeypad({
           position: "absolute",
           top: 0,
           left: 0,
-          right: 0,
-          bottom: 0,
-          opacity: 0.02,
+          width: 1,
+          height: 1,
+          opacity: 1,
           color: "transparent",
-          zIndex: 10,
+          backgroundColor: "transparent",
         }}
       />
 
