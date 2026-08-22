@@ -930,46 +930,52 @@
     let latestVerName = '1.4.2';
 
     // Fetch Latest Manifest
-    fetch('https://umiren-d6a66.web.app/releases/latest.json')
+    fetch('/releases/latest.json')
       .then(r => r.json())
       .then(data => {
         if (data && data.versionName) {
-          latestBuildCode = data.versionCode || 54;
+          latestBuildCode = Number(data.versionCode) || 54;
           latestVerName = data.versionName;
 
           const dlBtn = document.getElementById('download-btn');
           const dlText = document.getElementById('dl-btn-text');
           const badge = document.getElementById('version-badge');
           
-          badge.textContent = `🚀 ${currentLang === 'bm' ? 'Versi Terkini' : 'Latest Release'}: v${data.versionName} (Build ${data.versionCode})`;
-          if (data.downloadUrl) dlBtn.href = data.downloadUrl;
+          if (badge) badge.textContent = `🚀 ${currentLang === 'bm' ? 'Versi Terkini' : 'Latest Release'}: v${data.versionName} (Build ${data.versionCode})`;
+          if (data.downloadUrl && dlBtn) dlBtn.href = data.downloadUrl;
           if (dlText) dlText.textContent = `${currentLang === 'bm' ? 'Muat Turun APK Rasmi' : 'Download Official APK'} (v${data.versionName})`;
 
           if (Array.isArray(data.releaseNotes) && data.releaseNotes.length > 0) {
             const list = document.getElementById('changelog-list');
-            list.innerHTML = data.releaseNotes.map(n => `<li class="changelog-item">${n}</li>`).join('');
+            if (list) list.innerHTML = data.releaseNotes.map(n => `<li class="changelog-item">${n}</li>`).join('');
           }
         }
       })
+      .catch(err => {
+        console.warn('Latest manifest fetch error:', err);
+      });
+
     // Fetch Full History Manifest
-    fetch('https://umiren-d6a66.web.app/releases/history.json')
+    fetch('/releases/history.json')
       .then(r => r.json())
       .then(history => {
         const container = document.getElementById('history-list-container');
+        if (!container) return;
+
         if (!Array.isArray(history) || history.length === 0) {
           container.innerHTML = '<div style="color: var(--text-dim); font-size: 13px; padding: 12px;">No historical releases available.</div>';
           return;
         }
 
-        // Dynamically show only previous/older versions (exclude build 54 / v1.4.2)
+        // Dynamically show only previous/older versions (exclude current release)
         const previousReleases = history.filter(item => 
-          Number(item.versionCode) < 54 && item.versionName !== '1.4.2'
+          Number(item.versionCode) < latestBuildCode
         );
 
         container.innerHTML = previousReleases.map((item, idx) => {
           const notes = Array.isArray(item.releaseNotes) ? item.releaseNotes : [];
           const date = item.releaseDate || item.date || '-';
-          const dlUrl = item.downloadUrl || ('https://umiren-d6a66.web.app/releases/artha-' + item.versionName + '.apk');
+          const dlUrl = item.downloadUrl || ('/releases/artha-' + item.versionName + '.apk');
 
           return `
             <div class="history-item">
@@ -1072,7 +1078,6 @@
       }
 
       // Status tag
-      const isBM = (lang === 'bm');
       let statusLabel = statusRaw;
       if (statusRaw.toLowerCase() === 'aktif' || statusRaw.toLowerCase() === 'active') {
         statusLabel = isBM ? 'Aktif / Untuk Dijual' : 'Active / For Sale';
