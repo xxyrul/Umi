@@ -1,8 +1,8 @@
 {
-  "versionName": "1.4.3",
-  "versionCode": 55,
+  "versionName": "1.4.2",
+  "versionCode": 54,
   "packageName": "com.umi.caseflow",
-  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.3.apk",
+  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.2.apk",
   "releaseDate": "2026-08-22",
   "releaseNotes": [
     "🚀 Lightning Fast Dashboard: Your dashboard metrics now load instantly and use significantly less internet data.",
