@@ -534,6 +534,15 @@ export default function MasterListingScreen() {
     [listings]
   );
 
+  // QoL: Automatically direct agent with listings to "My Listings", or agents without listings to "All Listings"
+  const hasAutoSelectedSegmentRef = useRef(false);
+  useEffect(() => {
+    if (!isLoading && !hasAutoSelectedSegmentRef.current && currentUserId) {
+      hasAutoSelectedSegmentRef.current = true;
+      setActiveSegment(myListingsCount > 0 ? "mine" : "all");
+    }
+  }, [isLoading, myListingsCount, currentUserId]);
+
   // Compute active filter count for badge (Semua is the default, so count is 0)
   const activeFilterCount = useMemo(() => {
     let count = 0;
