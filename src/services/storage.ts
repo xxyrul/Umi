@@ -571,6 +571,8 @@ export async function createPropertyListing(
     const currentUser = auth().currentUser;
     const userId = currentUser?.uid || "";
     const authorName = currentUser ? (currentUser.displayName || currentUser.email || "") : "";
+    const agentFallbackName = authorName || "Ejen";
+    const agentFallbackPhone = currentUser?.phoneNumber || "";
 
     const payload: PropertyListing = {
       id: listingId,
@@ -588,8 +590,8 @@ export async function createPropertyListing(
       bilikAir: listingData.bilikAir || 0,
       keluasan: listingData.keluasan || "",
       location: listingData.location || null,
-      namaOwner: listingData.namaOwner || "",
-      telOwner: listingData.telOwner || "",
+      namaOwner: listingData.namaOwner?.trim() || agentFallbackName,
+      telOwner: listingData.telOwner?.trim() || agentFallbackPhone,
       gambar: uploadedGambarUrls,
       imageUrl: uploadedGambarUrls[0] || "",
       images: uploadedGambarUrls,
@@ -598,9 +600,9 @@ export async function createPropertyListing(
       spa: spaUrl,
       bilUtility: bilUtilityUrl,
       userId,
-      authorName,
-      agentName: authorName,
-      agentPhone: currentUser?.phoneNumber || "",
+      authorName: authorName || agentFallbackName,
+      agentName: listingData.agentName?.trim() || listingData.namaOwner?.trim() || agentFallbackName,
+      agentPhone: listingData.agentPhone?.trim() || listingData.telOwner?.trim() || agentFallbackPhone,
       navLink: listingData.navLink || "",
       createdAt: now,
       updatedAt: now,

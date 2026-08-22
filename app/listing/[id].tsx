@@ -1202,8 +1202,8 @@ export default function PropertyDetailScreen() {
                 <MaterialCommunityIcons name="account" size={26} color={themeColors.maroonPrimary} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.ownerName, { color: themeColors.textPrimary, fontSize: 16 }]}>{listing.namaOwner || t("ownerNoName")}</Text>
-                <Text style={[styles.ownerPhone, { color: themeColors.textSecondary, fontSize: 15 }]}>{listing.telOwner || t("ownerNoPhone")}</Text>
+                <Text style={[styles.ownerName, { color: themeColors.textPrimary, fontSize: 16 }]}>{listing.namaOwner || listing.authorName || t("ownerNoName")}</Text>
+                <Text style={[styles.ownerPhone, { color: themeColors.textSecondary, fontSize: 15 }]}>{listing.telOwner || listing.agentPhone || t("ownerNoPhone")}</Text>
               </View>
             </View>
 
