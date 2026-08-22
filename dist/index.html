@@ -746,7 +746,7 @@
               <div class="agent-avatar" id="agent-avatar">A</div>
               <div>
                 <div class="agent-name" id="agent-name">Property Agent</div>
-                <div class="agent-sub">Licensed Real Estate Negotiator</div>
+                <div class="agent-sub">Property Agent</div>
               </div>
             </div>
             <div class="agent-actions">
@@ -1160,7 +1160,7 @@
 
       // Section titles & CTA text
       document.querySelector('.listing-desc-title').textContent = isBM ? '📝 Keterangan Hartanah' : '📝 Property Description';
-      document.querySelector('.agent-sub').textContent = isBM ? 'Perunding Hartanah Berdaftar' : 'Licensed Real Estate Negotiator';
+      document.querySelector('.agent-sub').textContent = isBM ? 'Ejen Hartanah' : 'Property Agent';
 
       // Photos Hero & Thumbnails
       let photos = [];
@@ -1185,8 +1185,7 @@
 
       // WhatsApp & Call Buttons
       const cleanPhone = String(agentPhone || '').replace(/[^0-9]/g, '');
-      const hasPhone = cleanPhone.length >= 8;
-      const waPhone = cleanPhone.startsWith('60') ? cleanPhone : (cleanPhone.startsWith('0') ? '6' + cleanPhone : '60' + cleanPhone);
+      const userId = f.createdBy?.stringValue || f.agentUid?.stringValue || f.userId?.stringValue || f.agentId?.stringValue;
       const waMsg = encodeURIComponent(
         isBM
           ? `Salam ${agentName}, saya berminat dengan listing hartanah:\n*${cleanTitle}* (${price})\n\nBoleh saya tahu status dan jadual viewing?`
@@ -1196,19 +1195,42 @@
       const waBtn = document.getElementById('btn-agent-wa');
       const callBtn = document.getElementById('btn-agent-call');
 
-      if (hasPhone) {
-        waBtn.href = `https://wa.me/${waPhone}?text=${waMsg}`;
-        waBtn.innerHTML = `<span>💬 ${isBM ? 'WhatsApp Ejen' : 'WhatsApp Agent'}</span>`;
-        waBtn.style.display = 'flex';
+      function updateContactButtons(phoneStr) {
+        const p = String(phoneStr || '').replace(/[^0-9]/g, '');
+        if (p.length >= 8) {
+          const wa = p.startsWith('60') ? p : (p.startsWith('0') ? '6' + p : '60' + p);
+          waBtn.href = `https://wa.me/${wa}?text=${waMsg}`;
+          waBtn.innerHTML = `<span>💬 ${isBM ? 'WhatsApp Ejen' : 'WhatsApp Agent'}</span>`;
+          waBtn.style.display = 'flex';
 
-        callBtn.href = `tel:+${waPhone}`;
-        callBtn.innerHTML = `<span>📞 ${isBM ? 'Hubungi' : 'Call'}</span>`;
-        callBtn.style.display = 'flex';
+          callBtn.href = `tel:+${wa}`;
+          callBtn.innerHTML = `<span>📞 ${isBM ? 'Hubungi' : 'Call'}</span>`;
+          callBtn.style.display = 'flex';
+        } else {
+          waBtn.href = '/';
+          waBtn.innerHTML = `<span>ℹ️ ${isBM ? 'Tiada No. Telefon' : 'No Phone Listed'}</span>`;
+          waBtn.style.display = 'flex';
+          callBtn.style.display = 'none';
+        }
+      }
+
+      if (cleanPhone.length >= 8) {
+        updateContactButtons(cleanPhone);
+      } else if (userId) {
+        fetch(`https://firestore.googleapis.com/v1/projects/iren-d6a66/databases/(default)/documents/users/${userId}`)
+          .then(res => res.json())
+          .then(uData => {
+            const uFields = uData.fields || {};
+            const uPhone = uFields.phoneNumber?.stringValue || uFields.phone?.stringValue || '';
+            if (uPhone) {
+              updateContactButtons(uPhone);
+            } else {
+              updateContactButtons('');
+            }
+          })
+          .catch(() => updateContactButtons(''));
       } else {
-        waBtn.href = '/';
-        waBtn.innerHTML = `<span>💬 ${isBM ? 'Hubungi Melalui Aplikasi' : 'Contact via App'}</span>`;
-        waBtn.style.display = 'flex';
-        callBtn.style.display = 'none';
+        updateContactButtons('');
       }
 
       document.getElementById('listing-loading').style.display = 'none';
