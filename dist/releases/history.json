@@ -1,5 +1,22 @@
 [
   {
+    "versionName": "1.5.0",
+    "versionCode": 55,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.5.0.apk",
+    "releaseDate": "2026-08-23",
+    "releaseNotes": [
+      "✨ Dedicated Settings Pages: Account, Notifications, and Help & Support now open as clean, full-screen pages with smooth back navigation.",
+      "📐 Grid Alignment & Share Button: Master Listing grid cards now have equalized heights with perfectly aligned Share buttons.",
+      "🔍 My Listings Filter Fix: All your properties (Active, Booking, Sold, Draft) are now always visible under My Listings by default.",
+      "🛡️ Redesigned Feedback & Bug Report: Easily report issues and attach screenshots with comfortable safe-area spacing and gesture back support.",
+      "⚡ Lightning Performance: Optimized data loading and smart caching across dashboard and listings.",
+      "🔒 Enhanced Privacy & Security: Complete control over PIN app lock, biometrics, and anti-screenshot protection."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
     "versionName": "1.4.2",
     "versionCode": 54,
     "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.2.apk",
