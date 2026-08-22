@@ -10,20 +10,27 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   
   <script>
-    const isListingRoute = window.location.pathname.startsWith('/listing/') || window.location.search.includes('listingId=');
-    if (!isListingRoute && window.location.pathname !== '/' && !window.location.pathname.startsWith('/admin')) {
-      window.history.replaceState(null, '', '/');
-    }
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(regs) {
-        for (let r of regs) r.unregister();
-      });
-    }
-    if ('caches' in window) {
-      caches.keys().then(function(keys) {
-        for (let k of keys) caches.delete(k);
-      });
-    }
+    (function() {
+      const path = window.location.pathname.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      const isListing = path.startsWith('/listing') || search.includes('listingid=') || search.includes('id=');
+      const isAdmin = path.startsWith('/admin');
+
+      if (!isListing && !isAdmin && path !== '/') {
+        window.history.replaceState(null, '', '/');
+      }
+
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (let r of regs) r.unregister();
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(keys) {
+          for (let k of keys) caches.delete(k);
+        });
+      }
+    })();
   </script>
 
   <style>
@@ -1203,6 +1210,10 @@
       document.getElementById('listing-card').style.display = 'block';
     }
 
+    const pathLower = window.location.pathname.toLowerCase();
+    const searchLower = window.location.search.toLowerCase();
+    const isListingRoute = pathLower.startsWith('/listing') || searchLower.includes('listingid=') || searchLower.includes('id=');
+
     if (isListingRoute) {
       document.getElementById('app-download-view').style.display = 'none';
       const listingView = document.getElementById('listing-view');
@@ -1210,8 +1221,9 @@
 
       let listingId = '';
       const path = window.location.pathname;
-      if (path.startsWith('/listing/')) {
-        listingId = path.replace('/listing/', '').split('/')[0].split('?')[0];
+      const match = path.match(/\/listing\/([^\/\?]+)/i);
+      if (match && match[1]) {
+        listingId = decodeURIComponent(match[1]);
       }
       if (!listingId) {
         const params = new URLSearchParams(window.location.search);
