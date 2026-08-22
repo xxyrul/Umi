@@ -109,9 +109,14 @@ export default function ProfileScreen() {
       getBiometricsEnabled()
         .then(setBiometricsState)
         .catch(() => {});
-      isBiometricSupported()
-        .then(setHasBiometrics)
+      getAppLockTimeout()
+        .then(setAppLockTimeoutState)
         .catch(() => {});
+    } catch (e) {
+      console.warn("Profile load error:", e);
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       getAppLockEnabled().then(setAppLockState).catch(() => {});
