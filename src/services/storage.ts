@@ -1,5 +1,6 @@
 import { auth, firestore } from "@/services/firebase";
 import storage from "@react-native-firebase/storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { PropertyCase, CaseMetrics } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 import { compressImage } from "@/utils/imageUtils";
@@ -572,7 +573,11 @@ export async function createPropertyListing(
     const userId = currentUser?.uid || "";
     const authorName = currentUser ? (currentUser.displayName || currentUser.email || "") : "";
     const agentFallbackName = authorName || "Ejen";
-    const agentFallbackPhone = currentUser?.phoneNumber || "";
+    let savedPhone = "";
+    try {
+      savedPhone = (await AsyncStorage.getItem("@artha_agent_phone")) || "";
+    } catch (_) {}
+    const agentFallbackPhone = listingData.agentPhone?.trim() || savedPhone || currentUser?.phoneNumber || "";
 
     const payload: PropertyListing = {
       id: listingId,
@@ -602,7 +607,7 @@ export async function createPropertyListing(
       userId,
       authorName: authorName || agentFallbackName,
       agentName: listingData.agentName?.trim() || listingData.namaOwner?.trim() || agentFallbackName,
-      agentPhone: listingData.agentPhone?.trim() || listingData.telOwner?.trim() || agentFallbackPhone,
+      agentPhone: agentFallbackPhone,
       navLink: listingData.navLink || "",
       createdAt: now,
       updatedAt: now,
@@ -695,10 +700,17 @@ export async function updatePropertyListing(
     ]);
 
     // 3. Update the private document and its safe public projection.
+    let savedPhone = "";
+    try {
+      savedPhone = (await AsyncStorage.getItem("@artha_agent_phone")) || "";
+    } catch (_) {}
+    const updatedAgentPhone = listingData.agentPhone?.trim() || existingListing?.agentPhone?.trim() || savedPhone || "";
+
     const privateUpdate = {
       ...listingData,
       userId: existingListing?.userId || currentUid,
       agentId: existingListing?.agentId || currentUid,
+      agentPhone: updatedAgentPhone,
       gambar: finalGambarUrls,
       imageUrl: finalGambarUrls[0] || "",
       images: finalGambarUrls,

@@ -671,6 +671,21 @@
       font-weight: 700;
       text-decoration: none;
     }
+    .agent-no-phone {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-dim);
+      padding: 10px 16px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      pointer-events: none;
+      cursor: default;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -1200,16 +1215,18 @@
         if (p.length >= 8) {
           const wa = p.startsWith('60') ? p : (p.startsWith('0') ? '6' + p : '60' + p);
           waBtn.href = `https://wa.me/${wa}?text=${waMsg}`;
+          waBtn.className = 'btn-whatsapp';
           waBtn.innerHTML = `<span>💬 ${isBM ? 'WhatsApp Ejen' : 'WhatsApp Agent'}</span>`;
-          waBtn.style.display = 'flex';
+          waBtn.style.display = 'inline-flex';
 
           callBtn.href = `tel:+${wa}`;
           callBtn.innerHTML = `<span>📞 ${isBM ? 'Hubungi' : 'Call'}</span>`;
-          callBtn.style.display = 'flex';
+          callBtn.style.display = 'inline-flex';
         } else {
-          waBtn.href = '/';
-          waBtn.innerHTML = `<span>ℹ️ ${isBM ? 'Tiada No. Telefon' : 'No Phone Listed'}</span>`;
-          waBtn.style.display = 'flex';
+          waBtn.removeAttribute('href');
+          waBtn.className = 'agent-no-phone';
+          waBtn.innerHTML = `<span>ℹ️ ${isBM ? 'Tiada No. Telefon Disediakan' : 'No Contact Phone Provided'}</span>`;
+          waBtn.style.display = 'inline-flex';
           callBtn.style.display = 'none';
         }
       }
