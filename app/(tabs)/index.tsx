@@ -13,6 +13,7 @@ import {
   StyleSheet,
   Modal,
   AppState,
+  Linking,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -24,9 +25,10 @@ import {
   dismissAnnouncementCloud,
 } from "@/services/notificationStorage";
 
+import { Image as ExpoImage } from "expo-image";
 import { CaseCard } from "@/components";
 import { deleteCase, getCaseMetrics } from "@/services/storage";
-import { getCurrentUserProfile } from "@/services/auth";
+import { getCurrentUserProfile, getUserInitials } from "@/services/auth";
 import type { PropertyCase, UserProfile } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -296,44 +298,24 @@ export default function DashboardScreen() {
   const metricSold = metrics.sold;
   const metricExpired = metrics.expired;
 
-  // Monthly Performance Chart Calculation for selectedYear strictly using Cases (memoized)
-  const { chartPoints, fillPoints, monthlyCounts, totalYearRecords, maxVal } = useMemo(() => {
-    const yearRecords = allCases.filter((c) => {
-      const dateStr = c.createdAt || c.tarikh || "";
-      if (!dateStr) return false;
-      const createdDate = new Date(dateStr);
-      return !isNaN(createdDate.getTime()) && createdDate.getFullYear().toString() === selectedYear;
+  // Time-based automated greeting
+  const timeGreeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return language === "BM" ? "Selamat Pagi" : "Good Morning";
+    if (hour >= 12 && hour < 15) return language === "BM" ? "Selamat Tengah Hari" : "Good Afternoon";
+    if (hour >= 15 && hour < 19) return language === "BM" ? "Selamat Petang" : "Good Evening";
+    return language === "BM" ? "Selamat Malam" : "Good Night";
+  }, [language]);
+
+  // Today's Follow-up Action Items
+  const todayActionCases = useMemo(() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    return allCases.filter((c) => {
+      if (!c.reminderDate) return false;
+      const remStr = c.reminderDate.split("T")[0];
+      return remStr <= todayStr && c.status !== "Completed" && c.status !== "Cancelled";
     });
-
-    const counts = Array(12).fill(0);
-    yearRecords.forEach((r) => {
-      const createdDate = new Date(r.createdAt);
-      if (!isNaN(createdDate.getTime())) {
-        const month = createdDate.getMonth();
-        if (month >= 0 && month <= 11) {
-          counts[month] += 1;
-        }
-      }
-    });
-
-    const maxVal = Math.max(...counts, 1);
-
-    const points = counts
-      .map((val, idx) => {
-        const x = (idx / 11) * 300;
-        const y = 110 - (val / maxVal) * 85;
-        return `${x.toFixed(1)},${y.toFixed(1)}`;
-      })
-      .join(" ");
-
-    return {
-      chartPoints: points,
-      fillPoints: `0,120 ${points} 300,120`,
-      monthlyCounts: counts,
-      totalYearRecords: yearRecords.length,
-      maxVal,
-    };
-  }, [allCases, selectedYear]);
+  }, [allCases]);
 
   return (
     <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
@@ -348,11 +330,11 @@ export default function DashboardScreen() {
           },
         ]}
       >
-        <Text style={[styles.topBarTitle, { color: themeColors.maroonPrimary, textTransform: "none" }]}>
+        <Text style={[styles.topBarTitle, { color: themeColors.maroonPrimary, textTransform: "none", fontSize: 20 }]}>
           artha
         </Text>
 
-        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
           {/* Notifications Inbox Bell */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}
@@ -373,18 +355,12 @@ export default function DashboardScreen() {
             )}
           </TouchableOpacity>
 
+          {/* Profile / Settings Shortcut */}
           <TouchableOpacity
             style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}
-            onPress={() => router.push("/(tabs)/calculator" as any)}
+            onPress={() => router.push("/(tabs)/profile" as any)}
           >
-            <MaterialCommunityIcons name="calculator" size={22} color={themeColors.textPrimary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.iconButton, { backgroundColor: themeColors.surfaceContainer }]}
-            onPress={() => router.push("/(tabs)/listings")}
-          >
-            <MaterialCommunityIcons name="magnify" size={22} color={themeColors.textPrimary} />
+            <MaterialCommunityIcons name="cog-outline" size={22} color={themeColors.textPrimary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -394,9 +370,9 @@ export default function DashboardScreen() {
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: Math.max(insets.bottom, 24) + 104,
+          paddingBottom: Math.max(insets.bottom, 24) + 120,
         }}
-        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 104 }}
+        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 120 }}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -417,233 +393,420 @@ export default function DashboardScreen() {
             : (announcement.messageEN || announcement.message);
 
           return (
-          <Animated.View entering={FadeInDown.springify()} style={{ backgroundColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#DC26261A" : (announcement.type || "").toUpperCase() === "LISTING_ALERT" ? "#2563EB1A" : themeColors.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#EF444440" : themeColors.borderColor, padding: 14, marginBottom: 16, flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-            <TouchableOpacity 
-              activeOpacity={0.7}
-              onPress={() => {
-                const text = ((announcement.title || "") + " " + (announcement.message || "")).toLowerCase();
-                if (text.includes("update") || text.includes("version")) {
-                  router.push("/updates" as any);
-                }
-              }}
-              style={{ flex: 1 }}
-            >
-              <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 4 }}>
-                {annTitle}
-              </Text>
-              <Text style={{ fontSize: 12, color: themeColors.textMuted, lineHeight: 17 }}>
-                {annMessage}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                handleDismissAnnouncement(announcement.id);
-              }}
-              hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-              style={{ padding: 4 }}
-            >
-              <MaterialCommunityIcons name="close" size={18} color={themeColors.textMuted} />
-            </TouchableOpacity>
-          </Animated.View>
+            <Animated.View entering={FadeInDown.springify()} style={{ backgroundColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#DC26261A" : (announcement.type || "").toUpperCase() === "LISTING_ALERT" ? "#2563EB1A" : themeColors.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#EF444440" : themeColors.borderColor, padding: 14, marginBottom: 16, flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+              <TouchableOpacity 
+                activeOpacity={0.7}
+                onPress={() => {
+                  const text = ((announcement.title || "") + " " + (announcement.message || "")).toLowerCase();
+                  if (text.includes("update") || text.includes("version")) {
+                    router.push("/updates" as any);
+                  }
+                }}
+                style={{ flex: 1 }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 4 }}>
+                  {annTitle}
+                </Text>
+                <Text style={{ fontSize: 12, color: themeColors.textMuted, lineHeight: 17 }}>
+                  {annMessage}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDismissAnnouncement(announcement.id);
+                }}
+                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+                style={{ padding: 4 }}
+              >
+                <MaterialCommunityIcons name="close" size={18} color={themeColors.textMuted} />
+              </TouchableOpacity>
+            </Animated.View>
           );
         })()}
 
         {/* Welcome Section */}
         <Animated.View entering={FadeInDown.duration(180)} style={styles.welcomeSection}>
           <Text style={[styles.welcomeTitle, { color: themeColors.textPrimary }]}>
-            {t("greeting")}, {userProfile?.displayName ? userProfile.displayName.split(" ")[0] : "Agent"} 👋
+            {timeGreeting},{" "}
+            {userProfile?.displayName
+              ? userProfile.displayName.split(" ")[0].charAt(0).toUpperCase() +
+                userProfile.displayName.split(" ")[0].slice(1)
+              : "Agent"}{" "}
+            ☀️
           </Text>
           <Text style={[styles.welcomeSubtitle, { color: themeColors.textMuted }]}>
-            {t("performanceSummary")}
+            {language === "BM"
+              ? `${allCases.length} kes aktif dipantau dalam saluran transaksi anda`
+              : `${allCases.length} active ${allCases.length === 1 ? "case" : "cases"} tracked in your transaction pipeline`}
           </Text>
         </Animated.View>
 
-        {/* Real Live Metrics Grid */}
-        <View style={styles.metricsGrid}>
-          {/* Aktif */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Active" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
-            <View style={styles.metricTopRow}>
-              <MaterialCommunityIcons name="check-circle" size={22} color="#DC2626" />
-              <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
-                {metricAktif}
+        {/* 📌 TODAY'S ACTION ITEMS & REMINDERS */}
+        <View style={{ marginBottom: 16 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <MaterialCommunityIcons name="calendar-alert" size={18} color={themeColors.maroonPrimary} />
+              <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
+                {language === "BM" ? "Tindakan Hari Ini" : "Today's Action Items"}
               </Text>
             </View>
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
-              {t("statusAktif")}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Booking */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Booking Paid" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
-            <View style={styles.metricTopRow}>
-              <MaterialCommunityIcons name="calendar-check" size={22} color="#2563EB" />
-              <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
-                {metricBooking}
-              </Text>
-            </View>
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
-              {t("statusBooking")}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Under Loan */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Loan Approved" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
-            <View style={styles.metricTopRow}>
-              <MaterialCommunityIcons name="bank" size={22} color="#9333EA" />
-              <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
-                {metricUnderLoan}
-              </Text>
-            </View>
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
-              {t("statusUnderLoan")}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Under SPA */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "SPA Signed" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
-            <View style={styles.metricTopRow}>
-              <MaterialCommunityIcons name="file-document-outline" size={22} color="#F97316" />
-              <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
-                {metricUnderSpa}
-              </Text>
-            </View>
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
-              {t("statusUnderSpa")}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Sold */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Completed" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
-            <View style={styles.metricTopRow}>
-              <MaterialCommunityIcons name="tag-outline" size={22} color="#16A34A" />
-              <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
-                {metricSold}
-              </Text>
-            </View>
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
-              {t("statusSold")}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Expired */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Cancelled" } })}
-            style={[styles.metricCard, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
-          >
-            <View style={styles.metricTopRow}>
-              <MaterialCommunityIcons name="clock-outline" size={22} color="#64748B" />
-              <Text style={[styles.metricNumber, { color: themeColors.textPrimary }]}>
-                {metricExpired}
-              </Text>
-            </View>
-            <Text style={[styles.metricLabel, { color: themeColors.textSecondary }]}>
-              {t("statusExpired")}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Monthly Performance Section */}
-        <View
-          style={[
-            styles.chartCard,
-            { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor },
-          ]}
-        >
-          <View style={styles.chartHeaderRow}>
-            <Text style={[styles.chartTitle, { color: themeColors.maroonPrimary }]}>
-              {t("monthlyPerformance")}
-            </Text>
-            <TouchableOpacity
-              onPress={() => setShowYearModal(true)}
-              style={[
-                styles.yearDropdownBadge,
-                { backgroundColor: themeColors.surfaceContainer, borderColor: themeColors.borderColor },
-              ]}
-            >
-              <Text style={[styles.yearDropdownText, { color: themeColors.textPrimary }]}>
-                {selectedYear}
-              </Text>
-              <MaterialCommunityIcons name="chevron-down" size={20} color={themeColors.textPrimary} />
-            </TouchableOpacity>
+            {todayActionCases.length > 0 && (
+              <View style={{ backgroundColor: `${themeColors.maroonPrimary}20`, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                <Text style={{ fontSize: 11, fontWeight: "800", color: themeColors.maroonPrimary }}>
+                  {todayActionCases.length} {language === "BM" ? "Perlu Tindakan" : "Action Needed"}
+                </Text>
+              </View>
+            )}
           </View>
 
-          {totalYearRecords === 0 ? (
-            <View style={styles.chartEmptyContainer}>
-              <MaterialCommunityIcons name="chart-line-variant" size={36} color={themeColors.textMuted} />
-              <Text style={[styles.chartEmptyText, { color: themeColors.textPrimary }]}>
-                {t("noCasesYet")}
-              </Text>
-              <Text style={[styles.chartEmptySubtext, { color: themeColors.textMuted }]}>
-                {selectedYear}
+          {todayActionCases.length === 0 ? (
+            <View
+              style={{
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 14,
+                padding: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <MaterialCommunityIcons name="check-circle-outline" size={22} color="#10B981" />
+              <Text style={{ fontSize: 13, color: themeColors.textMuted, flex: 1 }}>
+                {language === "BM"
+                  ? "Semua tindakan susulan selesai untuk hari ini."
+                  : "All follow-up actions and reminders are clear for today."}
               </Text>
             </View>
           ) : (
-            <View style={{ marginTop: 12 }}>
-              <Svg height="130" width="100%" viewBox="0 0 300 130">
-                <Defs>
-                  <LinearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                    <Stop offset="0" stopColor={themeColors.maroonPrimary} stopOpacity="0.3" />
-                    <Stop offset="1" stopColor={themeColors.maroonPrimary} stopOpacity="0.0" />
-                  </LinearGradient>
-                </Defs>
-                <Polyline points={fillPoints} fill="url(#chartGrad)" />
-                <Polyline
-                  points={chartPoints}
-                  fill="none"
-                  stroke={themeColors.maroonPrimary}
-                  strokeWidth="3"
-                />
-                {monthlyCounts.map((val, idx) => {
-                  if (val === 0) return null;
-                  const x = (idx / 11) * 300;
-                  const y = 110 - (val / maxVal) * 85;
-                  return (
-                    <Circle
-                      key={idx}
-                      cx={x}
-                      cy={y}
-                      r="4"
-                      fill={themeColors.maroonPrimary}
-                      stroke="#FFFFFF"
-                      strokeWidth="2"
-                    />
-                  );
-                })}
-              </Svg>
-
-              <View style={styles.chartMonthLabels}>
-                {language === "BM" ? ["Jan", "Feb", "Mac", "Apr", "Mei", "Jun", "Jul", "Ogo", "Sep", "Okt", "Nov", "Dis"] : ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map(
-                  (m) => (
-                    <Text key={m} style={[styles.chartMonthText, { color: themeColors.textMuted }]}>
-                      {m}
+            todayActionCases.slice(0, 3).map((caseItem) => (
+              <View
+                key={caseItem.id}
+                style={{
+                  backgroundColor: themeColors.cardBackground,
+                  borderColor: themeColors.borderColor,
+                  borderWidth: 1,
+                  borderRadius: 14,
+                  padding: 14,
+                  marginBottom: 8,
+                  gap: 8,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
+                      {caseItem.namaCase || "Follow-up Deal"}
                     </Text>
-                  )
-                )}
+                    <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 2 }}>
+                      {caseItem.clientName || caseItem.buyerName || caseItem.vendorName ? `${caseItem.clientName || caseItem.buyerName || caseItem.vendorName} • ` : ""}
+                      {caseItem.reminderNote || (language === "BM" ? "Semak status milestone seterusnya" : "Check next milestone")}
+                    </Text>
+                  </View>
+                  <View style={{ backgroundColor: `${themeColors.maroonPrimary}15`, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.maroonPrimary }}>
+                      {caseItem.status}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                  {(caseItem.buyerPhone || caseItem.vendorPhone) ? (
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      onPress={() => {
+                        const rawPhone = (caseItem.buyerPhone || caseItem.vendorPhone || "").replace(/[^0-9]/g, "");
+                        const formatted = rawPhone.startsWith("6") ? rawPhone : `60${rawPhone.replace(/^0/, "")}`;
+                        Linking.openURL(`whatsapp://send?phone=${formatted}`).catch(() => {});
+                      }}
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 6,
+                        backgroundColor: "#25D366",
+                        paddingVertical: 8,
+                        borderRadius: 8,
+                      }}
+                    >
+                      <MaterialCommunityIcons name="whatsapp" size={16} color="#FFFFFF" />
+                      <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "700" }}>WhatsApp</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() => router.push(`/case/${caseItem.id}` as any)}
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                      backgroundColor: themeColors.surfaceContainer,
+                      borderWidth: 1,
+                      borderColor: themeColors.borderColor,
+                      paddingVertical: 8,
+                      borderRadius: 8,
+                    }}
+                  >
+                    <MaterialCommunityIcons name="folder-open-outline" size={16} color={themeColors.textPrimary} />
+                    <Text style={{ color: themeColors.textPrimary, fontSize: 12, fontWeight: "700" }}>
+                      {language === "BM" ? "Lihat Kes" : "View Case"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
+            ))
           )}
+        </View>
+
+        {/* 💼 6-STAGE TRANSACTION PIPELINE (Compact Full-Word Horizontal Pills) */}
+        <View style={{ marginBottom: 14 }}>
+          <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 8 }}>
+            {language === "BM" ? "Saluran Transaksi" : "Transaction Pipeline"}
+          </Text>
+
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", gap: 8 }}>
+            {/* Aktif */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Active" } })}
+              style={{
+                width: "48.5%",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, paddingRight: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" }} />
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Aktif" : "Active"}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: themeColors.textPrimary }}>
+                {metricAktif}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Booking */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Booking Paid" } })}
+              style={{
+                width: "48.5%",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, paddingRight: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#3B82F6" }} />
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Bayaran Booking" : "Booking Deposit"}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: themeColors.textPrimary }}>
+                {metricBooking}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Under Loan */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Loan Approved" } })}
+              style={{
+                width: "48.5%",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, paddingRight: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#9333EA" }} />
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Pinjaman Bank" : "Under Loan"}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: themeColors.textPrimary }}>
+                {metricUnderLoan}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Under SPA */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "SPA Signed" } })}
+              style={{
+                width: "48.5%",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, paddingRight: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#F97316" }} />
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Perjanjian SPA" : "Under SPA"}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: themeColors.textPrimary }}>
+                {metricUnderSpa}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Sold */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Completed" } })}
+              style={{
+                width: "48.5%",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, paddingRight: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" }} />
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Selesai (Sold)" : "Completed (Sold)"}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: themeColors.textPrimary }}>
+                {metricSold}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Expired */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => router.push({ pathname: "/(tabs)/cases" as any, params: { status: "Cancelled" } })}
+              style={{
+                width: "48.5%",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 9,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, paddingRight: 4 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#64748B" }} />
+                <Text numberOfLines={1} style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                  {language === "BM" ? "Dibatalkan" : "Cancelled"}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 16, fontWeight: "900", color: themeColors.textPrimary }}>
+                {metricExpired}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ⚡ AKSES PANTAS (Quick Tools Row with Full Labels) */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 8 }}>
+            {language === "BM" ? "Akses Pantas" : "Quick Utilities"}
+          </Text>
+
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => router.push({ pathname: "/calculator" as any, params: { tab: "mortgage" } })}
+              style={{
+                flex: 1,
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <MaterialCommunityIcons name="calculator-variant" size={20} color={themeColors.maroonPrimary} />
+              <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
+                {language === "BM" ? "Kalkulator Pinjaman" : "Loan Calculator"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => router.push({ pathname: "/calculator" as any, params: { tab: "dsr" } })}
+              style={{
+                flex: 1,
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <MaterialCommunityIcons name="percent" size={20} color="#3B82F6" />
+              <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
+                {language === "BM" ? "Kelayakan DSR" : "DSR Calculator"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => router.push("/tambah" as any)}
+              style={{
+                flex: 1,
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <MaterialCommunityIcons name="plus-circle" size={20} color="#10B981" />
+              <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
+                {language === "BM" ? "Tambah Listing" : "New Listing"}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Recent Cases Section */}

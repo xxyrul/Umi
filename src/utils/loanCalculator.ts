@@ -5,6 +5,7 @@ export interface LoanCalculationResult {
   totalInterest: number;
   totalPayment: number;
   stampDuty: number;
+  originalStampDuty: number;
   legalFees: number;
   valuationFee: number;
   totalUpfront: number;
@@ -18,7 +19,8 @@ export function calculateMortgage(
   price: number,
   downPaymentPercent: number = 10,
   interestRateAnnual: number = 4.2,
-  tenureYears: number = 30
+  tenureYears: number = 30,
+  isFirstHomeBuyer: boolean = false
 ): LoanCalculationResult {
   if (!price || price <= 0) {
     return {
@@ -28,6 +30,7 @@ export function calculateMortgage(
       totalInterest: 0,
       totalPayment: 0,
       stampDuty: 0,
+      originalStampDuty: 0,
       legalFees: 0,
       valuationFee: 0,
       totalUpfront: 0,
@@ -56,17 +59,26 @@ export function calculateMortgage(
   const totalInterest = Math.max(0, totalPayment - loanAmount);
 
   // Malaysian Stamp Duty on SPA (Tiered: 1% first 100k, 2% up to 500k, 3% up to 1M, 4% above 1M)
-  let stampDuty = 0;
+  let standardStampDuty = 0;
   if (price > 1000000) {
-    stampDuty = 100000 * 0.01 + 400000 * 0.02 + 500000 * 0.03 + (price - 1000000) * 0.04;
+    standardStampDuty = 100000 * 0.01 + 400000 * 0.02 + 500000 * 0.03 + (price - 1000000) * 0.04;
   } else if (price > 500000) {
-    stampDuty = 100000 * 0.01 + 400000 * 0.02 + (price - 500000) * 0.03;
+    standardStampDuty = 100000 * 0.01 + 400000 * 0.02 + (price - 500000) * 0.03;
   } else if (price > 100000) {
-    stampDuty = 100000 * 0.01 + (price - 100000) * 0.02;
+    standardStampDuty = 100000 * 0.01 + (price - 100000) * 0.02;
   } else {
-    stampDuty = price * 0.01;
+    standardStampDuty = price * 0.01;
   }
-  stampDuty = Math.round(stampDuty);
+  standardStampDuty = Math.round(standardStampDuty);
+
+  let stampDuty = standardStampDuty;
+  if (isFirstHomeBuyer) {
+    if (price <= 500000) {
+      stampDuty = 0; // 100% exemption for first home <= RM 500k
+    } else if (price <= 1000000) {
+      stampDuty = Math.round(standardStampDuty * 0.25); // 75% remission for RM 500k - RM 1M
+    }
+  }
 
   // Scale of Legal Fees (Solicitors' Remuneration Order ~1.1% of property value, min RM2,500)
   const legalFees = Math.round(Math.max(2500, price * 0.011));
@@ -77,8 +89,8 @@ export function calculateMortgage(
   // Total Initial Cash Required = Downpayment + Stamp Duty + Legal Fees + Valuation
   const totalUpfront = downPaymentAmount + stampDuty + legalFees + valuationFee;
 
-  // Recommended Min. Net Household Income (assume 45% DSR)
-  const recommendedIncome = Math.round(monthlyInstallment / 0.45);
+  // Recommended Min. Net Household Income (assume 60% DSR)
+  const recommendedIncome = Math.round(monthlyInstallment / 0.60);
 
   return {
     monthlyInstallment,
@@ -87,6 +99,7 @@ export function calculateMortgage(
     totalInterest,
     totalPayment,
     stampDuty,
+    originalStampDuty: standardStampDuty,
     legalFees,
     valuationFee,
     totalUpfront,

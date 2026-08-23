@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  Platform,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
@@ -52,7 +53,12 @@ export function MortgageCalculatorModal({
       onRequestClose={onClose}
     >
       <TouchableOpacity
-        style={{ flex: 1, backgroundColor: "rgba(0, 0, 0, 0.65)", justifyContent: "flex-end" }}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0, 0, 0, 0.78)",
+          justifyContent: "flex-end",
+          paddingTop: insets.top + 16,
+        }}
         activeOpacity={1}
         onPress={onClose}
       >
@@ -64,7 +70,8 @@ export function MortgageCalculatorModal({
             borderTopRightRadius: 24,
             borderWidth: 1,
             borderColor: themeColors.borderColor,
-            maxHeight: screenHeight * 0.9,
+            maxHeight: screenHeight * 0.92,
+            paddingBottom: Platform.OS === "android" ? 16 : 0,
           }}
         >
           {/* Sheet Drag Handle */}
@@ -75,7 +82,7 @@ export function MortgageCalculatorModal({
               borderRadius: 2,
               backgroundColor: themeColors.textMuted,
               alignSelf: "center",
-              marginTop: 10,
+              marginTop: 8,
               opacity: 0.4,
             }}
           />
@@ -86,25 +93,25 @@ export function MortgageCalculatorModal({
               flexDirection: "row",
               alignItems: "center",
               justifyContent: "space-between",
-              paddingHorizontal: 20,
-              paddingTop: 12,
-              paddingBottom: 14,
+              paddingHorizontal: 16,
+              paddingTop: 8,
+              paddingBottom: 10,
               borderBottomColor: themeColors.borderColor,
               borderBottomWidth: 1,
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <MaterialCommunityIcons name="calculator-variant" size={22} color={themeColors.maroonPrimary} />
-              <Text style={{ fontSize: 18, fontWeight: "700", color: themeColors.textPrimary }}>
+              <Text style={{ fontSize: 17, fontWeight: "700", color: themeColors.textPrimary }}>
                 {language === "BM" ? "Kalkulator Ansuran Bank" : "Home Loan Calculator"}
               </Text>
             </View>
             <TouchableOpacity
               onPress={onClose}
               style={{
-                width: 32,
-                height: 32,
-                borderRadius: 16,
+                width: 30,
+                height: 30,
+                borderRadius: 15,
                 backgroundColor: themeColors.surfaceContainer,
                 alignItems: "center",
                 justifyContent: "center",
@@ -116,10 +123,11 @@ export function MortgageCalculatorModal({
 
           <ScrollView
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
-              padding: 16,
-              gap: 14,
-              paddingBottom: Math.max(insets.bottom, 20) + 16,
+              padding: 14,
+              gap: 10,
+              paddingBottom: 60,
             }}
           >
             {/* Monthly Installment Result Card */}

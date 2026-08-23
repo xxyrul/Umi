@@ -15,9 +15,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { getCurrentUserProfile } from "@/services/auth";
+import { firebaseDB } from "@/services/firebase";
+import { requestNotificationPermissions } from "@/services/notifications";
 import {
   getUpdateNotificationsEnabled,
   getLastUpdateNotificationFailure,
@@ -26,6 +29,12 @@ import {
 } from "@/services/updateNotifications";
 import { SPACING } from "@/constants/theme";
 
+const STORAGE_KEYS = {
+  PUSH: "@artha_push_enabled",
+  CASE_ALERTS: "@artha_case_alerts_enabled",
+  DAILY_DIGEST: "@artha_daily_digest_enabled",
+};
+
 export default function NotificationSettingsScreen() {
   const insets = useSafeAreaInsets();
   const { themeColors, language } = useAppSettings();
@@ -33,16 +42,114 @@ export default function NotificationSettingsScreen() {
 
   const [pushEnabled, setPushEnabled] = useState(true);
   const [caseAlertsEnabled, setCaseAlertsEnabled] = useState(true);
-  const [dailyDigestEnabled, setDailyDigestEnabled] = useState(false);
-  const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(true);
+  const [dailyDigestEnabled, setDailyDigestEnabled] = useState(true);
   const [updateAlertsEnabled, setUpdateAlertsEnabled] = useState(false);
   const [isSavingUpdateAlerts, setIsSavingUpdateAlerts] = useState(false);
+  const [isSavingDigest, setIsSavingDigest] = useState(false);
 
   useEffect(() => {
+    // Load saved preferences
+    const loadPrefs = async () => {
+      try {
+        const [savedPush, savedCase, savedDigest] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.PUSH),
+          AsyncStorage.getItem(STORAGE_KEYS.CASE_ALERTS),
+          AsyncStorage.getItem(STORAGE_KEYS.DAILY_DIGEST),
+        ]);
+
+        if (savedPush !== null) setPushEnabled(savedPush === "true");
+        if (savedCase !== null) setCaseAlertsEnabled(savedCase === "true");
+        if (savedDigest !== null) {
+          setDailyDigestEnabled(savedDigest === "true");
+        } else {
+          setDailyDigestEnabled(true);
+          await AsyncStorage.setItem(STORAGE_KEYS.DAILY_DIGEST, "true");
+        }
+      } catch (e) {
+        console.warn("Could not load notification preferences:", e);
+      }
+    };
+
+    loadPrefs();
+
     getUpdateNotificationsEnabled()
       .then(setUpdateAlertsEnabled)
       .catch(() => {});
   }, []);
+
+  const handleToggleDailyDigest = async (value: boolean) => {
+    Haptics.selectionAsync().catch(() => {});
+    setIsSavingDigest(true);
+    setDailyDigestEnabled(value);
+
+    try {
+      if (value) {
+        const hasPermission = await requestNotificationPermissions();
+        if (!hasPermission) {
+          Alert.alert(
+            isBM ? "Kebenaran Diperlukan" : "Permission Needed",
+            isBM
+              ? "Sila benarkan notifikasi dalam tetapan peranti untuk menerima ringkasan harian jam 9:00 AM."
+              : "Please allow notifications in device settings to receive 9:00 AM daily briefings.",
+            [
+              { text: isBM ? "Buka Tetapan" : "Open Settings", onPress: () => void Linking.openSettings() },
+              { text: isBM ? "Batal" : "Cancel", style: "cancel" },
+            ]
+          );
+          setDailyDigestEnabled(false);
+          await AsyncStorage.setItem(STORAGE_KEYS.DAILY_DIGEST, "false");
+          return;
+        }
+      }
+
+      await AsyncStorage.setItem(STORAGE_KEYS.DAILY_DIGEST, value ? "true" : "false");
+
+      // Sync directly with Firebase user profile
+      const user = getCurrentUserProfile();
+      if (user?.uid) {
+        await firebaseDB.collection("users").doc(user.uid).set(
+          {
+            notificationPreferences: {
+              dailyDigest: value,
+              dailyDigestTime: "09:00",
+              updatedAt: new Date().toISOString(),
+            },
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+    } catch (error) {
+      console.error("Error updating daily digest preference:", error);
+    } finally {
+      setIsSavingDigest(false);
+    }
+  };
+
+  const handleTogglePush = async (value: boolean) => {
+    Haptics.selectionAsync().catch(() => {});
+    setPushEnabled(value);
+    await AsyncStorage.setItem(STORAGE_KEYS.PUSH, value ? "true" : "false");
+    const user = getCurrentUserProfile();
+    if (user?.uid) {
+      await firebaseDB.collection("users").doc(user.uid).set(
+        { notificationPreferences: { pushEnabled: value } },
+        { merge: true }
+      ).catch(() => {});
+    }
+  };
+
+  const handleToggleCaseAlerts = async (value: boolean) => {
+    Haptics.selectionAsync().catch(() => {});
+    setCaseAlertsEnabled(value);
+    await AsyncStorage.setItem(STORAGE_KEYS.CASE_ALERTS, value ? "true" : "false");
+    const user = getCurrentUserProfile();
+    if (user?.uid) {
+      await firebaseDB.collection("users").doc(user.uid).set(
+        { notificationPreferences: { caseAlertsEnabled: value } },
+        { merge: true }
+      ).catch(() => {});
+    }
+  };
 
   const handleToggleUpdateAlerts = async (value: boolean) => {
     const user = getCurrentUserProfile();
@@ -252,7 +359,7 @@ export default function NotificationSettingsScreen() {
             isBM ? "Notifikasi Tolak" : "Push Notifications",
             isBM ? "Terima makluman terus pada peranti" : "Receive instant alerts on device",
             pushEnabled,
-            setPushEnabled,
+            handleTogglePush,
             "#EF4444"
           )}
 
@@ -261,18 +368,19 @@ export default function NotificationSettingsScreen() {
             isBM ? "Kemaskini Status Kes" : "Case Milestone Alerts",
             isBM ? "Makluman apabila status kes/peringkat berubah" : "Alerts when case progress changes",
             caseAlertsEnabled,
-            setCaseAlertsEnabled,
+            handleToggleCaseAlerts,
             "#3B82F6"
           )}
 
           {renderToggleRow(
             "newspaper-variant-outline",
             isBM ? "Ringkasan Harian" : "Daily Digest Briefing",
-            isBM ? "Ringkasan kes & temujanji setiap pagi" : "Morning summary of active cases & tasks",
+            isBM ? "Ringkasan kes & susulan setiap pagi jam 9:00 AM" : "Morning summary of active cases & follow-ups at 9:00 AM",
             dailyDigestEnabled,
-            setDailyDigestEnabled,
+            handleToggleDailyDigest,
             "#F59E0B",
-            true
+            true,
+            isSavingDigest
           )}
         </Animated.View>
 

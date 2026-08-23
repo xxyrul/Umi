@@ -1,5 +1,22 @@
 [
   {
+    "versionName": "1.5.1",
+    "versionCode": 56,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.5.1.apk",
+    "releaseDate": "2026-08-23",
+    "releaseNotes": [
+      "📱 Fresh & Compact Dashboard: The entire dashboard now fits cleanly on your screen with zero abbreviations on pipeline and quick tools.",
+      "🏠 First-Time Home Buyer Exemption: 1-tap toggle for 100% MOT Stamp Duty exemption with live cash savings display.",
+      "📈 Visual DSR Health Gauge: Color-coded progress bar showing loan approval chances at a glance, plus 1-tap bank limit chips and dedicated PTPTN loan deductions.",
+      "🧮 Enhanced Calculators: Improved 6-month average income tool for variable/OT salary, plus instant cross-tab loan calculation bridge.",
+      "🔄 Smoother Navigation & Cleaner Sharing: Back button from calculator returns directly to the exact listing, with symmetric WhatsApp and Copy buttons.",
+      "📰 Daily Digest Briefing (9:00 AM): Automatically receive your morning active case summary from Firebase Cloud (Turn ON in Profile > Notification Settings)."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 62150000
+  },
+  {
     "versionName": "1.5.0",
     "versionCode": 55,
     "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.5.0.apk",

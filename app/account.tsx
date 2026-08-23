@@ -17,7 +17,8 @@ import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { getCurrentUserProfile } from "@/services/auth";
+import { Image as ExpoImage } from "expo-image";
+import { getCurrentUserProfile, getUserInitials } from "@/services/auth";
 import { firestore, auth } from "@/services/firebase";
 import { SPACING } from "@/constants/theme";
 import type { UserProfile } from "@/types/case";
@@ -96,10 +97,7 @@ export default function AccountScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}
-    >
+    <View style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}>
       {/* Header */}
       <View
         style={{
@@ -133,152 +131,268 @@ export default function AccountScreen() {
         </Text>
       </View>
 
-      <ScrollView
-        contentContainerStyle={{
-          padding: 16,
-          paddingBottom: insets.bottom + 40,
-        }}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
       >
-        {/* Email Identity Card */}
-        <Animated.View
-          entering={FadeInDown.delay(50).duration(200)}
-          style={{
-            backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: themeColors.borderColor,
+        <ScrollView
+          contentContainerStyle={{
             padding: 16,
-            marginBottom: SPACING.md,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 14,
+            paddingBottom: Math.max(insets.bottom, 24) + 100, // Leave room for anchored button
           }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View
+          {/* Agent Avatar Header */}
+          <Animated.View
+            entering={FadeInDown.delay(50).duration(200)}
             style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              backgroundColor: "#3B82F6",
               alignItems: "center",
-              justifyContent: "center",
+              marginBottom: SPACING.xl,
             }}
           >
-            <MaterialCommunityIcons name="email-check-outline" size={24} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
-              {isBM ? "Emel Berdaftar" : "Registered Email"}
-            </Text>
-            <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary, marginTop: 2 }}>
-              {profile?.email || auth().currentUser?.email || "ejen@drtmasterlisting.com"}
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Edit Form Group */}
-        <Animated.View
-          entering={FadeInDown.delay(100).duration(200)}
-          style={{
-            backgroundColor: themeColors.cardBackground,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: themeColors.borderColor,
-            padding: 16,
-            marginBottom: SPACING.md,
-            gap: 16,
-          }}
-        >
-          {/* Display Name Input */}
-          <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }}>
-              {isBM ? "Nama Paparan / Ejen" : "Display / Agent Name"}
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: themeColors.surfaceContainer,
-                borderColor: themeColors.borderColor,
-                borderWidth: 1,
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                fontSize: 15,
-                color: themeColors.textPrimary,
-              }}
-              placeholder={isBM ? "Cth. Ahmad Rizal" : "e.g. Ahmad Rizal"}
-              placeholderTextColor={themeColors.textMuted}
-              value={displayNameInput}
-              onChangeText={setDisplayNameInput}
-              autoCapitalize="words"
-            />
-          </View>
-
-          {/* WhatsApp Phone Number Input */}
-          <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }}>
-              {isBM ? "Nombor Telefon WhatsApp" : "WhatsApp Phone Number"}
-            </Text>
-            <TextInput
-              style={{
-                backgroundColor: themeColors.surfaceContainer,
-                borderColor: themeColors.borderColor,
-                borderWidth: 1,
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                fontSize: 15,
-                color: themeColors.textPrimary,
-              }}
-              placeholder="0123456789"
-              placeholderTextColor={themeColors.textMuted}
-              value={phoneInput}
-              onChangeText={setPhoneInput}
-              keyboardType="phone-pad"
-            />
-            <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 2 }}>
-              {isBM
-                ? "Digunakan untuk butang 'WhatsApp Ejen' di paparan showcase web awam."
-                : "Used for direct 'WhatsApp Agent' action on public listing showcase pages."}
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* Save CTA Button */}
-        <Animated.View entering={FadeInDown.delay(150).duration(200)}>
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={isSaving}
-            activeOpacity={0.8}
-            style={{
-              backgroundColor: themeColors.maroonPrimary,
-              borderRadius: 14,
-              paddingVertical: 14,
-              alignItems: "center",
-              justifyContent: "center",
-              flexDirection: "row",
-              gap: 8,
-              shadowColor: "#000",
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-              elevation: 3,
-            }}
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+            {profile?.photoURL || auth().currentUser?.photoURL ? (
+              <ExpoImage
+                source={{ uri: profile?.photoURL || auth().currentUser?.photoURL || "" }}
+                style={{
+                  width: 84,
+                  height: 84,
+                  borderRadius: 42,
+                  marginBottom: 12,
+                  borderWidth: 2.5,
+                  borderColor: themeColors.maroonPrimary,
+                }}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                transition={200}
+              />
             ) : (
-              <>
-                <MaterialCommunityIcons name="content-save-outline" size={20} color="#FFFFFF" />
-                <Text style={{ fontSize: 15, fontWeight: "700", color: "#FFFFFF" }}>
-                  {isBM ? "Simpan Perubahan" : "Save Changes"}
-                </Text>
-              </>
+              <View
+                style={{
+                  width: 84,
+                  height: 84,
+                  borderRadius: 42,
+                  backgroundColor: themeColors.surfaceContainer,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 12,
+                  borderWidth: 2,
+                  borderColor: themeColors.borderColor,
+                }}
+              >
+                {displayNameInput.trim() ? (
+                  <Text style={{ fontSize: 26, fontWeight: "800", color: themeColors.maroonPrimary }}>
+                    {getUserInitials(displayNameInput)}
+                  </Text>
+                ) : (
+                  <MaterialCommunityIcons name="account" size={40} color={themeColors.textMuted} />
+                )}
+              </View>
             )}
-          </TouchableOpacity>
-        </Animated.View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            <View
+              style={{
+                backgroundColor: "rgba(16, 185, 129, 0.15)",
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <MaterialCommunityIcons name="check-decagram" size={14} color="#10B981" />
+              <Text style={{ fontSize: 12, fontWeight: "700", color: "#10B981" }}>
+                {isBM ? "Ejen Disahkan" : "Verified Agent"}
+              </Text>
+            </View>
+          </Animated.View>
+
+          {/* Group 1: Profile & Credentials */}
+          <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 }}>
+            {isBM ? "Profil & Kredensial" : "Profile & Credentials"}
+          </Text>
+          <Animated.View
+            entering={FadeInDown.delay(100).duration(200)}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+              padding: 16,
+              marginBottom: SPACING.lg,
+              gap: 16,
+            }}
+          >
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textSecondary }}>
+                {isBM ? "Nama Paparan" : "Display Name"}
+              </Text>
+              <TextInput
+                style={{
+                  backgroundColor: themeColors.canvasBackground,
+                  borderColor: themeColors.borderColor,
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  fontSize: 15,
+                  color: themeColors.textPrimary,
+                }}
+                placeholder={isBM ? "Cth. Ahmad Rizal" : "e.g. Ahmad Rizal"}
+                placeholderTextColor={themeColors.textMuted}
+                value={displayNameInput}
+                onChangeText={setDisplayNameInput}
+                autoCapitalize="words"
+              />
+            </View>
+          </Animated.View>
+
+          {/* Group 2: WhatsApp Contact */}
+          <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 }}>
+            {isBM ? "Kenalan WhatsApp" : "WhatsApp Contact"}
+          </Text>
+          <Animated.View
+            entering={FadeInDown.delay(150).duration(200)}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+              padding: 16,
+              marginBottom: SPACING.lg,
+              gap: 16,
+            }}
+          >
+            <View style={{ gap: 6 }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textSecondary }}>
+                {isBM ? "Nombor Telefon" : "Phone Number"}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View
+                  style={{
+                    backgroundColor: themeColors.canvasBackground,
+                    borderWidth: 1,
+                    borderColor: themeColors.borderColor,
+                    borderRadius: 12,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    justifyContent: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+                    +60
+                  </Text>
+                </View>
+                <TextInput
+                  style={{
+                    flex: 1,
+                    backgroundColor: themeColors.canvasBackground,
+                    borderColor: themeColors.borderColor,
+                    borderWidth: 1,
+                    borderRadius: 12,
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    fontSize: 15,
+                    color: themeColors.textPrimary,
+                  }}
+                  placeholder="123456789"
+                  placeholderTextColor={themeColors.textMuted}
+                  value={phoneInput}
+                  onChangeText={setPhoneInput}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <Text style={{ fontSize: 12, color: themeColors.textMuted, marginTop: 2 }}>
+                {isBM
+                  ? "Digunakan untuk butang 'WhatsApp Ejen' awam."
+                  : "Used for public 'WhatsApp Agent' button."}
+              </Text>
+            </View>
+          </Animated.View>
+
+          {/* Group 3: Account Security */}
+          <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textMuted, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 }}>
+            {isBM ? "Keselamatan Akaun" : "Account Security"}
+          </Text>
+          <Animated.View
+            entering={FadeInDown.delay(200).duration(200)}
+            style={{
+              backgroundColor: themeColors.cardBackground,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: themeColors.borderColor,
+              padding: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+            }}
+          >
+            <View
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                backgroundColor: themeColors.surfaceContainer,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <MaterialCommunityIcons name="email-check-outline" size={24} color={themeColors.textPrimary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textMuted }}>
+                {isBM ? "Emel Berdaftar" : "Registered Email"}
+              </Text>
+              <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginTop: 2 }}>
+                {profile?.email || auth().currentUser?.email || "ejen@drtmasterlisting.com"}
+              </Text>
+            </View>
+            <MaterialCommunityIcons name="lock-outline" size={18} color={themeColors.textMuted} />
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Anchored Bottom Save Button */}
+      <View
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: themeColors.cardBackground,
+          borderTopWidth: 1,
+          borderTopColor: themeColors.borderColor,
+          paddingHorizontal: 16,
+          paddingTop: 16,
+          paddingBottom: Math.max(insets.bottom, 24) + 16,
+        }}
+      >
+        <TouchableOpacity
+          onPress={handleSave}
+          disabled={isSaving}
+          activeOpacity={0.8}
+          style={{
+            backgroundColor: themeColors.maroonPrimary,
+            borderRadius: 14,
+            paddingVertical: 14,
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "row",
+            gap: 8,
+          }}
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <MaterialCommunityIcons name="content-save-outline" size={20} color="#FFFFFF" />
+              <Text style={{ fontSize: 15, fontWeight: "700", color: "#FFFFFF" }}>
+                {isBM ? "Simpan Perubahan" : "Save Changes"}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }

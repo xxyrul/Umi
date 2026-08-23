@@ -872,7 +872,10 @@ export default function PropertyDetailScreen() {
                   activeOpacity={0.75}
                   onPress={() => {
                     Haptics.selectionAsync().catch(() => {});
-                    setIsLoanCalcVisible(true);
+                    router.push({
+                      pathname: "/calculator" as any,
+                      params: { price: String(numericPrice), tab: "mortgage" },
+                    });
                   }}
                   style={{
                     flexDirection: "row",

@@ -1,15 +1,15 @@
 {
-  "versionName": "1.5.0",
-  "versionCode": 55,
+  "versionName": "1.5.1",
+  "versionCode": 56,
   "packageName": "com.umi.caseflow",
-  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.5.0.apk",
+  "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.5.1.apk",
   "releaseDate": "2026-08-23",
   "releaseNotes": [
-    "✨ Dedicated Settings Pages: Account, Notifications, and Help & Support now open as clean, full-screen pages with smooth back navigation.",
-    "📐 Grid Alignment & Share Button: Master Listing grid cards now have equalized heights with perfectly aligned Share buttons.",
-    "🔍 My Listings Filter Fix: All your properties (Active, Booking, Sold, Draft) are now always visible under My Listings by default.",
-    "🛡️ Redesigned Feedback & Bug Report: Easily report issues and attach screenshots with comfortable safe-area spacing and gesture back support.",
-    "⚡ Lightning Performance: Optimized data loading and smart caching across dashboard and listings.",
-    "🔒 Enhanced Privacy & Security: Complete control over PIN app lock, biometrics, and anti-screenshot protection."
+    "📱 Fresh & Compact Dashboard: The entire dashboard now fits cleanly on your screen with zero abbreviations on pipeline and quick tools.",
+    "🏠 First-Time Home Buyer Exemption: 1-tap toggle for 100% MOT Stamp Duty exemption with live cash savings display.",
+    "📈 Visual DSR Health Gauge: Color-coded progress bar showing loan approval chances at a glance, plus 1-tap bank limit chips and dedicated PTPTN loan deductions.",
+    "🧮 Enhanced Calculators: Improved 6-month average income tool for variable/OT salary, plus instant cross-tab loan calculation bridge.",
+    "🔄 Smoother Navigation & Cleaner Sharing: Back button from calculator returns directly to the exact listing, with symmetric WhatsApp and Copy buttons.",
+    "📰 Daily Digest Briefing (9:00 AM): Automatically receive your morning active case summary from Firebase Cloud (Turn ON in Profile > Notification Settings)."
   ]
 }

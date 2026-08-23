@@ -1042,7 +1042,7 @@ export default function TambahScreen() {
               styles.bottomSheetContainer,
               {
                 backgroundColor: themeColors.cardBackground,
-                paddingBottom: Math.max(insets.bottom, 24) + 16,
+                paddingBottom: Math.max(insets.bottom, 48) + 24,
               },
             ]}
           >
@@ -1087,8 +1087,13 @@ export default function TambahScreen() {
               )}
             </View>
 
-            <ScrollView style={{ paddingHorizontal: 16, maxHeight: 360 }}>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 8 }}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ paddingHorizontal: 16, maxHeight: 420 }}
+              contentContainerStyle={{ paddingBottom: 24 }}
+            >
+              <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", paddingVertical: 8 }}>
                 {NEGERI_LIST
                   .filter((s) => s.toLowerCase().includes(stateSearchQuery.toLowerCase()))
                   .map((stateItem) => {
@@ -1105,28 +1110,39 @@ export default function TambahScreen() {
                           setStateSearchQuery("");
                           Haptics.selectionAsync().catch(() => {});
                         }}
-                        style={[
-                          styles.stateOptionChip,
-                          {
-                            backgroundColor: isSelected ? themeColors.maroonPrimary : themeColors.surfaceContainer,
-                            borderColor: isSelected ? themeColors.maroonPrimary : themeColors.borderColor,
-                          },
-                        ]}
+                        style={{
+                          width: "48.5%",
+                          flexDirection: "row",
+                          alignItems: "center",
+                          paddingHorizontal: 12,
+                          paddingVertical: 12,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          marginBottom: 8,
+                          gap: 8,
+                          backgroundColor: isSelected ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                          borderColor: isSelected ? themeColors.maroonPrimary : themeColors.borderColor,
+                        }}
                       >
                         <MaterialCommunityIcons
-                          name="map-marker"
-                          size={16}
+                          name="map-marker-outline"
+                          size={18}
                           color={isSelected ? "#FFFFFF" : themeColors.maroonPrimary}
                         />
                         <Text
                           style={{
+                            flex: 1,
                             color: isSelected ? "#FFFFFF" : themeColors.textPrimary,
-                            fontWeight: "700",
-                            fontSize: 14,
+                            fontWeight: "600",
+                            fontSize: 13,
                           }}
+                          numberOfLines={1}
                         >
                           {stateItem}
                         </Text>
+                        {isSelected && (
+                          <MaterialCommunityIcons name="check" size={16} color="#FFFFFF" />
+                        )}
                       </TouchableOpacity>
                     );
                   })}
