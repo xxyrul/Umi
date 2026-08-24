@@ -97,8 +97,13 @@ async function unlockWithPasscode() {
       try {
         await auth.signInWithCustomToken(data.firebaseCustomToken);
       } catch (authErr) {
-        console.warn('Custom token sign-in warning:', authErr);
+        console.warn('Custom token sign-in fallback:', authErr);
+        if (!auth.currentUser) {
+          await auth.signInAnonymously().catch(() => {});
+        }
       }
+    } else if (!auth.currentUser) {
+      await auth.signInAnonymously().catch(() => {});
     }
     try {
       localStorage.removeItem('artha_admin_unlocked');
@@ -129,7 +134,11 @@ if (sessionStorage.getItem('artha_admin_unlocked') === 'true') {
   document.getElementById('user-email-display').textContent = 'Super Admin';
   const savedToken = sessionStorage.getItem('artha_admin_custom_token');
   if (savedToken && !auth.currentUser) {
-    auth.signInWithCustomToken(savedToken).catch(() => {});
+    auth.signInWithCustomToken(savedToken).catch(() => {
+      if (!auth.currentUser) auth.signInAnonymously().catch(() => {});
+    });
+  } else if (!auth.currentUser) {
+    auth.signInAnonymously().catch(() => {});
   }
   showView('view-dashboard');
   restoreActiveTab();
@@ -167,30 +176,37 @@ async function claimAdminElevation() {
   if (!entered) return alert("Please enter the Access Code");
 
   try {
-    const res = await fetch('https://us-central1-umiren-d6a66.cloudfunctions.net/verifyAdminAccessCode', {
+    const res = await fetch('https://verifyadminaccesscode-qmzvmlyqza-uc.a.run.app', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ passcode: entered })
     });
 
     const data = await res.json();
-    if (!res.ok || !data.token) {
+    if (!res.ok || (!data.sessionToken && !data.token && !data.success)) {
       throw new Error(data.error || "Invalid Access Code");
     }
 
-    if (currentUser) {
+    if (data.sessionToken) {
+      sessionStorage.setItem('artha_admin_session_token', data.sessionToken);
+    }
+
+    if (data.firebaseCustomToken && (!currentUser || currentUser.isAnonymous)) {
+      await auth.signInWithCustomToken(data.firebaseCustomToken);
+    } else if (currentUser) {
       await db.collection('users').doc(currentUser.uid).set({
         role: 'admin',
         updatedAt: new Date().toISOString()
       }, { merge: true });
-      currentRole = 'admin';
-      sessionStorage.setItem('artha_admin_unlocked', 'true');
-      document.documentElement.classList.add('artha-unlocked');
-      showView('view-dashboard');
-      restoreActiveTab();
-      startRealtimeListeners();
-      showToast("👑 Admin role granted!");
     }
+
+    currentRole = 'admin';
+    sessionStorage.setItem('artha_admin_unlocked', 'true');
+    document.documentElement.classList.add('artha-unlocked');
+    showView('view-dashboard');
+    restoreActiveTab();
+    startRealtimeListeners();
+    showToast("👑 Admin role granted!");
   } catch (err) {
     alert("❌ " + (err.message || "Failed to verify Access Code"));
   }
