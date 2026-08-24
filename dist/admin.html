@@ -14,6 +14,9 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <script>
+    if (window.location.hostname.includes('umiren-d6a66')) {
+      window.location.replace('https://artharen.web.app' + window.location.pathname + window.location.search + window.location.hash);
+    }
     // Strict sessionStorage: survives page refreshes, automatically destroyed on browser/tab close
     try {
       localStorage.removeItem('artha_admin_unlocked');

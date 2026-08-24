@@ -18,38 +18,71 @@
   "storage": {
     "rules": "storage.rules"
   },
-  "hosting": {
-    "site": "artharen",
-    "public": "dist",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "headers": [
-      {
-        "source": "**",
-        "headers": [
-          {
-            "key": "Access-Control-Allow-Origin",
-            "value": "*"
-          },
-          {
-            "key": "Cache-Control",
-            "value": "no-cache, no-store, must-revalidate"
-          }
-        ]
-      }
-    ],
-    "rewrites": [
-      {
-        "source": "/admin",
-        "destination": "/admin.html"
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  }
+  "hosting": [
+    {
+      "site": "artharen",
+      "public": "dist",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "headers": [
+        {
+          "source": "**",
+          "headers": [
+            {
+              "key": "Access-Control-Allow-Origin",
+              "value": "*"
+            },
+            {
+              "key": "Cache-Control",
+              "value": "no-cache, no-store, must-revalidate"
+            }
+          ]
+        }
+      ],
+      "rewrites": [
+        {
+          "source": "/admin",
+          "destination": "/admin.html"
+        },
+        {
+          "source": "**",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "site": "umiren-d6a66",
+      "public": "dist",
+      "redirects": [
+        {
+          "source": "/",
+          "destination": "https://artharen.web.app/",
+          "type": 301
+        },
+        {
+          "source": "/releases/:file*",
+          "destination": "https://artharen.web.app/releases/:file*",
+          "type": 301
+        },
+        {
+          "source": "/listing/:id*",
+          "destination": "https://artharen.web.app/listing/:id*",
+          "type": 301
+        },
+        {
+          "source": "/admin",
+          "destination": "https://artharen.web.app/admin",
+          "type": 301
+        },
+        {
+          "source": "/:all*",
+          "destination": "https://artharen.web.app/:all*",
+          "type": 301
+        }
+      ]
+    }
+  ]
 }

@@ -10,6 +10,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   
   <script>
+    if (window.location.hostname.includes('umiren-d6a66')) {
+      window.location.replace('https://artharen.web.app' + window.location.pathname + window.location.search + window.location.hash);
+    }
     (function() {
       const path = window.location.pathname.toLowerCase();
       const search = window.location.search.toLowerCase();
