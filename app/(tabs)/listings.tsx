@@ -679,7 +679,7 @@ export default function MasterListingScreen() {
     const locText = locInfo.displayLocation || item.alamat || item.negeri || "Malaysia";
     const descSnippet = (item.description || "").trim();
 
-    const webLinkStr = item.id ? `\n🔗 Info Penuh & Foto: https://umiren-d6a66.web.app/listing/${item.id}` : "";
+    const webLinkStr = item.id ? `\n🔗 Info Penuh & Foto: https://artharen.web.app/listing/${item.id}` : "";
 
     if (isBM) {
       return (
@@ -709,7 +709,7 @@ export default function MasterListingScreen() {
       `• Tenure: ${item.pegangan || "Freehold"} (${item.lot || "Bumi Lot"})\n` +
       (item.jenis ? `• Type: ${item.jenis}\n` : "") +
       (descSnippet ? `\n📝 Description:\n${descSnippet}\n` : "") +
-      (item.id ? `\n🔗 Full Info & Photos: https://umiren-d6a66.web.app/listing/${item.id}` : "") +
+      (item.id ? `\n🔗 Full Info & Photos: https://artharen.web.app/listing/${item.id}` : "") +
       `\n\n📲 Interested? Contact me now for viewing & details!`
     );
   };

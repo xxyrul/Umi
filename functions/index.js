@@ -22,7 +22,7 @@ exports.dailyUpdateNudge = onSchedule(
 
     try {
       // 1. Fetch live latest manifest from hosting
-      const manifestRes = await fetch("https://umiren-d6a66.web.app/releases/latest.json", {
+      const manifestRes = await fetch("https://artharen.web.app/releases/latest.json", {
         headers: { "Cache-Control": "no-cache" },
       });
 
@@ -132,7 +132,7 @@ exports.sendInstantUpdatePush = onRequest(
     const messaging = admin.messaging();
 
     try {
-      const manifestRes = await fetch("https://umiren-d6a66.web.app/releases/latest.json", {
+      const manifestRes = await fetch("https://artharen.web.app/releases/latest.json", {
         headers: { "Cache-Control": "no-cache" },
       });
 

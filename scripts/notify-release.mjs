@@ -24,7 +24,7 @@ import path from "node:path";
 
 const MANIFEST_PATH = path.resolve("dist/releases/latest.json");
 const EXPECTED_PACKAGE = "com.umi.caseflow";
-const RELEASE_HOSTNAME = "umiren-d6a66.web.app";
+const RELEASE_HOSTNAME = "artharen.web.app";
 const LIVE_MANIFEST_URL = `https://${RELEASE_HOSTNAME}/releases/latest.json`;
 const TOKEN_SCOPES = [
   "https://www.googleapis.com/auth/firebase.messaging",

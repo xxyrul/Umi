@@ -4,8 +4,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import { Alert, Linking, Platform } from "react-native";
 
-const UPDATE_MANIFEST_URL = "https://umiren-d6a66.web.app/releases/latest.json";
-const RELEASE_HOSTNAME = "umiren-d6a66.web.app";
+const UPDATE_MANIFEST_URL = "https://artharen.web.app/releases/latest.json";
+const RELEASE_HOSTNAME = "artharen.web.app";
 const PACKAGE_NAME = "com.umi.caseflow";
 const LAST_DISMISSED_UPDATE_KEY = "artha_last_dismissed_update_timestamp";
 const NUDGE_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 Days
@@ -270,7 +270,7 @@ export const getUpdateCacheSize = async (): Promise<number> => {
 
 export async function fetchReleaseHistory(): Promise<NativeAppRelease[]> {
   try {
-    const response = await fetch("https://umiren-d6a66.web.app/releases/history.json", {
+    const response = await fetch("https://artharen.web.app/releases/history.json", {
       headers: { "Cache-Control": "no-cache", Pragma: "no-cache" },
     });
     if (response.ok) {

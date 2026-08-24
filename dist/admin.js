@@ -392,7 +392,7 @@ async function handleCreateInviteCode() {
 
     if (codeText) codeText.textContent = code;
     if (previewText) {
-      previewText.innerHTML = '🔑 Code: <strong>' + code + '</strong><br>📲 Download: https://umiren-d6a66.web.app/';
+      previewText.innerHTML = '🔑 Code: <strong>' + code + '</strong><br>📲 Download: https://artharen.web.app/';
     }
     if (shareEl) shareEl.style.display = 'block';
 
@@ -408,7 +408,7 @@ async function handleCreateInviteCode() {
 function copyShareMessage() {
   const code = document.getElementById('share-code-text')?.textContent || '';
   if (!code) return;
-  const msg = "🔑 *ARTHA AGENT INVITE CODE*\n\nYour registration code: `" + code + "`\n\n📲 *Download Umi (Artha) APK:*\nhttps://umiren-d6a66.web.app/\n\n*Instructions:*\n1. Install app & open\n2. Tap 'Daftar Akaun Baru'\n3. Enter your unique invite code above.";
+  const msg = "🔑 *ARTHA AGENT INVITE CODE*\n\nYour registration code: `" + code + "`\n\n📲 *Download Artha APK:*\nhttps://artharen.web.app/\n\n*Instructions:*\n1. Install app & open\n2. Tap 'Daftar Akaun Baru'\n3. Enter your unique invite code above.";
   navigator.clipboard.writeText(msg).then(() => {
     showToast("📋 Copied WhatsApp invite!");
   });
@@ -417,7 +417,7 @@ function copyShareMessage() {
 function openWhatsAppShare() {
   const code = document.getElementById('share-code-text')?.textContent || '';
   if (!code) return;
-  const msg = "🔑 *ARTHA AGENT INVITE CODE*\n\nYour registration code: `" + code + "`\n\n📲 *Download Umi (Artha) APK:*\nhttps://umiren-d6a66.web.app/";
+  const msg = "🔑 *ARTHA AGENT INVITE CODE*\n\nYour registration code: `" + code + "`\n\n📲 *Download Artha APK:*\nhttps://artharen.web.app/";
   window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
 }
 
@@ -569,7 +569,7 @@ function copyBatchWhatsAppList() {
   lastGeneratedBatch.forEach((c, idx) => {
     msg += (idx + 1) + ". `" + c + "`\n";
   });
-  msg += "\n📲 *Download Umi (Artha) APK:*\nhttps://umiren-d6a66.web.app/\n\n*Instructions:*\n1. Install app & open\n2. Tap 'Daftar Akaun Baru'\n3. Enter your unique invite code above.";
+  msg += "\n📲 *Download Artha APK:*\nhttps://artharen.web.app/\n\n*Instructions:*\n1. Install app & open\n2. Tap 'Daftar Akaun Baru'\n3. Enter your unique invite code above.";
 
   navigator.clipboard.writeText(msg).then(() => {
     showToast("📋 WhatsApp list copied to clipboard!");

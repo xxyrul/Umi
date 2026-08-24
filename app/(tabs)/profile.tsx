@@ -830,7 +830,7 @@ export default function ProfileScreen() {
               "shield-crown-outline",
               t("adminPortalTitle"),
               t("adminPortalSub"),
-              () => Linking.openURL("https://umiren-d6a66.web.app/admin").catch(() => {}),
+              () => Linking.openURL("https://artharen.web.app/admin").catch(() => {}),
               "#F59E0B",
               true
             )}
