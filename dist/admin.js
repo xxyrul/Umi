@@ -308,6 +308,7 @@ function startRealtimeListeners() {
   unsubAgents = db.collection('users').onSnapshot(snapshot => {
     allAgents = [];
     snapshot.forEach(doc => {
+      if (doc.id.startsWith('super_admin') || doc.id.startsWith('system_')) return;
       const d = doc.data();
       d.uid = doc.id;
       allAgents.push(d);

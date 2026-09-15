@@ -339,14 +339,6 @@ exports.verifyAdminAccessCode = onRequest(
         logger.warn("createCustomToken fallback:", tokenErr.message);
       }
 
-      // Ensure user document exists with admin role
-      await db.collection("users").doc("super_admin_web_portal").set({
-        role: "admin",
-        displayName: "Super Admin",
-        email: "admin@drtmasterlisting.com",
-        updatedAt: new Date().toISOString(),
-      }, { merge: true }).catch(e => logger.warn("User doc update warning:", e.message));
-
       logger.info("Admin access code verified successfully.");
       res.json({
         success: true,
