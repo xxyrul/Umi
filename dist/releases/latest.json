@@ -1,15 +1,16 @@
 {
-  "versionName": "1.5.1",
-  "versionCode": 56,
+  "versionName": "1.5.2",
+  "versionCode": 57,
   "packageName": "com.umi.caseflow",
-  "downloadUrl": "https://artharen.web.app/releases/artha-1.5.1.apk",
-  "releaseDate": "2026-08-23",
+  "downloadUrl": "https://artharen.web.app/releases/artha-1.5.2.apk",
+  "fileSizeBytes": 62006327,
+  "releaseDate": "2026-09-16",
+  "mandatory": false,
   "releaseNotes": [
-    "📱 Fresh & Compact Dashboard: The entire dashboard now fits cleanly on your screen with zero abbreviations on pipeline and quick tools.",
-    "🏠 First-Time Home Buyer Exemption: 1-tap toggle for 100% MOT Stamp Duty exemption with live cash savings display.",
-    "📈 Visual DSR Health Gauge: Color-coded progress bar showing loan approval chances at a glance, plus 1-tap bank limit chips and dedicated PTPTN loan deductions.",
-    "🧮 Enhanced Calculators: Improved 6-month average income tool for variable/OT salary, plus instant cross-tab loan calculation bridge.",
-    "🔄 Smoother Navigation & Cleaner Sharing: Back button from calculator returns directly to the exact listing, with symmetric WhatsApp and Copy buttons.",
-    "📰 Daily Digest Briefing (9:00 AM): Automatically receive your morning active case summary from Firebase Cloud (Turn ON in Profile > Notification Settings)."
+    "🧮 Loan Insurance Calculator: Added MRTT / MRTA (age 25–50) and Houseowner / Fire Insurance calculations with option to finance into loan or pay cash upfront.",
+    "🔄 Seamless Navigation: Floating bottom navigation bar automatically restores when using Android back gesture from listings.",
+    "📐 Bottom Screen Clearance: Fixed tab screen padding so all case action buttons and follow-up rows remain unobstructed.",
+    "✨ Instant Listing Sync: Creating a property now auto-refreshes Listings, scrolls to the top, and displays a success toast.",
+    "💬 Technical Support Update: Converted WhatsApp technical support to a dedicated Coming Soon status badge."
   ]
 }

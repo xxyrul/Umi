@@ -387,6 +387,10 @@ async function main() {
   const devices = await listEnabledDevices(projectId, accessToken);
   const now = Date.now();
 
+  // Sort devices by highest buildVersion and most recent update first so that
+  // newer registrations (e.g. updated language preference) take precedence over older stale records.
+  devices.sort((a, b) => (b.buildVersion || 0) - (a.buildVersion || 0) || (b.lastNotifiedAt || 0) - (a.lastNotifiedAt || 0));
+
   // One notification per token, and never to a device already on this build.
   const seenTokens = new Set();
   const recipients = devices.filter((device) => {
