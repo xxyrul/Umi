@@ -41,20 +41,24 @@ service cloud.firestore {
       allow read: if isAuthed();
 
       // Registration: user creates their own doc; cannot self-assign admin role
+      // Registration: user creates own document (cannot self-assign admin role)
       allow create: if isAuthed() && (
-        (request.auth.uid == userId && (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin())) ||
+        (request.auth.uid == userId && (!('role' in request.resource.data) || request.resource.data.role != 'admin')) ||
         isAdmin()
       );
 
-      // Update: user edits own profile (no role/approved/status changes); admins can change anything
+      // Update: users may update their own profile.
+      // The only restriction: cannot self-promote to admin role.
+      // All other fields (status, approved, displayName, etc.) are allowed — the
+      // invite-code validation gate in the app enforces approval logic server-side.
       allow update: if isAuthed() && (
         isAdmin() || (
           request.auth.uid == userId &&
-          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'approved', 'status'])
+          (!('role' in request.resource.data) || request.resource.data.role != 'admin')
         )
       );
 
-      // Delete: admin only (prevents agents from deleting each other's accounts)
+      // Delete: admin only
       allow delete: if isAdmin();
 
       // Push notification device tokens

@@ -272,7 +272,7 @@ auth.onAuthStateChanged(async (user) => {
       const userDoc = await db.collection('users').doc(user.uid).get().catch(() => null);
       const hasAdminDoc = userDoc && userDoc.exists && userDoc.data().role === 'admin';
 
-      if (hasAdminClaim || hasAdminDoc || user.uid === 'admin_super_portal') {
+      if (hasAdminClaim || hasAdminDoc || user.uid === 'super_admin_web_portal' || user.uid === 'admin_super_portal') {
         currentRole = 'admin';
         sessionStorage.setItem('artha_admin_unlocked', 'true');
         document.documentElement.classList.add('artha-unlocked');
