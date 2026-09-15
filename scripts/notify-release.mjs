@@ -387,24 +387,33 @@ async function main() {
   const devices = await listEnabledDevices(projectId, accessToken);
   const now = Date.now();
 
-  // Sort devices by highest buildVersion and most recent update first so that
-  // newer registrations (e.g. updated language preference) take precedence over older stale records.
-  devices.sort((a, b) => (b.buildVersion || 0) - (a.buildVersion || 0) || (b.lastNotifiedAt || 0) - (a.lastNotifiedAt || 0));
+  // Group all registrations by physical push token
+  const tokenMap = new Map();
+  for (const device of devices) {
+    if (!tokenMap.has(device.token)) {
+      tokenMap.set(device.token, []);
+    }
+    tokenMap.get(device.token).push(device);
+  }
 
-  // One notification per token, and never to a device already on this build.
-  const seenTokens = new Set();
-  const recipients = devices.filter((device) => {
-    if (seenTokens.has(device.token)) return false;
-    if (device.buildVersion >= manifest.versionCode) return false;
-    
-    // In nudge mode, verify 3-day cooldown
-    if (isNudge && device.lastNotifiedAt && now - device.lastNotifiedAt < NUDGE_COOLDOWN_MS) {
-      return false;
+  const recipients = [];
+  for (const [token, tokenDevices] of tokenMap.entries()) {
+    // Sort this token's records: highest buildVersion first, newest lastNotifiedAt first
+    tokenDevices.sort((a, b) => (b.buildVersion || 0) - (a.buildVersion || 0) || (b.lastNotifiedAt || 0) - (a.lastNotifiedAt || 0));
+    const primaryDevice = tokenDevices[0];
+
+    // If this physical device is already on this build or newer, skip it entirely
+    if (primaryDevice.buildVersion >= manifest.versionCode) {
+      continue;
     }
 
-    seenTokens.add(device.token);
-    return true;
-  });
+    // In nudge mode, verify 3-day cooldown
+    if (isNudge && primaryDevice.lastNotifiedAt && now - primaryDevice.lastNotifiedAt < NUDGE_COOLDOWN_MS) {
+      continue;
+    }
+
+    recipients.push(primaryDevice);
+  }
 
   console.log(
     `[notify-release] ${isNudge ? "[Nudge Mode] " : ""}${manifest.versionName} (code ${manifest.versionCode}) -> ${recipients.length} device(s) of ${devices.length} registered.`
