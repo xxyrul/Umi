@@ -648,7 +648,7 @@ async function handleBroadcastAnnouncement() {
     await db.collection('announcements').doc(annId).set(newAnn);
 
     try {
-      const pushUrl = "https://us-central1-umiren-d6a66.cloudfunctions.net/sendBroadcastPush";
+      const pushUrl = "https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app";
       await fetch(pushUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

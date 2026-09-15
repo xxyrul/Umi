@@ -45,7 +45,7 @@ exports.dailyUpdateNudge = onSchedule(
       logger.info(`Checking for devices outdated compared to Code ${latestCode} (v${latestName})`);
 
       // 2. Query all registered device documents
-      const devicesSnap = await db.collectionGroup("devices").where("enabled", "==", true).get();
+      const devicesSnap = await db.collectionGroup("devices").get();
 
       if (devicesSnap.empty) {
         logger.info("No registered devices found.");
@@ -58,6 +58,7 @@ exports.dailyUpdateNudge = onSchedule(
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
+        if (data.enabled === false) continue;
         const token = data.token;
         const deviceBuild = Number(data.buildVersion || 0);
         const lastNotified = data.lastNotifiedAt ? Date.parse(data.lastNotifiedAt) : 0;
@@ -126,7 +127,7 @@ exports.dailyUpdateNudge = onSchedule(
 );
 
 exports.sendInstantUpdatePush = onRequest(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (req, res) => {
     const db = admin.firestore();
     const messaging = admin.messaging();
@@ -140,11 +141,12 @@ exports.sendInstantUpdatePush = onRequest(
       const latestCode = Number(manifest.versionCode);
       const latestName = manifest.versionName;
 
-      const devicesSnap = await db.collectionGroup("devices").where("enabled", "==", true).get();
+      const devicesSnap = await db.collectionGroup("devices").get();
       let sentCount = 0;
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
+        if (data.enabled === false) continue;
         const token = data.token;
         if (!token) continue;
 
@@ -196,25 +198,32 @@ exports.sendInstantUpdatePush = onRequest(
  * Expects JSON body: { titleEN, titleBM, messageEN, messageBM, type }
  */
 exports.sendBroadcastPush = onRequest(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (req, res) => {
     const db = admin.firestore();
     const messaging = admin.messaging();
 
     try {
-      const { titleEN, titleBM, messageEN, messageBM, type } = req.body || {};
+      let body = req.body;
+      if (Buffer.isBuffer(body)) {
+        try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+      } else if (typeof body === "string") {
+        try { body = JSON.parse(body); } catch (e) {}
+      }
+      const { titleEN, titleBM, messageEN, messageBM, type } = body || {};
 
-      if (!titleEN || !messageEN) {
-        res.status(400).json({ error: "titleEN and messageEN are required." });
+      if (!titleEN && !titleBM && !messageEN && !messageBM) {
+        res.status(400).json({ error: "Title and message are required." });
         return;
       }
 
-      const devicesSnap = await db.collectionGroup("devices").where("enabled", "==", true).get();
+      const devicesSnap = await db.collectionGroup("devices").get();
       let sentCount = 0;
       let failCount = 0;
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
+        if (data.enabled === false) continue;
         const token = data.token;
         if (!token) continue;
 
@@ -266,7 +275,7 @@ exports.sendBroadcastPush = onRequest(
  * If valid, generates a cryptographic session token and records the session securely.
  */
 exports.verifyAdminAccessCode = onRequest(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (req, res) => {
     try {
       if (req.method !== "POST") {
@@ -275,7 +284,9 @@ exports.verifyAdminAccessCode = onRequest(
       }
 
       let body = req.body;
-      if (typeof body === "string") {
+      if (Buffer.isBuffer(body)) {
+        try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+      } else if (typeof body === "string") {
         try { body = JSON.parse(body); } catch (e) {}
       }
       const passcode = body?.passcode;
@@ -289,7 +300,7 @@ exports.verifyAdminAccessCode = onRequest(
       ].filter(Boolean);
 
       if (!passcode || typeof passcode !== "string" || !validKeys.includes(passcode.trim())) {
-        logger.warn("Invalid admin passcode attempt.");
+        logger.warn("Invalid admin passcode attempt.", { received: passcode, validCount: validKeys.length });
         res.status(401).json({ error: "Invalid access code" });
         return;
       }
@@ -357,7 +368,7 @@ exports.verifyAdminAccessCode = onRequest(
  * Acts as an authorized backup to client-side Firestore updates.
  */
 exports.adminUpdateListingStatus = onRequest(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (req, res) => {
     try {
       if (req.method !== "POST") {
@@ -415,11 +426,12 @@ exports.dailyDigestBriefingCron = onSchedule(
       logger.info("Starting 9:00 AM Daily Digest Briefing job...");
 
       // Find all registered devices
-      const devicesSnap = await db.collectionGroup("devices").where("enabled", "==", true).get();
+      const devicesSnap = await db.collectionGroup("devices").get();
       let sentCount = 0;
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
+        if (data.enabled === false) continue;
         const token = data.token;
         const uid = data.uid || doc.ref.parent.parent?.id;
         if (!token) continue;
