@@ -462,3 +462,88 @@ exports.adminUpdateListingStatus = onRequest(
     }
   }
 );
+
+/**
+ * ☀️ Daily Digest Briefing (9:00 AM Asia/Kuala_Lumpur)
+ * Personalised morning briefing — active case count + tasks for the day.
+ */
+exports.dailyDigestBriefingCron = onSchedule(
+  {
+    schedule: "0 9 * * *",
+    timeZone: "Asia/Kuala_Lumpur",
+  },
+  async () => {
+    const db = admin.firestore();
+    const messaging = admin.messaging();
+
+    try {
+      logger.info("Starting 9:00 AM Daily Digest Briefing job...");
+
+      const devicesSnap = await db.collectionGroup("devices").get();
+      let sentCount = 0;
+
+      for (const doc of devicesSnap.docs) {
+        const data = doc.data();
+        if (data.enabled === false) continue;
+        const token = data.token;
+        const uid = data.uid || doc.ref.parent.parent?.id;
+        if (!token) continue;
+
+        const isMalay = data.language === "BM";
+
+        // Personalise with active case count
+        let activeCount = 0;
+        if (uid) {
+          try {
+            const casesSnap = await db.collection("cases")
+              .where("userId", "==", uid)
+              .where("status", "in", ["Active", "Booking Paid", "Loan Approved", "SPA Signed"])
+              .get();
+            activeCount = casesSnap.size;
+          } catch (e) {
+            // compound index may not exist for all users; skip gracefully
+          }
+        }
+
+        const title = isMalay ? "☀️ Ringkasan Pagi Artha" : "☀️ Artha Daily Briefing";
+        const body = isMalay
+          ? activeCount > 0
+            ? `Selamat pagi! Anda mempunyai ${activeCount} kes aktif dalam saluran transaksi hari ini.`
+            : "Selamat pagi! Buka Artha untuk menyemak senarai hartanah dan tugasan anda hari ini."
+          : activeCount > 0
+            ? `Good morning! You have ${activeCount} active cases in your transaction pipeline today.`
+            : "Good morning! Open Artha to review your property listings and tasks for today.";
+
+        const message = {
+          token,
+          notification: { title, body },
+          data: { screen: "dashboard", type: "daily_digest" },
+          android: {
+            priority: "high",
+            notification: {
+              channel_id: "daily-digest",
+              color: "#F59E0B",
+              sound: "default",
+            },
+          },
+        };
+
+        try {
+          await messaging.send(message);
+          sentCount++;
+        } catch (err) {
+          if (
+            err.code === "messaging/registration-token-not-registered" ||
+            err.code === "messaging/invalid-registration-token"
+          ) {
+            await doc.ref.delete().catch(() => {});
+          }
+        }
+      }
+
+      logger.info(`Daily Digest Complete: Delivered to ${sentCount} devices.`);
+    } catch (error) {
+      logger.error("Daily digest briefing cron failed:", error);
+    }
+  }
+);
