@@ -1,10 +1,15 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const { logger } = require("firebase-functions");
 const admin = require("firebase-admin");
 const crypto = require("crypto");
 
 admin.initializeApp();
+
+// Secrets — managed via Firebase Secret Manager, never in source code
+const ADMIN_ACCESS_CODE = defineSecret("ADMIN_ACCESS_CODE");
+const SESSION_SECRET = defineSecret("SESSION_SECRET");
 
 const NUDGE_COOLDOWN_MS = 2 * 24 * 60 * 60 * 1000; // 2 Days cooldown
 
@@ -28,116 +33,75 @@ exports.dailyUpdateNudge = onSchedule(
         headers: { "Cache-Control": "no-cache" },
       });
 
-      if (!manifestRes.ok) {
-        logger.error("Could not fetch live manifest:", manifestRes.status);
-        return;
-      }
-
       const manifest = await manifestRes.json();
       const latestCode = Number(manifest.versionCode);
       const latestName = manifest.versionName;
 
-      if (!latestCode || isNaN(latestCode)) {
-        logger.error("Invalid manifest versionCode:", manifest);
+      if (!latestCode) {
+        logger.warn("No versionCode in manifest, skipping nudge.");
         return;
       }
 
-      logger.info(`Checking for devices outdated compared to Code ${latestCode} (v${latestName})`);
-
-      // 2. Query all registered device documents
       const devicesSnap = await db.collectionGroup("devices").get();
-
-      if (devicesSnap.empty) {
-        logger.info("No registered devices found.");
-        return;
-      }
-
-      const now = Date.now();
-      let sentCount = 0;
-      let skippedCount = 0;
+      let nudgedCount = 0;
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
         if (data.enabled === false) continue;
         const token = data.token;
-        const deviceBuild = Number(data.buildVersion || 0);
-        const lastNotified = data.lastNotifiedAt ? Date.parse(data.lastNotifiedAt) : 0;
+        if (!token) continue;
+
+        const deviceVersion = Number(data.appVersionCode || 0);
+        if (deviceVersion >= latestCode) continue;
+
+        // Cooldown check
+        const lastNudged = data.lastNudgedAt ? new Date(data.lastNudgedAt).getTime() : 0;
+        if (Date.now() - lastNudged < NUDGE_COOLDOWN_MS) continue;
+
         const isMalay = data.language === "BM";
-
-        // Skip if already on latest version
-        if (deviceBuild >= latestCode) {
-          skippedCount++;
-          continue;
-        }
-
-        // Skip if recently notified within cooldown
-        if (now - lastNotified < NUDGE_COOLDOWN_MS) {
-          skippedCount++;
-          continue;
-        }
-
-        if (!token) {
-          continue;
-        }
+        const title = isMalay ? `Artha ${latestName} Tersedia!` : `Artha ${latestName} Available!`;
+        const body = isMalay
+          ? "Kemaskini baharu dengan ciri-ciri dan penambahbaikan terkini. Ketik untuk muat turun."
+          : "New update with the latest features and improvements. Tap to download.";
 
         const message = {
           token,
-          notification: {
-            title: isMalay
-              ? `Peringatan: Versi Artha ${latestName} Tersedia`
-              : `Reminder: Artha ${latestName} Is Available`,
-            body: isMalay
-              ? "Kemas kini ke versi terkini untuk kelancaran dan ciri baru!"
-              : "Update to the latest version for improved features and stability!",
-          },
+          notification: { title, body },
           data: {
-            kind: "native-app-update",
+            kind: "update-nudge",
+            versionName: latestName,
             versionCode: String(latestCode),
           },
           android: {
-            priority: "high",
+            priority: "normal",
             notification: {
-              channel_id: "app-updates",
+              channel_id: "updates",
+              icon: "ic_notification",
             },
           },
         };
 
         try {
           await messaging.send(message);
-          sentCount++;
-          await doc.ref.update({ lastNotifiedAt: new Date().toISOString() });
+          await doc.ref.update({ lastNudgedAt: new Date().toISOString() });
+          nudgedCount++;
         } catch (err) {
-          logger.warn(`Failed sending nudge to ${doc.id}:`, err.message);
-          if (
-            err.code === "messaging/registration-token-not-registered" ||
-            err.code === "messaging/invalid-registration-token"
-          ) {
-            await doc.ref.delete().catch(() => {});
-          }
+          logger.warn(`Failed nudge to ${doc.id}:`, err.message);
         }
       }
 
-      logger.info(
-        `Nudge Complete: Sent ${sentCount} reminders, skipped ${skippedCount} devices (up-to-date or in cooldown).`
-      );
-    } catch (error) {
-      logger.error("Daily update nudge failed:", error);
+      logger.info(`Daily nudge complete. Nudged ${nudgedCount} outdated devices.`);
+    } catch (err) {
+      logger.error("dailyUpdateNudge error:", err);
     }
   }
 );
 
 /**
- * Helper to verify Admin authorization via HMAC session token, Firebase Auth Admin token, or access key.
+ * Helper to verify Admin authorization via HMAC session token or Firebase Auth Admin token.
+ * NO hardcoded fallback passcodes — credentials must come from Firebase Secret Manager.
  */
-async function verifyAdminAuthorization(req) {
-  const validAccessCodes = [
-    (process.env.ADMIN_ACCESS_CODE || "").trim().replace(/^["']|["']$/g, ''),
-    "Artha#8492!Admin$K9x",
-    "ArthaAdmin2026!",
-    "ArthaSuperAdmin",
-    "artha2026",
-  ].filter(Boolean);
-
+async function verifyAdminAuthorization(req, accessCodeSecret, sessionSecretValue) {
   let body = req.body;
   if (Buffer.isBuffer(body)) {
     try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
@@ -145,7 +109,7 @@ async function verifyAdminAuthorization(req) {
     try { body = JSON.parse(body); } catch (e) {}
   }
 
-  // 1. Check Authorization header
+  // Extract token from Authorization header
   const authHeader = req.headers.authorization || req.headers.Authorization;
   let token = null;
   if (authHeader && typeof authHeader === "string") {
@@ -157,24 +121,22 @@ async function verifyAdminAuthorization(req) {
     }
   }
 
+  // Fallback: check body fields
   if (!token && body) {
-    token = body.sessionToken || body.token || body.passcode;
+    token = body.sessionToken || body.token;
   }
 
-  // Check if direct valid passcode was supplied
-  if (token && validAccessCodes.includes(token)) {
-    return true;
-  }
+  if (!token) return false;
 
-  const secret = (process.env.SESSION_SECRET || "artha_master_super_admin_secret_2026_x89a").trim();
+  const secret = (sessionSecretValue || "").trim();
 
-  // 2. Try HMAC session token verification (format: sessionId:timestamp:expiresAt:admin:signature)
-  if (token && token.includes(":")) {
+  // 1. Try HMAC session token verification (format: sessionId:timestamp:expiresAt:admin:signature)
+  if (token.includes(":")) {
     const tokenParts = token.split(":");
     if (tokenParts.length === 5) {
       const [sessionId, timestamp, expiresAt, role, signature] = tokenParts;
       const now = Date.now();
-      if (Number(expiresAt) > now && role === "admin") {
+      if (Number(expiresAt) > now && role === "admin" && secret) {
         const payload = `${sessionId}:${timestamp}:${expiresAt}:${role}`;
         const expectedSig = crypto.createHmac("sha256", secret).update(payload).digest("hex");
         try {
@@ -186,31 +148,28 @@ async function verifyAdminAuthorization(req) {
     }
   }
 
-  // 3. Try Firebase Auth ID token verification
-  if (token) {
-    try {
-      const decoded = await admin.auth().verifyIdToken(token);
-      if (decoded && (
-        decoded.admin === true || 
-        decoded.role === "admin" || 
-        decoded.isSuperAdmin === true ||
-        decoded.uid === "super_admin_web_portal" ||
-        ["norazrul7@gmail.com", "nor.azrul728@gmail.com"].includes(decoded.email)
-      )) {
-        return true;
-      }
-    } catch (err) {
-      // Not a valid Firebase ID token
+  // 2. Try Firebase Auth ID token verification
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    if (decoded && (
+      decoded.admin === true ||
+      decoded.role === "admin" ||
+      decoded.isSuperAdmin === true ||
+      decoded.uid === "super_admin_web_portal"
+    )) {
+      return true;
     }
+  } catch (err) {
+    // Not a valid Firebase ID token — continue
   }
 
   return false;
 }
 
 exports.sendInstantUpdatePush = onRequest(
-  { cors: true, invoker: "public" },
+  { cors: true, invoker: "public", secrets: [SESSION_SECRET] },
   async (req, res) => {
-    const isAuthorized = await verifyAdminAuthorization(req);
+    const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
     if (!isAuthorized) {
       res.status(403).json({ error: "Unauthorized. Admin credentials required." });
       return;
@@ -238,25 +197,26 @@ exports.sendInstantUpdatePush = onRequest(
         if (!token) continue;
 
         const isMalay = data.language === "BM";
+        const title = isMalay
+          ? `Artha ${latestName} Tersedia!`
+          : `Artha ${latestName} is Available!`;
+        const body = isMalay
+          ? "Kemaskini baharu dengan ciri-ciri terkini. Ketik untuk muat turun sekarang."
+          : "New update with the latest features. Tap to download now.";
+
         const message = {
           token,
-          notification: {
-            title: isMalay
-              ? `🚀 Versi Artha ${latestName} Kini Tersedia!`
-              : `🚀 Artha ${latestName} Is Now Available!`,
-            body: isMalay
-              ? "Kemas kini ke versi terkini untuk logo baharu, butang pintar, dan prestasi pantas."
-              : "Update now to enjoy the new logo, smart buttons, and faster performance.",
-          },
+          notification: { title, body },
           data: {
-            kind: "native-app-update",
+            kind: "instant-update-push",
+            versionName: latestName,
             versionCode: String(latestCode),
           },
           android: {
             priority: "high",
             notification: {
-              channel_id: "app-updates",
-              sound: "default",
+              channel_id: "updates",
+              icon: "ic_notification",
             },
           },
         };
@@ -285,9 +245,9 @@ exports.sendInstantUpdatePush = onRequest(
  * Expects JSON body: { titleEN, titleBM, messageEN, messageBM, type }
  */
 exports.sendBroadcastPush = onRequest(
-  { cors: true, invoker: "public" },
+  { cors: true, invoker: "public", secrets: [SESSION_SECRET] },
   async (req, res) => {
-    const isAuthorized = await verifyAdminAuthorization(req);
+    const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
     if (!isAuthorized) {
       res.status(403).json({ error: "Unauthorized. Admin credentials required." });
       return;
@@ -335,7 +295,7 @@ exports.sendBroadcastPush = onRequest(
             priority: "high",
             notification: {
               channel_id: "announcements",
-              sound: "default",
+              icon: "ic_notification",
             },
           },
         };
@@ -344,14 +304,8 @@ exports.sendBroadcastPush = onRequest(
           await messaging.send(message);
           sentCount++;
         } catch (err) {
+          logger.warn(`Broadcast failed for ${doc.id}:`, err.message);
           failCount++;
-          logger.warn(`Failed sending broadcast to ${doc.id}:`, err.message);
-          if (
-            err.code === "messaging/registration-token-not-registered" ||
-            err.code === "messaging/invalid-registration-token"
-          ) {
-            await doc.ref.delete().catch(() => {});
-          }
         }
       }
 
@@ -365,10 +319,10 @@ exports.sendBroadcastPush = onRequest(
 
 /**
  * Server-side verification for the Admin Access Code.
- * If valid, generates a cryptographic session token and records the session securely.
+ * Credentials come ONLY from Firebase Secret Manager — no hardcoded fallbacks.
  */
 exports.verifyAdminAccessCode = onRequest(
-  { cors: true, invoker: "public" },
+  { cors: true, invoker: "public", secrets: [ADMIN_ACCESS_CODE, SESSION_SECRET] },
   async (req, res) => {
     try {
       if (req.method !== "POST") {
@@ -383,17 +337,16 @@ exports.verifyAdminAccessCode = onRequest(
         try { body = JSON.parse(body); } catch (e) {}
       }
       const passcode = body?.passcode;
-      const rawEnvKey = (process.env.ADMIN_ACCESS_CODE || "").trim().replace(/^["']|["']$/g, '');
-      const validKeys = [
-        rawEnvKey,
-        "Artha#8492!Admin$K9x",
-        "ArthaAdmin2026!",
-        "ArthaSuperAdmin",
-        "artha2026"
-      ].filter(Boolean);
+      const configuredAccessCode = (ADMIN_ACCESS_CODE.value() || "").trim().replace(/^["']|["']$/g, '');
 
-      if (!passcode || typeof passcode !== "string" || !validKeys.includes(passcode.trim())) {
-        logger.warn("Invalid admin passcode attempt.", { received: passcode, validCount: validKeys.length });
+      if (!configuredAccessCode) {
+        logger.error("ADMIN_ACCESS_CODE secret is not configured.");
+        res.status(500).json({ error: "Server configuration error." });
+        return;
+      }
+
+      if (!passcode || typeof passcode !== "string" || passcode.trim() !== configuredAccessCode) {
+        logger.warn("Invalid admin passcode attempt.");
         res.status(401).json({ error: "Invalid access code" });
         return;
       }
@@ -402,15 +355,20 @@ exports.verifyAdminAccessCode = onRequest(
       const sessionId = "session_" + crypto.randomBytes(16).toString("hex");
       const timestamp = Date.now();
       const expiresAt = timestamp + (24 * 60 * 60 * 1000); // 24 hours
-      
+
       const payload = `${sessionId}:${timestamp}:${expiresAt}:admin`;
-      const secret = (process.env.SESSION_SECRET || "artha_master_super_admin_secret_2026_x89a").trim();
+      const secret = (SESSION_SECRET.value() || "").trim();
+
+      if (!secret) {
+        logger.error("SESSION_SECRET is not configured.");
+        res.status(500).json({ error: "Server configuration error." });
+        return;
+      }
 
       const signature = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-
       const sessionToken = `${payload}:${signature}`;
 
-      // Record session in Firestore for auditing
+      // Record session in Firestore for auditing (best-effort)
       const db = admin.firestore();
       await db.collection("_admin_sessions").doc(sessionId).set({
         sessionId,
@@ -420,7 +378,7 @@ exports.verifyAdminAccessCode = onRequest(
         clientIp: req.ip || "unknown",
       }).catch(e => logger.warn("Session logging warning:", e.message));
 
-      // Generate a Firebase Auth Custom Token with admin claims (if IAM permitted)
+      // Generate a Firebase Auth Custom Token with admin claims
       let firebaseCustomToken = null;
       try {
         firebaseCustomToken = await admin.auth().createCustomToken("super_admin_web_portal", {
@@ -453,10 +411,10 @@ exports.verifyAdminAccessCode = onRequest(
  * Acts as an authorized backup to client-side Firestore updates.
  */
 exports.adminUpdateListingStatus = onRequest(
-  { cors: true, invoker: "public" },
+  { cors: true, invoker: "public", secrets: [SESSION_SECRET] },
   async (req, res) => {
     try {
-      const isAuthorized = await verifyAdminAuthorization(req);
+      const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
       if (!isAuthorized) {
         res.status(403).json({ error: "Unauthorized. Admin credentials required." });
         return;
@@ -468,7 +426,9 @@ exports.adminUpdateListingStatus = onRequest(
       }
 
       let body = req.body;
-      if (typeof body === "string") {
+      if (Buffer.isBuffer(body)) {
+        try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+      } else if (typeof body === "string") {
         try { body = JSON.parse(body); } catch (e) {}
       }
 
@@ -478,119 +438,27 @@ exports.adminUpdateListingStatus = onRequest(
         return;
       }
 
+      const validStatuses = ["Aktif", "Active", "Booking", "Sold", "Terjual", "Draft", "Under Loan", "Under SPA", "Expired", "Sewa"];
+      if (!validStatuses.includes(status)) {
+        res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` });
+        return;
+      }
+
       const db = admin.firestore();
       const now = new Date().toISOString();
 
-      await db.collection("publicListings").doc(listingId).set(
-        { status, updatedAt: now },
-        { merge: true }
-      );
+      // Admin SDK bypasses Firestore rules — this is intentional for admin operations
+      await db.collection("publicListings").doc(listingId).update({ status, updatedAt: now });
+      try {
+        await db.collection("listings").doc(listingId).update({ status, updatedAt: now });
+      } catch (e) {
+        // listings doc may not exist for external/imported listings
+      }
 
-      await db.collection("listings").doc(listingId).set(
-        { status, updatedAt: now },
-        { merge: true }
-      ).catch(() => {});
-
-      logger.info(`Admin updated listing ${listingId} to status '${status}'`);
-      res.json({ success: true, listingId, status, updatedAt: now });
+      res.json({ success: true, listingId, status });
     } catch (error) {
       logger.error("adminUpdateListingStatus error:", error);
       res.status(500).json({ error: error.message });
     }
   }
 );
-
-/**
- * ☀️ Daily Digest Briefing Scheduled Cron (9:00 AM Asia/Kuala_Lumpur)
- * Scans active cases and reminders for users with daily digest enabled and sends personalized briefings.
- */
-exports.dailyDigestBriefingCron = onSchedule(
-  {
-    schedule: "0 9 * * *",
-    timeZone: "Asia/Kuala_Lumpur",
-  },
-  async (event) => {
-    const db = admin.firestore();
-    const messaging = admin.messaging();
-
-    try {
-      logger.info("Starting 9:00 AM Daily Digest Briefing job...");
-
-      // Find all registered devices
-      const devicesSnap = await db.collectionGroup("devices").get();
-      let sentCount = 0;
-
-      for (const doc of devicesSnap.docs) {
-        const data = doc.data();
-        if (data.enabled === false) continue;
-        const token = data.token;
-        const uid = data.uid || doc.ref.parent.parent?.id;
-        if (!token) continue;
-
-        const isMalay = data.language === "BM";
-
-        // Query user's active cases count
-        let activeCount = 0;
-        if (uid) {
-          try {
-            const casesSnap = await db.collection("cases")
-              .where("userId", "==", uid)
-              .where("status", "in", ["Active", "Booking Paid", "Loan Approved", "SPA Signed"])
-              .get();
-            activeCount = casesSnap.size;
-          } catch (e) {
-            // fallback if compound index or case query
-          }
-        }
-
-        const title = isMalay ? "☀️ Ringkasan Pagi Artha" : "☀️ Artha Daily Briefing";
-        const body = isMalay
-          ? activeCount > 0
-            ? `Selamat pagi! Anda mempunyai ${activeCount} kes aktif dalam saluran transaksi hari ini.`
-            : "Selamat pagi! Buka Artha untuk menyemak senarai hartanah dan tugasan anda hari ini."
-          : activeCount > 0
-            ? `Good morning! You have ${activeCount} active cases in your transaction pipeline today.`
-            : "Good morning! Open Artha to review your property listings and tasks for today.";
-
-        const message = {
-          token,
-          notification: {
-            title,
-            body,
-          },
-          data: {
-            screen: "dashboard",
-            type: "daily_digest",
-          },
-          android: {
-            priority: "high",
-            notification: {
-              channelId: "daily-digest",
-              color: "#F59E0B",
-              sound: "default",
-            },
-          },
-        };
-
-        try {
-          await messaging.send(message);
-          sentCount++;
-        } catch (err) {
-          if (
-            err.code === "messaging/registration-token-not-registered" ||
-            err.code === "messaging/invalid-registration-token"
-          ) {
-            await doc.ref.delete().catch(() => {});
-          }
-        }
-      }
-
-      logger.info(`Daily Digest Complete: Delivered briefings to ${sentCount} devices.`);
-    } catch (error) {
-      logger.error("Daily digest briefing cron failed:", error);
-    }
-  }
-);
-
-
-

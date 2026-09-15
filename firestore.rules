@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isAuthed() {
       return request.auth != null;
     }
@@ -10,8 +11,7 @@ service cloud.firestore {
         request.auth.token.role == 'admin' ||
         request.auth.token.admin == true ||
         request.auth.token.isSuperAdmin == true ||
-        request.auth.token.email in ['norazrul7@gmail.com', 'nor.azrul728@gmail.com'] ||
-        request.auth.uid in ['super_admin_web_portal', 'admin_super_portal'] ||
+        request.auth.uid == 'super_admin_web_portal' ||
         (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
@@ -28,136 +28,165 @@ service cloud.firestore {
 
     function hasValidListingStatus() {
       return request.resource.data.status in [
-        'Aktif',
-        'Active',
-        'Booking',
-        'Sold',
-        'Terjual',
-        'Draft',
-        'Under Loan',
-        'Under SPA',
-        'Expired',
-        'Sewa'
+        'Aktif', 'Active', 'Booking', 'Sold', 'Terjual',
+        'Draft', 'Under Loan', 'Under SPA', 'Expired', 'Sewa'
       ];
     }
 
-    // 👤 User Profiles & Directory
+    // ─────────────────────────────────────────────
+    // 👤 User Profiles & Agent Directory
+    // ─────────────────────────────────────────────
     match /users/{userId} {
-      // Allow reading agent profiles for public listings, app operations, and web admin directory
-      allow read: if true;
-      
-      // Registration: Authenticated user creating their own document (cannot self-assign admin role unless admin)
+      // Any authenticated agent can read profiles (needed for listings, co-broke, directory)
+      allow read: if isAuthed();
+
+      // Registration: user creates their own doc; cannot self-assign admin role
       allow create: if isAuthed() && (
         (request.auth.uid == userId && (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin())) ||
         isAdmin()
       );
 
-      // Update: User can update their own profile; Admins / Web Portal can approve, suspend, change role
+      // Update: user edits own profile (no role/approved/status changes); admins can change anything
       allow update: if isAuthed() && (
         isAdmin() || (
           request.auth.uid == userId &&
-          (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin())
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'approved', 'status'])
         )
       );
 
-      // Deletion: Admin only or user cleanup
-      allow delete: if isAuthed() || isAdmin();
+      // Delete: admin only (prevents agents from deleting each other's accounts)
+      allow delete: if isAdmin();
 
-      // Push registrations for update notifications
+      // Push notification device tokens
       match /devices/{deviceId} {
-        allow read, write: if isAuthed() || isAdmin();
+        allow read, write: if isAuthed() && (request.auth.uid == userId || isAdmin());
       }
     }
 
-    // 🔑 Invite Codes (Registration & Batch System)
+    // ─────────────────────────────────────────────
+    // 🔑 Invite Codes (Registration Gate)
+    // ─────────────────────────────────────────────
     match /invite_codes/{code} {
-      // Unauthenticated read is required because registration validates invite code before/during signup
+      // Public read: registration validates invite code BEFORE Firebase Auth account exists
       allow read: if true;
-      // Agents can update status to 'USED'; Admins & Web Portal can create, edit, or delete codes
+      // Update: agents claim codes (status → USED) during registration; admins manage all
       allow update: if true;
-      allow create, delete: if isAuthed() || isAdmin();
+      // Create/delete: require authentication (web admin portal signs in via custom token)
+      allow create, delete: if isAuthed();
     }
 
     match /inviteCodes/{code} {
       allow read: if true;
       allow update: if true;
-      allow create, delete: if isAuthed() || isAdmin();
+      allow create, delete: if isAuthed();
     }
 
-    // 📢 System Announcements & Bulletins
+    // ─────────────────────────────────────────────
+    // 📢 Announcements & Bulletins
+    // ─────────────────────────────────────────────
     match /announcements/{annId} {
-      allow read: if true;
-      allow write: if isAuthed() || isAdmin();
+      // Authenticated agents can read the feed
+      allow read: if isAuthed();
+      // Only admins (incl. web portal custom-token user) can broadcast
+      allow write: if isAdmin();
     }
 
+    // ─────────────────────────────────────────────
     // 🐛 Feedback & Bug Reports
+    // ─────────────────────────────────────────────
     match /feedback/{docId} {
-      allow create: if isAuthed();
-      allow read, update, delete: if isAuthed() || isAdmin();
+      // Agents submit their own reports
+      allow create: if isAuthed() &&
+        (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid);
+
+      // Agents read/delete only their own tickets; admins see all
+      allow read, delete: if isAuthed() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.userEmail == request.auth.token.email ||
+        isAdmin()
+      );
+
+      // Only admins update status / adminResponse
+      allow update: if isAdmin();
     }
 
-    // 📍 Location Knowledge Base (Self-learning geocoding cache)
+    // ─────────────────────────────────────────────
+    // 📍 Location Knowledge Base (geocoding cache)
+    // ─────────────────────────────────────────────
     match /locationKnowledgeBase/{docId} {
-      allow read, write: if isAuthed();
+      allow read, create, update: if isAuthed();
+      allow delete: if isAdmin();
     }
 
-    // 💼 Property Cases (Deal & Pipeline Management)
+    // ─────────────────────────────────────────────
+    // 💼 Property Cases (Deal Pipeline)
+    // ─────────────────────────────────────────────
     match /cases/{caseId} {
-      // Reads and deletes: existing document must belong to caller or admin
-      allow read, delete: if isAuthed()
-        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, delete: if isAuthed() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
 
-      // Creates: new document must claim caller's UID as owner (or admin creating for an agent)
-      allow create: if isAuthed()
-        && (request.resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthed() &&
+        (request.resource.data.userId == request.auth.uid || isAdmin());
 
-      // Updates: existing document must belong to caller (or admin)
-      allow update: if isAuthed()
-        && ((resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) || isAdmin());
+      allow update: if isAuthed() && (
+        (resource.data.userId == request.auth.uid &&
+         request.resource.data.userId == request.auth.uid) ||
+        isAdmin()
+      );
     }
 
-    // 🏠 Property Listings (Private Details & Documents)
+    // ─────────────────────────────────────────────
+    // 🏠 Private Listings (owner IC / documents)
+    // ─────────────────────────────────────────────
     match /listings/{listingId} {
       allow read: if isListingOwner(resource.data) || isAdmin();
-      allow create: if isAuthed()
-        && (isListingOwner(request.resource.data) || isAdmin())
-        && hasValidListingStatus();
-      allow update: if isAuthed()
-        && (
-          (isListingOwner(resource.data) && isListingOwner(request.resource.data)) ||
-          isAdmin()
-        )
-        && hasValidListingStatus();
+      allow create: if isAuthed() &&
+        (isListingOwner(request.resource.data) || isAdmin()) &&
+        hasValidListingStatus();
+      allow update: if isAuthed() && (
+        (isListingOwner(resource.data) && isListingOwner(request.resource.data)) ||
+        isAdmin()
+      ) && hasValidListingStatus();
       allow delete: if isAuthed() && (isListingOwner(resource.data) || isAdmin());
     }
 
-    // 🌐 Public Listings (Safe projection for co-broking and marketplace)
+    // ─────────────────────────────────────────────
+    // 🌐 Public Listings (co-broking feed)
+    // ─────────────────────────────────────────────
     match /publicListings/{listingId} {
-      allow read: if true;
-      allow create: if isAuthed()
-        && (request.resource.data.agentId == request.auth.uid || isAdmin());
+      // Authenticated agents only — not fully public
+      allow read: if isAuthed();
+      allow create: if isAuthed() &&
+        (request.resource.data.agentId == request.auth.uid || isAdmin());
       allow update: if (
-          isAuthed() && (
-            (resource.data.agentId == request.auth.uid && request.resource.data.agentId == request.auth.uid) ||
-            isAdmin()
-          )
-        ) || (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
-          hasValidListingStatus()
-        );
-      allow delete: if isAuthed()
-        && (resource.data.agentId == request.auth.uid || isAdmin());
+        isAuthed() && (
+          (resource.data.agentId == request.auth.uid &&
+           request.resource.data.agentId == request.auth.uid) ||
+          isAdmin()
+        )
+      ) || (
+        // Allow status-only updates (e.g. admin endpoint via Admin SDK bypasses rules anyway)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
+        hasValidListingStatus()
+      );
+      allow delete: if isAuthed() && (resource.data.agentId == request.auth.uid || isAdmin());
     }
 
-    // 🚀 App Release Notifications Bookkeeping
+    // ─────────────────────────────────────────────
+    // 🚀 App Release Notifications
+    // ─────────────────────────────────────────────
     match /appReleaseNotifications/{releaseId} {
-      allow read: if true;
-      allow write: if isAuthed() || isAdmin();
+      allow read: if isAuthed();
+      allow write: if isAdmin();
     }
 
-    // 🔒 Admin Session Audits
+    // ─────────────────────────────────────────────
+    // 🔒 Admin Session Audit Log
+    // ─────────────────────────────────────────────
     match /_admin_sessions/{sessionId} {
-      allow read, write: if true;
+      // Written by Cloud Function (Admin SDK — bypasses rules)
+      // Client reads blocked; no need for client access
+      allow read, write: if false;
     }
   }
 }

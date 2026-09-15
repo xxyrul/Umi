@@ -746,22 +746,24 @@ async function handleBroadcastAnnouncement() {
 
     try {
       const pushUrl = "https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app";
-      const token = sessionStorage.getItem('artha_admin_session_token') || 'artha2026';
-      await fetch(pushUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify({
-          titleEN: newAnn.titleEN,
-          titleBM: newAnn.titleBM,
-          messageEN: newAnn.messageEN,
-          messageBM: newAnn.messageBM,
-          type: type,
-          sessionToken: token
-        }),
-      });
+      const token = sessionStorage.getItem('artha_admin_session_token');
+      if (token) {
+        await fetch(pushUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            titleEN: newAnn.titleEN,
+            titleBM: newAnn.titleBM,
+            messageEN: newAnn.messageEN,
+            messageBM: newAnn.messageBM,
+            type: type,
+            sessionToken: token
+          }),
+        });
+      }
     } catch (pushErr) {
       console.warn("[Broadcast] FCM push error:", pushErr);
     }
@@ -1068,17 +1070,19 @@ async function handleQuickStatusChange(listingId, newStatus) {
 
     // 1. Try server-side admin endpoint (bypasses rules using Admin SDK)
     try {
-      const token = sessionStorage.getItem('artha_admin_session_token') || 'artha2026';
-      const res = await fetch('https://us-central1-umiren-d6a66.cloudfunctions.net/adminUpdateListingStatus', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + token
-        },
-        body: JSON.stringify({ listingId, status: newStatus, sessionToken: token })
-      });
-      if (res.ok) {
-        updated = true;
+      const token = sessionStorage.getItem('artha_admin_session_token');
+      if (token) {
+        const res = await fetch('https://us-central1-umiren-d6a66.cloudfunctions.net/adminUpdateListingStatus', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ listingId, status: newStatus, sessionToken: token })
+        });
+        if (res.ok) {
+          updated = true;
+        }
       }
     } catch(fetchErr) {
       console.warn("Direct function endpoint warning, attempting client SDK:", fetchErr);
