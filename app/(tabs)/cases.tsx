@@ -19,7 +19,7 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import * as Haptics from "expo-haptics";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -124,7 +124,14 @@ export default function CasesScreen() {
   const [showFullHistory, setShowFullHistory] = useState(false);
 
   // Reanimated 60FPS UI-thread auto-hide FAB synced with floating bar
-  const { barTranslateY, scrollHandler } = useScrollAwareBar();
+  const { barTranslateY, scrollHandler, showBar } = useScrollAwareBar();
+
+  useFocusEffect(
+    React.useCallback(() => {
+      showBar();
+    }, [showBar])
+  );
+
   const animatedFabStyle = useAnimatedStyle(() => {
     const translateY = barTranslateY ? barTranslateY.value : 0;
     const opacity = interpolate(translateY, [0, 60], [1, 0], Extrapolation.CLAMP);
@@ -258,6 +265,11 @@ export default function CasesScreen() {
     // Attach immediately
     attachListener();
 
+    // Listen to Firebase Auth state changes so listener is bound as soon as user initializes on cold start
+    const unsubAuth = auth().onAuthStateChanged((user) => {
+      attachListener();
+    });
+
     // Pause listener when backgrounded to prevent battery drain
     const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
       if (nextAppState === "active") {
@@ -269,6 +281,7 @@ export default function CasesScreen() {
 
     return () => {
       detachListener();
+      unsubAuth();
       subscription.remove();
     };
   }, []);

@@ -32,6 +32,7 @@ import { getCurrentUserProfile, getUserInitials } from "@/services/auth";
 import type { PropertyCase, UserProfile } from "@/types/case";
 import type { PropertyListing } from "@/types/listing";
 import { useAppSettings } from "@/context/AppSettingsContext";
+import { useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 
 const currentYear = new Date().getFullYear();
 const AVAILABLE_YEARS = [String(currentYear - 2), String(currentYear - 1), String(currentYear), String(currentYear + 1)];
@@ -39,6 +40,7 @@ const AVAILABLE_YEARS = [String(currentYear - 2), String(currentYear - 1), Strin
 export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const { themeColors, t, language } = useAppSettings();
+  const { showBar } = useScrollAwareBar();
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [metrics, setMetrics] = useState({ totalCases: 0, aktif: 0, booking: 0, underLoan: 0, underSpa: 0, sold: 0, expired: 0 });
@@ -126,8 +128,14 @@ export default function DashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      showBar();
       fetchMetricsData();
-    }, [])
+      updateUnreadCount();
+      const profile = getCurrentUserProfile();
+      if (profile) {
+        setUserProfile(profile);
+      }
+    }, [showBar, updateUnreadCount])
   );
 
   // Fetch Firestore Listings and Cases in Realtime

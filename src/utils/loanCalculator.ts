@@ -10,17 +10,28 @@ export interface LoanCalculationResult {
   valuationFee: number;
   totalUpfront: number;
   recommendedIncome: number;
+  // Insurance additions
+  mrttEstimate: number;
+  fireInsuranceAnnual: number;
+  fireInsuranceMonthly: number;
+  isInsuranceFinanced: boolean;
+  effectiveLoanAmount: number;
+  monthlyInstallmentWithInsurance: number;
+  totalUpfrontWithInsurance: number;
 }
 
 /**
- * Calculates standard Malaysian housing loan monthly installment and entry fees.
+ * Calculates standard Malaysian housing loan monthly installment, entry fees, and insurance (MRTT/Fire).
  */
 export function calculateMortgage(
   price: number,
   downPaymentPercent: number = 10,
   interestRateAnnual: number = 4.2,
   tenureYears: number = 30,
-  isFirstHomeBuyer: boolean = false
+  isFirstHomeBuyer: boolean = false,
+  borrowerAge: number = 30,
+  includeInsurance: boolean = true,
+  financeMrtt: boolean = true
 ): LoanCalculationResult {
   if (!price || price <= 0) {
     return {
@@ -35,6 +46,13 @@ export function calculateMortgage(
       valuationFee: 0,
       totalUpfront: 0,
       recommendedIncome: 0,
+      mrttEstimate: 0,
+      fireInsuranceAnnual: 0,
+      fireInsuranceMonthly: 0,
+      isInsuranceFinanced: financeMrtt,
+      effectiveLoanAmount: 0,
+      monthlyInstallmentWithInsurance: 0,
+      totalUpfrontWithInsurance: 0,
     };
   }
 
@@ -86,11 +104,43 @@ export function calculateMortgage(
   // Bank Valuation Fee estimation
   const valuationFee = Math.round(Math.max(1000, price * 0.003));
 
-  // Total Initial Cash Required = Downpayment + Stamp Duty + Legal Fees + Valuation
+  // Base Total Initial Cash Required = Downpayment + Stamp Duty + Legal Fees + Valuation
   const totalUpfront = downPaymentAmount + stampDuty + legalFees + valuationFee;
 
   // Recommended Min. Net Household Income (assume 60% DSR)
   const recommendedIncome = Math.round(monthlyInstallment / 0.60);
+
+  // --- INSURANCE CALCULATIONS ---
+  // MRTT / MRTA Estimation:
+  // Base rate scaled by borrower age and loan tenure (approx 1.2% to 3.2% of loan amount)
+  const clampedAge = Math.min(65, Math.max(20, borrowerAge));
+  const ageFactor = 0.012 + Math.max(0, clampedAge - 25) * 0.0009;
+  const tenureFactor = Math.max(0.5, tenureYears / 30);
+  const mrttRate = ageFactor * tenureFactor;
+  const mrttEstimate = includeInsurance && loanAmount > 0 ? Math.round(loanAmount * mrttRate) : 0;
+
+  // Houseowner / Fire Insurance (Tarif standard BNM ~0.115% per annum of property value)
+  const fireInsuranceAnnual = includeInsurance && price > 0 ? Math.round(price * 0.00115) : 0;
+  const fireInsuranceMonthly = Math.round(fireInsuranceAnnual / 12);
+
+  // Effective loan amount if MRTT is financed into mortgage
+  const isInsuranceFinanced = includeInsurance && financeMrtt;
+  const effectiveLoanAmount = isInsuranceFinanced ? loanAmount + mrttEstimate : loanAmount;
+
+  let monthlyInstallmentWithInsurance = monthlyInstallment;
+  if (isInsuranceFinanced && monthlyRate > 0 && totalMonths > 0) {
+    monthlyInstallmentWithInsurance = Math.round(
+      (effectiveLoanAmount * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths))) /
+        (Math.pow(1 + monthlyRate, totalMonths) - 1)
+    );
+  }
+
+  // Total Upfront Cash with insurance considerations
+  // If MRTT is financed: upfront only includes cash downpayment, stamp duty, legal, valuation (+ optional 1st yr fire ins)
+  // If MRTT is paid cash upfront: includes mrttEstimate + 1st yr fire ins
+  const totalUpfrontWithInsurance = isInsuranceFinanced
+    ? totalUpfront + fireInsuranceAnnual
+    : totalUpfront + mrttEstimate + fireInsuranceAnnual;
 
   return {
     monthlyInstallment,
@@ -104,6 +154,13 @@ export function calculateMortgage(
     valuationFee,
     totalUpfront,
     recommendedIncome,
+    mrttEstimate,
+    fireInsuranceAnnual,
+    fireInsuranceMonthly,
+    isInsuranceFinanced,
+    effectiveLoanAmount,
+    monthlyInstallmentWithInsurance,
+    totalUpfrontWithInsurance,
   };
 }
 

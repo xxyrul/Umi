@@ -43,6 +43,7 @@ import Animated, {
 
 import type { PeganganType, LotStatusType, PropertyLocation, PropertyListing } from "@/types/listing";
 import { createPropertyListing, updatePropertyListing } from "@/services/storage";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { compressImage } from "@/utils/imageUtils";
 import { detectMalaysianState } from "@/utils/locationDetector";
 import { resolveLocationWithGoogleLearning, initLearnedLocationCache } from "@/services/learningLocationService";
@@ -777,10 +778,18 @@ export default function TambahScreen() {
       };
       if (isEditMode && editId) {
         await updatePropertyListing(editId, listingData, files, onProgress);
-        Alert.alert(t("listingUpdated") || "Updated", `"${tajuk}"`, [{ text: t("goToListing") || "OK", onPress: () => { resetForm(); router.replace("/(tabs)/listings"); } }]);
+        Alert.alert(t("listingUpdated") || "Updated", `"${tajuk}"`, [{ text: t("goToListing") || "OK", onPress: async () => {
+          await AsyncStorage.setItem("@artha_new_listing_added", "true").catch(() => {});
+          resetForm();
+          router.replace("/(tabs)/listings");
+        } }]);
       } else {
         await createPropertyListing(listingData, files, onProgress);
-        Alert.alert(t("listingSaved") || "Saved", `"${tajuk}"`, [{ text: t("goToListing") || "OK", onPress: () => { resetForm(); router.replace("/(tabs)/listings"); } }]);
+        Alert.alert(t("listingSaved") || "Saved", `"${tajuk}"`, [{ text: t("goToListing") || "OK", onPress: async () => {
+          await AsyncStorage.setItem("@artha_new_listing_added", "true").catch(() => {});
+          resetForm();
+          router.replace("/(tabs)/listings");
+        } }]);
       }
     } catch (error: any) {
       Alert.alert(t("saveFailed") || "Failed", error?.message || t("errorTitle"));

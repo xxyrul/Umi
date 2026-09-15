@@ -95,6 +95,15 @@ function CustomFloatingTabBar({ state, descriptors, navigation }: any) {
     }
   }, [activeIndex, barWidth]);
 
+  // Automatically restore floating bar whenever active tab changes or user returns via back gesture
+  useEffect(() => {
+    barTranslateY.value = withSpring(0, {
+      damping: 20,
+      stiffness: 180,
+      mass: 0.8,
+    });
+  }, [state.index]);
+
   // Clean UI-thread translateY without double-spring wrapping
   const animatedBarStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: barTranslateY.value }],

@@ -41,6 +41,9 @@ export default function CalculatorScreen() {
   const [loanTenure, setLoanTenure] = useState<number>(30);
   const [interestRate, setInterestRate] = useState<number>(4.2);
   const [isFirstHomeBuyer, setIsFirstHomeBuyer] = useState<boolean>(true);
+  const [includeInsurance, setIncludeInsurance] = useState<boolean>(true);
+  const [financeMrtt, setFinanceMrtt] = useState<boolean>(true);
+  const [borrowerAge, setBorrowerAge] = useState<number>(30);
   const [copiedToast, setCopiedToast] = useState(false);
 
   useEffect(() => {
@@ -59,8 +62,17 @@ export default function CalculatorScreen() {
   }, [propertyPrice]);
 
   const mortgageEstimate = useMemo(() => {
-    return calculateMortgage(parsedPrice, downPaymentPercent, interestRate, loanTenure, isFirstHomeBuyer);
-  }, [parsedPrice, downPaymentPercent, interestRate, loanTenure, isFirstHomeBuyer]);
+    return calculateMortgage(
+      parsedPrice,
+      downPaymentPercent,
+      interestRate,
+      loanTenure,
+      isFirstHomeBuyer,
+      borrowerAge,
+      includeInsurance,
+      financeMrtt
+    );
+  }, [parsedPrice, downPaymentPercent, interestRate, loanTenure, isFirstHomeBuyer, borrowerAge, includeInsurance, financeMrtt]);
 
   // DSR Calculator State
   const [showSixMonthHelper, setShowSixMonthHelper] = useState(false);
@@ -170,19 +182,29 @@ export default function CalculatorScreen() {
   };
 
   const handleCopyMortgage = async () => {
+    const installmentDisplay = mortgageEstimate.isInsuranceFinanced
+      ? `${mortgageEstimate.monthlyInstallmentWithInsurance.toLocaleString()} (Termasuk MRTT)`
+      : `${mortgageEstimate.monthlyInstallment.toLocaleString()}`;
+
+    const insuranceUpfrontText = includeInsurance
+      ? `- Insurans Kebakaran (1 Thn): RM ${mortgageEstimate.fireInsuranceAnnual.toLocaleString()}\n` +
+        (!financeMrtt ? `- MRTT/MRTA (Tunai): RM ${mortgageEstimate.mrttEstimate.toLocaleString()}\n` : `- MRTT/MRTA: RM ${mortgageEstimate.mrttEstimate.toLocaleString()} (Dibiayai dlm Pinjaman)\n`)
+      : "";
+
     const text =
       `🏡 *Anggaran Pinjaman Hartanah*\n` +
       `Harga Rumah: RM ${parsedPrice.toLocaleString()}\n` +
       `Deposit (${downPaymentPercent}%): RM ${mortgageEstimate.downPaymentAmount.toLocaleString()}\n` +
-      `Pinjaman: RM ${mortgageEstimate.loanAmount.toLocaleString()} (${loanTenure} Tahun @ ${interestRate}%)\n` +
+      `Pinjaman: RM ${mortgageEstimate.effectiveLoanAmount.toLocaleString()} (${loanTenure} Tahun @ ${interestRate}%)\n` +
       `---------------------------------\n` +
-      `💰 *Ansuran Bulanan: RM ${mortgageEstimate.monthlyInstallment.toLocaleString()} /bulan*\n` +
+      `💰 *Ansuran Bulanan: RM ${installmentDisplay} /bulan*\n` +
       `---------------------------------\n` +
       `📋 *Kos Permulaan (Entry Costs):*\n` +
       `- Duti Setem MOT: RM ${mortgageEstimate.stampDuty.toLocaleString()}${isFirstHomeBuyer && parsedPrice <= 500000 ? " (Pengecualian 100%)" : ""}\n` +
       `- Yuran Guaman: RM ${mortgageEstimate.legalFees.toLocaleString()}\n` +
       `- Yuran Penilaian: RM ${mortgageEstimate.valuationFee.toLocaleString()}\n` +
-      `💵 *Jumlah Tunai Diperlukan: RM ${mortgageEstimate.totalUpfront.toLocaleString()}*\n\n` +
+      insuranceUpfrontText +
+      `💵 *Jumlah Tunai Diperlukan: RM ${mortgageEstimate.totalUpfrontWithInsurance.toLocaleString()}*\n\n` +
       `🎯 *Gaji Bersih Minima Diperlukan:* RM ${mortgageEstimate.recommendedIncome.toLocaleString()} /bulan`;
 
     await Clipboard.setStringAsync(text);
@@ -192,18 +214,28 @@ export default function CalculatorScreen() {
   };
 
   const handleShareMortgageWhatsApp = () => {
+    const installmentDisplay = mortgageEstimate.isInsuranceFinanced
+      ? `RM ${mortgageEstimate.monthlyInstallmentWithInsurance.toLocaleString()} /bulan (Termasuk Finansial MRTT)`
+      : `RM ${mortgageEstimate.monthlyInstallment.toLocaleString()} /bulan`;
+
+    const insuranceUpfrontText = includeInsurance
+      ? `- Insurans Kebakaran (1 Thn): RM ${mortgageEstimate.fireInsuranceAnnual.toLocaleString()}\n` +
+        (!financeMrtt ? `- MRTT/MRTA (Tunai): RM ${mortgageEstimate.mrttEstimate.toLocaleString()}\n` : `- MRTT/MRTA: RM ${mortgageEstimate.mrttEstimate.toLocaleString()} (Dibiayai dlm Pinjaman)\n`)
+      : "";
+
     const text =
       `*Anggaran Pinjaman Hartanah*\n\n` +
       `Harga Rumah: RM ${parsedPrice.toLocaleString()}\n` +
       `Deposit (${downPaymentPercent}%): RM ${mortgageEstimate.downPaymentAmount.toLocaleString()}\n` +
-      `Jumlah Pinjaman: RM ${mortgageEstimate.loanAmount.toLocaleString()}\n` +
+      `Jumlah Pinjaman: RM ${mortgageEstimate.effectiveLoanAmount.toLocaleString()}\n` +
       `Tempoh: ${loanTenure} Tahun | Kadar: ${interestRate}%\n\n` +
-      `*Ansuran Bulanan:* RM ${mortgageEstimate.monthlyInstallment.toLocaleString()} /bulan\n\n` +
+      `*Ansuran Bulanan:* ${installmentDisplay}\n\n` +
       `*Kos Permulaan (Entry Cost):*\n` +
       `- Duti Setem MOT: RM ${mortgageEstimate.stampDuty.toLocaleString()}${isFirstHomeBuyer && parsedPrice <= 500000 ? " (Pengecualian 100%)" : ""}\n` +
       `- Yuran Guaman: RM ${mortgageEstimate.legalFees.toLocaleString()}\n` +
       `- Yuran Penilaian: RM ${mortgageEstimate.valuationFee.toLocaleString()}\n` +
-      `*Jumlah Tunai Diperlukan:* RM ${mortgageEstimate.totalUpfront.toLocaleString()}\n\n` +
+      insuranceUpfrontText +
+      `*Jumlah Tunai Diperlukan:* RM ${mortgageEstimate.totalUpfrontWithInsurance.toLocaleString()}\n\n` +
       `*Kelayakan Gaji Bersih Minima (DSR 60%):* RM ${mortgageEstimate.recommendedIncome.toLocaleString()} /bulan`;
 
     const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
@@ -417,7 +449,7 @@ export default function CalculatorScreen() {
                   letterSpacing: -0.5,
                 }}
               >
-                RM {mortgageEstimate.monthlyInstallment.toLocaleString()}
+                RM {mortgageEstimate.monthlyInstallmentWithInsurance.toLocaleString()}
                 <Text style={{ fontSize: 14, fontWeight: "600", color: themeColors.textSecondary }}>
                   {" "}
                   / {isBM ? "bulan" : "month"}
@@ -431,8 +463,8 @@ export default function CalculatorScreen() {
                 }}
               >
                 {isBM
-                  ? `Pinjaman: RM ${mortgageEstimate.loanAmount.toLocaleString()} (${100 - downPaymentPercent}% Pembiayaan)`
-                  : `Loan: RM ${mortgageEstimate.loanAmount.toLocaleString()} (${100 - downPaymentPercent}% Financing)`}
+                  ? `Pinjaman: RM ${mortgageEstimate.effectiveLoanAmount.toLocaleString()} (${100 - downPaymentPercent}% Pembiayaan${mortgageEstimate.isInsuranceFinanced && mortgageEstimate.mrttEstimate > 0 ? " + Finansial MRTT" : ""})`
+                  : `Loan: RM ${mortgageEstimate.effectiveLoanAmount.toLocaleString()} (${100 - downPaymentPercent}% Financing${mortgageEstimate.isInsuranceFinanced && mortgageEstimate.mrttEstimate > 0 ? " + MRTT Financed" : ""})`}
               </Text>
             </View>
 
@@ -666,6 +698,206 @@ export default function CalculatorScreen() {
               </View>
             </View>
 
+            {/* Insurance & Takaful (MRTT / Fire) Card */}
+            <View
+              style={{
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 12,
+              }}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {isBM ? "Insurans & Takaful Pinjaman" : "Loan Insurance & Takaful"}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 2 }}>
+                    {isBM
+                      ? "Anggaran MRTT (Hayat) & Insurans Kebakaran"
+                      : "Estimated MRTT (Life) & Fire Insurance"}
+                  </Text>
+                </View>
+                <Switch
+                  value={includeInsurance}
+                  onValueChange={(val) => {
+                    setIncludeInsurance(val);
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  trackColor={{ false: themeColors.surfaceContainer, true: themeColors.maroonPrimary }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              {includeInsurance && (
+                <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: themeColors.borderColor, paddingTop: 12 }}>
+                  {/* Borrower Age Selector */}
+                  <View style={{ gap: 6 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary }}>
+                        {isBM ? "Umur Peminjam Semasa" : "Borrower Age"}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.maroonPrimary }}>
+                        {borrowerAge} {isBM ? "Tahun" : "Years"}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      {[25, 30, 35, 40, 45, 50].map((age) => {
+                        const isSelected = borrowerAge === age;
+                        return (
+                          <TouchableOpacity
+                            key={age}
+                            onPress={() => {
+                              setBorrowerAge(age);
+                              Haptics.selectionAsync().catch(() => {});
+                            }}
+                            style={{
+                              flex: 1,
+                              paddingVertical: 6,
+                              borderRadius: 8,
+                              alignItems: "center",
+                              borderWidth: 1,
+                              backgroundColor: isSelected ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                              borderColor: isSelected ? themeColors.maroonPrimary : themeColors.borderColor,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontWeight: "700",
+                                color: isSelected ? "#FFFFFF" : themeColors.textSecondary,
+                              }}
+                            >
+                              {age}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+
+                  {/* MRTT Financing Choice */}
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary }}>
+                      {isBM ? "Kaedah Pembayaran MRTT / MRTA" : "MRTT / MRTA Payment Method"}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setFinanceMrtt(true);
+                          Haptics.selectionAsync().catch(() => {});
+                        }}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          paddingHorizontal: 8,
+                          borderRadius: 10,
+                          alignItems: "center",
+                          borderWidth: 1,
+                          backgroundColor: financeMrtt ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                          borderColor: financeMrtt ? themeColors.maroonPrimary : themeColors.borderColor,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: financeMrtt ? "#FFFFFF" : themeColors.textPrimary,
+                            textAlign: "center",
+                          }}
+                        >
+                          {isBM ? "Biayai dlm Pinjaman" : "Financed in Loan"}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 9,
+                            color: financeMrtt ? "rgba(255,255,255,0.8)" : themeColors.textMuted,
+                            marginTop: 2,
+                            textAlign: "center",
+                          }}
+                        >
+                          {isBM ? "Disyorkan (Tunai Minima)" : "Recommended"}
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                          setFinanceMrtt(false);
+                          Haptics.selectionAsync().catch(() => {});
+                        }}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 8,
+                          paddingHorizontal: 8,
+                          borderRadius: 10,
+                          alignItems: "center",
+                          borderWidth: 1,
+                          backgroundColor: !financeMrtt ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                          borderColor: !financeMrtt ? themeColors.maroonPrimary : themeColors.borderColor,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "700",
+                            color: !financeMrtt ? "#FFFFFF" : themeColors.textPrimary,
+                            textAlign: "center",
+                          }}
+                        >
+                          {isBM ? "Bayar Tunai Sahaja" : "Pay Cash Upfront"}
+                        </Text>
+                        <Text
+                          style={{
+                            fontSize: 9,
+                            color: !financeMrtt ? "rgba(255,255,255,0.8)" : themeColors.textMuted,
+                            marginTop: 2,
+                            textAlign: "center",
+                          }}
+                        >
+                          {isBM ? "Tanpa Faedah Pinjaman" : "Zero Loan Interest"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Summary preview of insurance values */}
+                  <View
+                    style={{
+                      backgroundColor: themeColors.surfaceContainer,
+                      padding: 10,
+                      borderRadius: 10,
+                      gap: 6,
+                    }}
+                  >
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={{ fontSize: 12, color: themeColors.textSecondary }}>
+                        {isBM ? "Anggaran Premium MRTT/MRTA:" : "Estimated MRTT/MRTA Premium:"}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                        RM {mortgageEstimate.mrttEstimate.toLocaleString()}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                      <Text style={{ fontSize: 12, color: themeColors.textSecondary }}>
+                        {isBM ? "Insurans Kebakaran / Rumah:" : "Houseowner / Fire Insurance:"}
+                      </Text>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.textPrimary }}>
+                        RM {mortgageEstimate.fireInsuranceAnnual.toLocaleString()}
+                        <Text style={{ fontSize: 10, color: themeColors.textMuted }}>
+                          {" "}
+                          / {isBM ? "thn" : "yr"} (~RM {mortgageEstimate.fireInsuranceMonthly}/bln)
+                        </Text>
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* Estimated Entry Cost Breakdown Card with First-Home Exemption */}
             <View
               style={{
@@ -749,6 +981,35 @@ export default function CalculatorScreen() {
                 </Text>
               </View>
 
+              {includeInsurance && (
+                <>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ fontSize: 13, color: themeColors.textSecondary }}>
+                      {isBM ? "Insurans Kebakaran (1 Tahun)" : "Fire Insurance (1 Year)"}
+                    </Text>
+                    <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textPrimary }}>
+                      RM {mortgageEstimate.fireInsuranceAnnual.toLocaleString()}
+                    </Text>
+                  </View>
+
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 13, color: themeColors.textSecondary }}>
+                      {isBM ? "Takaful / MRTT (Hayat)" : "MRTT / Life Takaful"}
+                    </Text>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={{ fontSize: 13, fontWeight: "600", color: themeColors.textPrimary }}>
+                        RM {mortgageEstimate.mrttEstimate.toLocaleString()}
+                      </Text>
+                      <Text style={{ fontSize: 10, color: financeMrtt ? "#10B981" : themeColors.textMuted, fontWeight: "600" }}>
+                        {financeMrtt
+                          ? (isBM ? "[Dibiayai dlm Pinjaman]" : "[Financed in Loan]")
+                          : (isBM ? "[Dibayar Tunai]" : "[Paid Cash]")}
+                      </Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
               {/* Total Upfront Needed */}
               <View
                 style={{
@@ -767,7 +1028,7 @@ export default function CalculatorScreen() {
                   {isBM ? "Jumlah Tunai Diperlukan:" : "Total Upfront Cash Needed:"}
                 </Text>
                 <Text style={{ fontSize: 16, fontWeight: "800", color: themeColors.maroonPrimary }}>
-                  RM {mortgageEstimate.totalUpfront.toLocaleString()}
+                  RM {mortgageEstimate.totalUpfrontWithInsurance.toLocaleString()}
                 </Text>
               </View>
             </View>

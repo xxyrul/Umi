@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -44,7 +44,7 @@ import Animated, {
   Extrapolation,
 } from "react-native-reanimated";
 import { useScrollAwareBar } from "@/context/ScrollAwareBarContext";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
 import type { PropertyListing } from "@/types/listing";
@@ -234,8 +234,9 @@ export default function MasterListingScreen() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const masterMapRef = useRef<MapView>(null);
+  const listRef = useRef<any>(null);
   const [isLocatingUser, setIsLocatingUser] = useState(false);
-  const { barTranslateY, scrollHandler } = useScrollAwareBar();
+  const { barTranslateY, scrollHandler, showBar } = useScrollAwareBar();
   const animatedFabStyle = useAnimatedStyle(() => {
     const translateY = barTranslateY ? barTranslateY.value : 0;
     const opacity = interpolate(translateY, [0, 60], [1, 0], Extrapolation.CLAMP);
@@ -430,19 +431,38 @@ export default function MasterListingScreen() {
     }
   };
 
+  // Auto-refresh and ensure bar is visible on tab focus
+  useFocusEffect(
+    useCallback(() => {
+      showBar();
+
+      // Check if a new listing was added in tambah.tsx
+      AsyncStorage.getItem("@artha_new_listing_added").then((val) => {
+        if (val) {
+          AsyncStorage.removeItem("@artha_new_listing_added").catch(() => {});
+          setActiveSegment("mine");
+          handleRefresh();
+          setTimeout(() => {
+            listRef.current?.scrollToOffset?.({ offset: 0, animated: true });
+          }, 300);
+          if (Platform.OS === "android") {
+            ToastAndroid.show(
+              language === "BM" ? "Listing baru berjaya diterbitkan!" : "New listing published successfully!",
+              ToastAndroid.SHORT
+            );
+          }
+        }
+      }).catch(() => {});
+    }, [showBar, language])
+  );
+
   // Lifecycle-aware Realtime Firestore Listener (Saves Battery when backgrounded)
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | null = null;
 
     const attachListener = () => {
       const currentUser = auth().currentUser;
-      const userId = currentUser?.uid;
-
-      if (!userId) {
-        setCurrentUserId("");
-        setIsLoading(false);
-        return;
-      }
+      const userId = currentUser?.uid || "";
       setCurrentUserId(userId);
 
       if (unsubscribeSnapshot) {
@@ -486,6 +506,14 @@ export default function MasterListingScreen() {
     // Attach immediately
     attachListener();
 
+    // Listen to Firebase Auth state changes so listener is bound as soon as user initializes on cold start
+    const unsubAuth = auth().onAuthStateChanged((user) => {
+      if (user?.uid) {
+        setCurrentUserId(user.uid);
+      }
+      attachListener();
+    });
+
     // Listen to background/foreground transitions to preserve battery
     const subscription = AppState.addEventListener("change", (nextAppState: AppStateStatus) => {
       if (nextAppState === "active") {
@@ -497,6 +525,7 @@ export default function MasterListingScreen() {
 
     return () => {
       detachListener();
+      unsubAuth();
       subscription.remove();
     };
   }, [listingLimit]);
@@ -1564,6 +1593,7 @@ export default function MasterListingScreen() {
         </ScrollView>
       ) : (
         <AnimatedFlashList
+          ref={listRef}
           key={`${viewMode}-${activeSegment}`}
           data={sortedListings}
           numColumns={viewMode === "grid" ? 2 : 1}

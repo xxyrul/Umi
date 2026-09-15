@@ -10,6 +10,7 @@ import {
 interface ScrollAwareBarContextType {
   barTranslateY: SharedValue<number>;
   scrollHandler: ReturnType<typeof useAnimatedScrollHandler>;
+  showBar: () => void;
 }
 
 const ScrollAwareBarContext = createContext<ScrollAwareBarContextType | null>(null);
@@ -76,8 +77,16 @@ export function ScrollAwareBarProvider({ children }: { children: React.ReactNode
     },
   });
 
+  const showBar = React.useCallback(() => {
+    barTranslateY.value = withSpring(0, {
+      damping: 20,
+      stiffness: 180,
+      mass: 0.8,
+    });
+  }, []);
+
   return (
-    <ScrollAwareBarContext.Provider value={{ barTranslateY, scrollHandler }}>
+    <ScrollAwareBarContext.Provider value={{ barTranslateY, scrollHandler, showBar }}>
       {children}
     </ScrollAwareBarContext.Provider>
   );

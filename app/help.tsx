@@ -27,20 +27,12 @@ export default function HelpScreen() {
 
   const handleOpenWhatsApp = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const phone = "601138548352";
-    const msg = encodeURIComponent(
+    Alert.alert(
+      isBM ? "Saluran WhatsApp Bantuan" : "WhatsApp Support Channel",
       isBM
-        ? "Salam admin Artha, saya memerlukan bantuan teknikal berkaitan aplikasi Artha."
-        : "Hello Artha admin, I need technical support regarding the Artha app."
+        ? "Saluran WhatsApp sokongan rasmi sedang dinaik taraf dan akan dilancarkan tidak lama lagi. Sila gunakan fungsi 'Lapor Masalah / Cadangan' buat masa ini."
+        : "Official WhatsApp support channel is being upgraded and will launch soon. Please use 'Report Bug / Feedback' in the meantime."
     );
-    Linking.openURL(`whatsapp://send?phone=${phone}&text=${msg}`).catch(() => {
-      Linking.openURL(`https://wa.me/${phone}?text=${msg}`).catch(() => {
-        Alert.alert(
-          isBM ? "Ralat" : "Error",
-          isBM ? "Tidak dapat membuka WhatsApp." : "Could not launch WhatsApp."
-        );
-      });
-    });
   };
 
   const renderActionRow = (
@@ -49,6 +41,7 @@ export default function HelpScreen() {
     subtitle: string,
     onPress: () => void,
     badgeColor: string,
+    badgeText?: string,
     isLast = false
   ) => {
     return (
@@ -82,9 +75,27 @@ export default function HelpScreen() {
         </View>
 
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
-            {title}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ fontSize: 15, fontWeight: "600", color: themeColors.textPrimary }}>
+              {title}
+            </Text>
+            {badgeText ? (
+              <View
+                style={{
+                  backgroundColor: "rgba(245, 158, 11, 0.15)",
+                  paddingHorizontal: 7,
+                  paddingVertical: 2,
+                  borderRadius: 6,
+                  borderWidth: 1,
+                  borderColor: "rgba(245, 158, 11, 0.35)",
+                }}
+              >
+                <Text style={{ fontSize: 10, fontWeight: "700", color: "#F59E0B" }}>
+                  {badgeText}
+                </Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={{ fontSize: 13, color: themeColors.textMuted, marginTop: 2 }}>
             {subtitle}
           </Text>
@@ -158,7 +169,9 @@ export default function HelpScreen() {
             isBM ? "Hubungi Sokongan WhatsApp" : "Contact WhatsApp Support",
             isBM ? "Bantuan teknikal dan pertanyaan terus ejen" : "Direct agent technical help & inquiries",
             handleOpenWhatsApp,
-            "#25D366"
+            "#25D366",
+            isBM ? "Akan Datang" : "Coming Soon",
+            false
           )}
 
           {renderActionRow(
@@ -167,6 +180,7 @@ export default function HelpScreen() {
             isBM ? "Hantar maklum balas & tangkapan skrin terus kepada pembangun" : "Submit bugs, ideas & feedback to developers",
             () => setIsFeedbackFormVisible(true),
             "#F59E0B",
+            undefined,
             true
           )}
         </Animated.View>
