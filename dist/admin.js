@@ -802,19 +802,24 @@ async function handleDeleteAgent(uid, identifier) {
 
 // Master Listings Helpers & Resolvers
 function resolveAgent(l) {
-  let name = l.agentName || l.namaEjen || l.userName || '';
-  let phone = l.agentPhone || l.telEjen || l.phone || l.contact || '';
-  let email = l.agentEmail || '';
+  let name = '';
+  let phone = '';
+  let email = '';
 
   const uid = l.userId || l.agentId;
   if (uid && Array.isArray(allAgents)) {
     const matched = allAgents.find(a => a.uid === uid || a.id === uid);
     if (matched) {
-      if (!name) name = matched.displayName || matched.name || matched.email || '';
-      if (!phone) phone = matched.phoneNumber || matched.phone || matched.tel || '';
-      if (!email) email = matched.email || '';
+      name = matched.displayName || matched.name || '';
+      phone = matched.phoneNumber || matched.phone || matched.tel || '';
+      email = matched.email || '';
     }
   }
+
+  // Fallback to listing author/creator fields
+  if (!name) name = l.authorName || l.userName || l.agentName || l.namaEjen || l.namaOwner || 'Agent';
+  if (!phone) phone = l.agentPhone || l.telEjen || l.telOwner || l.phone || l.contact || '';
+  if (!email) email = l.agentEmail || '';
 
   if (!phone && (l.description || l.tajuk)) {
     const text = (l.description || '') + ' ' + (l.tajuk || '');
@@ -822,11 +827,14 @@ function resolveAgent(l) {
     if (m) phone = m[0];
   }
 
+  const externalSource = (l.agentName && l.agentName !== name) ? l.agentName : (l.namaOwner && l.namaOwner !== name ? l.namaOwner : '');
+
   return {
     name: name || 'Agent',
     phone: phone.replace(/[^0-9]/g, ''),
     rawPhone: phone,
-    email: email || '-'
+    email: email || '-',
+    externalSource: externalSource
   };
 }
 
@@ -924,7 +932,7 @@ function openListingModal(listingId) {
   if (l.lot) specs.push('🏷️ ' + l.lot);
   document.getElementById('modal-specs-pills').innerHTML = specs.map(s => '<span class="spec-pill">' + s + '</span>').join('');
 
-  document.getElementById('modal-agent-name').textContent = agent.name;
+  document.getElementById('modal-agent-name').textContent = agent.name + (agent.externalSource ? ' (Source: ' + agent.externalSource + ')' : '');
   document.getElementById('modal-agent-email').textContent = agent.email + (agent.rawPhone ? ' • ' + agent.rawPhone : '');
 
   const waBtnContainer = document.getElementById('modal-agent-contact-btn');
@@ -939,7 +947,7 @@ function openListingModal(listingId) {
   const galleryEl = document.getElementById('modal-gallery');
   if (images.length > 0) {
     galleryEl.style.display = 'flex';
-    galleryEl.innerHTML = images.map(img => '<img src="' + img + '" style="width: 120px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; cursor: pointer;" onclick="window.open(\'' + img + '\', \'_blank\')" />').join('');
+    galleryEl.innerHTML = images.map(img => '<img src="' + img + '" style="width: 120px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; cursor: pointer;" onclick="window.open(\'' + img + \', \'_blank\')" />').join('');
   } else {
     galleryEl.style.display = 'none';
   }
@@ -976,26 +984,27 @@ function copyModalCopywriting(btnEl) {
 function renderListingsTable() {
   const tbody = document.getElementById('listings-table-body');
   if (!tbody) return;
+
   const search = (document.getElementById('filter-listing-input')?.value || '').trim().toLowerCase();
   const statusFilter = document.getElementById('filter-listing-status')?.value || 'ALL';
 
   let filtered = allListings;
-  if (statusFilter && statusFilter !== 'ALL') {
-    filtered = filtered.filter(l => (l.status || 'Aktif').toLowerCase() === statusFilter.toLowerCase());
+
+  if (statusFilter !== 'ALL') {
+    filtered = filtered.filter(l => (l.status || 'Aktif') === statusFilter);
   }
+
   if (search) {
-    filtered = filtered.filter(l =>
-      (l.tajuk && l.tajuk.toLowerCase().includes(search)) ||
-      (l.description && l.description.toLowerCase().includes(search)) ||
-      (l.lokasi && l.lokasi.toLowerCase().includes(search)) ||
-      (l.negeri && l.negeri.toLowerCase().includes(search)) ||
-      (l.daerah && l.daerah.toLowerCase().includes(search)) ||
-      (l.agentName && l.agentName.toLowerCase().includes(search))
-    );
+    filtered = filtered.filter(l => {
+      const title = (l.tajuk || l.description || '').toLowerCase();
+      const loc = (l.alamat || l.daerah || l.negeri || l.lokasi || '').toLowerCase();
+      const agent = (l.agentName || l.authorName || l.userName || '').toLowerCase();
+      return title.includes(search) || loc.includes(search) || agent.includes(search);
+    });
   }
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">No listings found matching filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">No listings found.</td></tr>';
     return;
   }
 
@@ -1042,6 +1051,7 @@ function renderListingsTable() {
       '<td><span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #93C5FD;">' + pType + '</span></td>' +
       '<td>' +
         '<div style="font-weight: 700; color: var(--text-main);">' + agent.name + '</div>' +
+        (agent.externalSource ? '<div style="font-size: 10px; color: #93C5FD; font-weight: 600;">(Source: ' + agent.externalSource + ')</div>' : '') +
         (agent.rawPhone ? '<div style="font-size: 11px; color: var(--text-dim);">' + agent.rawPhone + '</div>' : '') +
       '</td>' +
       '<td>' +
