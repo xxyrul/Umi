@@ -180,3 +180,64 @@ export async function revokeInviteCode(code: string): Promise<void> {
       updatedAt: new Date().toISOString(),
     });
 }
+
+/**
+ * Permanently deletes an invite code from Firestore.
+ */
+export async function deleteInviteCode(code: string): Promise<void> {
+  await firebaseDB
+    .collection("invite_codes")
+    .doc(code.trim().toUpperCase())
+    .delete();
+}
+
+/**
+ * Revokes multiple invite codes in batch.
+ */
+export async function batchRevokeInviteCodes(codes: string[]): Promise<void> {
+  if (!codes || codes.length === 0) return;
+  const batch = firebaseDB.batch();
+  const now = new Date().toISOString();
+
+  codes.forEach((code) => {
+    const docRef = firebaseDB.collection("invite_codes").doc(code.trim().toUpperCase());
+    batch.update(docRef, { status: "REVOKED", updatedAt: now });
+  });
+
+  await batch.commit();
+}
+
+/**
+ * Permanently deletes multiple invite codes in batch.
+ */
+export async function batchDeleteInviteCodes(codes: string[]): Promise<void> {
+  if (!codes || codes.length === 0) return;
+  const batch = firebaseDB.batch();
+
+  codes.forEach((code) => {
+    const docRef = firebaseDB.collection("invite_codes").doc(code.trim().toUpperCase());
+    batch.delete(docRef);
+  });
+
+  await batch.commit();
+}
+
+/**
+ * Deletes all revoked invite codes in batch.
+ */
+export async function deleteAllRevokedInviteCodes(): Promise<number> {
+  const snapshot = await firebaseDB
+    .collection("invite_codes")
+    .where("status", "==", "REVOKED")
+    .get();
+
+  if (snapshot.empty) return 0;
+
+  const batch = firebaseDB.batch();
+  snapshot.docs.forEach((doc) => {
+    batch.delete(doc.ref);
+  });
+
+  await batch.commit();
+  return snapshot.size;
+}

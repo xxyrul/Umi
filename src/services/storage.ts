@@ -447,6 +447,15 @@ async function getDownloadUrlWithRetry(reference: ReturnType<typeof storage>["re
 }
 
 /**
+ * Upload a user profile avatar to Firebase Cloud Storage (users/{userId}/avatar_...)
+ */
+export async function uploadUserAvatar(localUri: string, userId: string): Promise<string> {
+  const extension = localUri.split(".").pop()?.split("?")[0] || "jpg";
+  const path = `users/${userId}/avatar_${Date.now()}.${extension}`;
+  return await uploadFileToStorage(localUri, path);
+}
+
+/**
  * Upload local file to Firebase Cloud Storage and return download URL.
  */
 async function uploadFileToStorage(localUri: string, path: string): Promise<string> {

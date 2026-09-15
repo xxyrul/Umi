@@ -19,7 +19,7 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { calculateMortgage } from "@/utils/loanCalculator";
+import { calculateMortgage, calculateLPPSA } from "@/utils/loanCalculator";
 
 export default function CalculatorScreen() {
   const insets = useSafeAreaInsets();
@@ -28,9 +28,9 @@ export default function CalculatorScreen() {
   const { themeColors, t, language } = useAppSettings();
   const isBM = language === "BM";
 
-  // Top level tab: "mortgage" (Home Loan) vs "dsr" (DSR Eligibility)
-  const [primaryTab, setPrimaryTab] = useState<"mortgage" | "dsr">(
-    params.tab === "dsr" ? "dsr" : "mortgage"
+  // Top level tab: "mortgage" (Home Loan) vs "dsr" (DSR Eligibility) vs "lppsa" (Government Loan)
+  const [primaryTab, setPrimaryTab] = useState<"mortgage" | "dsr" | "lppsa">(
+    params.tab === "dsr" ? "dsr" : params.tab === "lppsa" ? "lppsa" : "mortgage"
   );
 
   // Mortgage Calculator State
@@ -46,12 +46,25 @@ export default function CalculatorScreen() {
   const [borrowerAge, setBorrowerAge] = useState<number>(30);
   const [copiedToast, setCopiedToast] = useState(false);
 
+  // LPPSA (Government Loan) State
+  const [lppsaBasicSalary, setLppsaBasicSalary] = useState<string>("4500");
+  const [lppsaFixedAllowance, setLppsaFixedAllowance] = useState<string>("1150");
+  const [lppsaPayslipDeductions, setLppsaPayslipDeductions] = useState<string>("800");
+  const [lppsaPropertyPrice, setLppsaPropertyPrice] = useState<string>(
+    params.price ? String(params.price) : "400000"
+  );
+  const [lppsaBorrowerAge, setLppsaBorrowerAge] = useState<number>(32);
+  const [lppsaScheme, setLppsaScheme] = useState<"skim1" | "skim2">("skim1");
+
   useEffect(() => {
     if (params.price) {
       setPropertyPrice(String(params.price));
-      setPrimaryTab("mortgage");
+      setLppsaPropertyPrice(String(params.price));
+      if (!params.tab) setPrimaryTab("mortgage");
     } else if (params.tab === "dsr") {
       setPrimaryTab("dsr");
+    } else if (params.tab === "lppsa") {
+      setPrimaryTab("lppsa");
     }
   }, [params.price, params.tab]);
 
@@ -286,6 +299,80 @@ export default function CalculatorScreen() {
     setPrimaryTab("mortgage");
   };
 
+  // LPPSA Calculations
+  const parsedLppsaBasic = useMemo(() => parseNum(lppsaBasicSalary), [lppsaBasicSalary]);
+  const parsedLppsaAllowance = useMemo(() => parseNum(lppsaFixedAllowance), [lppsaFixedAllowance]);
+  const parsedLppsaDeductions = useMemo(() => parseNum(lppsaPayslipDeductions), [lppsaPayslipDeductions]);
+  const parsedLppsaPrice = useMemo(() => parseNum(lppsaPropertyPrice), [lppsaPropertyPrice]);
+
+  const lppsaEstimate = useMemo(() => {
+    return calculateLPPSA({
+      basicSalary: parsedLppsaBasic,
+      fixedAllowances: parsedLppsaAllowance,
+      currentPayslipDeductions: parsedLppsaDeductions,
+      propertyPrice: parsedLppsaPrice,
+      borrowerAge: lppsaBorrowerAge,
+      scheme: lppsaScheme,
+    });
+  }, [parsedLppsaBasic, parsedLppsaAllowance, parsedLppsaDeductions, parsedLppsaPrice, lppsaBorrowerAge, lppsaScheme]);
+
+  const handleCopyLppsa = async () => {
+    const schemeLabel = lppsaScheme === "skim1" ? "Skim 1 (Pinjaman Pertama)" : "Skim 2 (Pinjaman Kedua)";
+    const statusText = lppsaEstimate.isEligible ? "✅ LAYAK / ELIGIBLE" : "⚠️ MELEBIHI HAD / OVER LIMIT";
+
+    const text =
+      `🏛️ *Penilaian Kelayakan Pinjaman LPPSA (Kerajaan)*\n` +
+      `Skim: ${schemeLabel}\n` +
+      `Gaji Pokok: ${formatCurrency(parsedLppsaBasic)}\n` +
+      `Imbuhan Tetap: ${formatCurrency(parsedLppsaAllowance)}\n` +
+      `Gaji Kelayakan: ${formatCurrency(lppsaEstimate.qualifyingIncome)}\n` +
+      `Potongan Slip Gaji Sedia Ada: ${formatCurrency(parsedLppsaDeductions)}\n` +
+      `---------------------------------\n` +
+      `🏠 *Kelayakan LPPSA (Kadar Tetap 4.0%):*\n` +
+      `- Jumlah Pinjaman Layak: ${formatCurrency(lppsaEstimate.maxEligibleLoanAmount)}\n` +
+      `- Tempoh Maksimum: ${lppsaEstimate.maxTenureYears} Tahun (Had Umur 70)\n` +
+      `- Had Ansuran Dibenarkan: ${formatCurrency(lppsaEstimate.maxAllowableMonthlyDeduction)} /bulan\n` +
+      (parsedLppsaPrice > 0
+        ? `- Harga Hartanah Dimohon: ${formatCurrency(parsedLppsaPrice)}\n` +
+          `- Ansuran Bulanan LPPSA: ${formatCurrency(lppsaEstimate.monthlyInstallment)} /bulan\n`
+        : "") +
+      `---------------------------------\n` +
+      `🎯 *Status Kelayakan:* ${statusText}\n` +
+      (lppsaEstimate.rejectionReason ? `Nota: ${lppsaEstimate.rejectionReason}\n` : "") +
+      `💵 *Anggaran Gaji Bersih Dibawa Pulang:* ${formatCurrency(lppsaEstimate.netTakeHomeAfterLoan)} /bulan`;
+
+    await Clipboard.setStringAsync(text);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    setCopiedToast(true);
+    setTimeout(() => setCopiedToast(false), 2000);
+  };
+
+  const handleShareLppsaWhatsApp = () => {
+    const schemeLabel = lppsaScheme === "skim1" ? "Skim 1 (Pinjaman Pertama)" : "Skim 2 (Pinjaman Kedua)";
+    const statusText = lppsaEstimate.isEligible ? "✅ LAYAK (ELIGIBLE)" : "⚠️ MELEBIHI HAD";
+
+    const text =
+      `🏛️ *Semakan Kelayakan Pinjaman LPPSA (Kerajaan)*\n\n` +
+      `Skim: ${schemeLabel} | Umur: ${lppsaBorrowerAge} Thn\n` +
+      `Gaji Kelayakan (Pokok + Imbuhan): ${formatCurrency(lppsaEstimate.qualifyingIncome)}\n` +
+      `Potongan Sedia Ada: ${formatCurrency(parsedLppsaDeductions)}\n\n` +
+      `*Keputusan Kelayakan LPPSA (Kadar Tetap 4.0%):*\n` +
+      `• Kelayakan Pinjaman Maksimum: *${formatCurrency(lppsaEstimate.maxEligibleLoanAmount)}*\n` +
+      `• Tempoh Maksimum: ${lppsaEstimate.maxTenureYears} Tahun\n` +
+      `• Had Ansuran Bulanan: ${formatCurrency(lppsaEstimate.maxAllowableMonthlyDeduction)} /bulan\n\n` +
+      (parsedLppsaPrice > 0
+        ? `*Permohonan Hartanah (${formatCurrency(parsedLppsaPrice)}):*\n` +
+          `• Ansuran Bulanan: *${formatCurrency(lppsaEstimate.monthlyInstallment)} /bulan*\n` +
+          `• Status: *${statusText}*\n\n`
+        : "") +
+      `💵 Baki Gaji Bersih Dibawa Pulang: *${formatCurrency(lppsaEstimate.netTakeHomeAfterLoan)} /bulan*`;
+
+    const url = `whatsapp://send?text=${encodeURIComponent(text)}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert("Error", "WhatsApp is not installed on your device.");
+    });
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: themeColors.canvasBackground }}
@@ -327,16 +414,16 @@ export default function CalculatorScreen() {
         </Text>
       </View>
 
-      {/* Primary Tab Switcher */}
+      {/* Primary Tab Switcher (3 Tabs) */}
       <View
         style={{
           flexDirection: "row",
           backgroundColor: themeColors.cardBackground,
           borderBottomWidth: 1,
           borderBottomColor: themeColors.borderColor,
-          paddingHorizontal: 16,
+          paddingHorizontal: 12,
           paddingVertical: 8,
-          gap: 10,
+          gap: 6,
         }}
       >
         <TouchableOpacity
@@ -351,24 +438,24 @@ export default function CalculatorScreen() {
             alignItems: "center",
             justifyContent: "center",
             paddingVertical: 10,
-            borderRadius: 12,
-            gap: 6,
+            borderRadius: 10,
+            gap: 4,
             backgroundColor: primaryTab === "mortgage" ? themeColors.maroonPrimary : themeColors.surfaceContainer,
           }}
         >
           <MaterialCommunityIcons
             name="calculator-variant"
-            size={18}
+            size={16}
             color={primaryTab === "mortgage" ? "#FFFFFF" : themeColors.textSecondary}
           />
           <Text
             style={{
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: "700",
               color: primaryTab === "mortgage" ? "#FFFFFF" : themeColors.textSecondary,
             }}
           >
-            {isBM ? "Ansuran Rumah" : "Home Loan"}
+            {isBM ? "Ansuran" : "Mortgage"}
           </Text>
         </TouchableOpacity>
 
@@ -384,24 +471,57 @@ export default function CalculatorScreen() {
             alignItems: "center",
             justifyContent: "center",
             paddingVertical: 10,
-            borderRadius: 12,
-            gap: 6,
+            borderRadius: 10,
+            gap: 4,
             backgroundColor: primaryTab === "dsr" ? themeColors.maroonPrimary : themeColors.surfaceContainer,
           }}
         >
           <MaterialCommunityIcons
             name="percent"
-            size={18}
+            size={16}
             color={primaryTab === "dsr" ? "#FFFFFF" : themeColors.textSecondary}
           />
           <Text
             style={{
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: "700",
               color: primaryTab === "dsr" ? "#FFFFFF" : themeColors.textSecondary,
             }}
           >
-            {isBM ? "Kelayakan DSR" : "DSR Eligibility"}
+            {isBM ? "DSR Bank" : "Bank DSR"}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          activeOpacity={0.75}
+          onPress={() => {
+            setPrimaryTab("lppsa");
+            Haptics.selectionAsync().catch(() => {});
+          }}
+          style={{
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            paddingVertical: 10,
+            borderRadius: 10,
+            gap: 4,
+            backgroundColor: primaryTab === "lppsa" ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+          }}
+        >
+          <MaterialCommunityIcons
+            name="bank"
+            size={16}
+            color={primaryTab === "lppsa" ? "#FFFFFF" : themeColors.textSecondary}
+          />
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "700",
+              color: primaryTab === "lppsa" ? "#FFFFFF" : themeColors.textSecondary,
+            }}
+          >
+            {isBM ? "LPPSA" : "Gov LPPSA"}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1104,7 +1224,7 @@ export default function CalculatorScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        ) : (
+        ) : primaryTab === "dsr" ? (
           <View style={{ gap: 14 }}>
             {/* DSR Result Card with Visual Progress Gauge */}
             <View
@@ -1619,6 +1739,410 @@ export default function CalculatorScreen() {
                 <MaterialCommunityIcons name={copiedToast ? "check" : "content-copy"} size={18} color={themeColors.textPrimary} />
                 <Text style={{ color: themeColors.textPrimary, fontSize: 13, fontWeight: "700" }}>
                   {copiedToast ? (isBM ? "Disalin ke Papan Keratan!" : "Copied to Clipboard!") : (isBM ? "Salin Ringkasan Kelayakan DSR" : "Copy DSR Eligibility Summary")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          /* LPPSA Government Loan View */
+          <View style={{ gap: 14 }}>
+            {/* Header Result Card */}
+            <View
+              style={{
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 18,
+                gap: 12,
+              }}
+            >
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textMuted }}>
+                    {isBM ? "Kelayakan Pinjaman LPPSA" : "LPPSA Loan Eligibility"}
+                  </Text>
+                  <Text style={{ fontSize: 26, fontWeight: "800", color: themeColors.maroonPrimary, marginTop: 2 }}>
+                    {formatCurrency(lppsaEstimate.maxEligibleLoanAmount)}
+                  </Text>
+                </View>
+                <View
+                  style={{
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 8,
+                    backgroundColor: `${themeColors.maroonPrimary}15`,
+                  }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: themeColors.maroonPrimary }}>
+                    {isBM ? "Kadar Tetap 4.0%" : "Fixed 4.0%"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Status Badge */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: 10,
+                  borderRadius: 10,
+                  backgroundColor: lppsaEstimate.isEligible ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)",
+                  borderWidth: 1,
+                  borderColor: lppsaEstimate.isEligible ? "rgba(16, 185, 129, 0.25)" : "rgba(239, 68, 68, 0.25)",
+                }}
+              >
+                <MaterialCommunityIcons
+                  name={lppsaEstimate.isEligible ? "checkbox-marked-circle" : "alert-circle"}
+                  size={18}
+                  color={lppsaEstimate.isEligible ? "#10B981" : "#EF4444"}
+                />
+                <Text
+                  style={{
+                    flex: 1,
+                    fontSize: 12,
+                    fontWeight: "600",
+                    color: lppsaEstimate.isEligible ? "#10B981" : "#EF4444",
+                  }}
+                >
+                  {lppsaEstimate.isEligible
+                    ? (isBM
+                        ? `LAYAK: Ansuran RM ${lppsaEstimate.monthlyInstallment.toLocaleString()}/bln dalam had ${formatCurrency(lppsaEstimate.maxAllowableMonthlyDeduction)}.`
+                        : `ELIGIBLE: Installment RM ${lppsaEstimate.monthlyInstallment.toLocaleString()}/mo is within ${formatCurrency(lppsaEstimate.maxAllowableMonthlyDeduction)} limit.`)
+                    : (lppsaEstimate.rejectionReason || (isBM ? "MELEBIHI HAD KELAYAKAN POTONGAN SLIP GAJI" : "EXCEEDS PAYSLIP DEDUCTION LIMIT"))}
+                </Text>
+              </View>
+
+              {/* Key Metrics Grid */}
+              <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: themeColors.canvasBackground,
+                    borderRadius: 10,
+                    padding: 10,
+                    borderWidth: 1,
+                    borderColor: themeColors.borderColor,
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: themeColors.textMuted }}>
+                    {isBM ? "Had Ansuran (60%/50%)" : "Max Monthly Limit"}
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginTop: 2 }}>
+                    {formatCurrency(lppsaEstimate.maxAllowableMonthlyDeduction)}
+                  </Text>
+                </View>
+
+                <View
+                  style={{
+                    flex: 1,
+                    backgroundColor: themeColors.canvasBackground,
+                    borderRadius: 10,
+                    padding: 10,
+                    borderWidth: 1,
+                    borderColor: themeColors.borderColor,
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: themeColors.textMuted }}>
+                    {isBM ? "Baki Bersih Pulang" : "Net Take-Home"}
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginTop: 2 }}>
+                    {formatCurrency(lppsaEstimate.netTakeHomeAfterLoan)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Scheme Selector */}
+            <View
+              style={{
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 12,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
+                {isBM ? "Pilih Skim Pinjaman LPPSA" : "Select LPPSA Loan Scheme"}
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setLppsaScheme("skim1");
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    paddingHorizontal: 8,
+                    borderRadius: 10,
+                    alignItems: "center",
+                    backgroundColor: lppsaScheme === "skim1" ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                    borderWidth: 1,
+                    borderColor: lppsaScheme === "skim1" ? themeColors.maroonPrimary : themeColors.borderColor,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "700",
+                      color: lppsaScheme === "skim1" ? "#FFFFFF" : themeColors.textPrimary,
+                    }}
+                  >
+                    {isBM ? "Skim 1 (Pertama)" : "Scheme 1 (First)"}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: lppsaScheme === "skim1" ? "rgba(255,255,255,0.8)" : themeColors.textMuted,
+                      marginTop: 2,
+                    }}
+                  >
+                    {isBM ? "Had 60% • Max 35 Thn" : "60% Cap • Max 35 Yrs"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setLppsaScheme("skim2");
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 12,
+                    paddingHorizontal: 8,
+                    borderRadius: 10,
+                    alignItems: "center",
+                    backgroundColor: lppsaScheme === "skim2" ? themeColors.maroonPrimary : themeColors.surfaceContainer,
+                    borderWidth: 1,
+                    borderColor: lppsaScheme === "skim2" ? themeColors.maroonPrimary : themeColors.borderColor,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontWeight: "700",
+                      color: lppsaScheme === "skim2" ? "#FFFFFF" : themeColors.textPrimary,
+                    }}
+                  >
+                    {isBM ? "Skim 2 (Kedua)" : "Scheme 2 (Second)"}
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      color: lppsaScheme === "skim2" ? "rgba(255,255,255,0.8)" : themeColors.textMuted,
+                      marginTop: 2,
+                    }}
+                  >
+                    {isBM ? "Had 50% • Max 30 Thn" : "50% Cap • Max 30 Yrs"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Income & Deduction Inputs */}
+            <View
+              style={{
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 16,
+                padding: 16,
+                gap: 14,
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary }}>
+                {isBM ? "Maklumat Gaji & Slip Gaji (RM)" : "Salary & Payslip Details (RM)"}
+              </Text>
+
+              {/* Gaji Pokok */}
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary, marginBottom: 4 }}>
+                  {isBM ? "Gaji Pokok Bulanan" : "Monthly Basic Salary"}
+                </Text>
+                <TextInput
+                  style={{
+                    height: 46,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: themeColors.borderColor,
+                    backgroundColor: themeColors.canvasBackground,
+                    paddingHorizontal: 12,
+                    fontSize: 16,
+                    fontWeight: "700",
+                    color: themeColors.textPrimary,
+                  }}
+                  keyboardType="numeric"
+                  value={lppsaBasicSalary}
+                  onChangeText={setLppsaBasicSalary}
+                  placeholder="4500"
+                  placeholderTextColor={themeColors.textMuted}
+                />
+              </View>
+
+              {/* Imbuhan Tetap */}
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary, marginBottom: 4 }}>
+                  {isBM ? "Imbuhan Tetap (ITP / ITK / COLA)" : "Fixed Allowances (ITP / ITK / COLA)"}
+                </Text>
+                <TextInput
+                  style={{
+                    height: 46,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: themeColors.borderColor,
+                    backgroundColor: themeColors.canvasBackground,
+                    paddingHorizontal: 12,
+                    fontSize: 16,
+                    fontWeight: "700",
+                    color: themeColors.textPrimary,
+                  }}
+                  keyboardType="numeric"
+                  value={lppsaFixedAllowance}
+                  onChangeText={setLppsaFixedAllowance}
+                  placeholder="1150"
+                  placeholderTextColor={themeColors.textMuted}
+                />
+              </View>
+
+              {/* Potongan Slip Gaji Sedia Ada */}
+              <View>
+                <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary, marginBottom: 4 }}>
+                  {isBM ? "Potongan Sedia Ada Dalam Slip Gaji" : "Existing Payslip Deductions"}
+                </Text>
+                <TextInput
+                  style={{
+                    height: 46,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: themeColors.borderColor,
+                    backgroundColor: themeColors.canvasBackground,
+                    paddingHorizontal: 12,
+                    fontSize: 16,
+                    fontWeight: "700",
+                    color: themeColors.textPrimary,
+                  }}
+                  keyboardType="numeric"
+                  value={lppsaPayslipDeductions}
+                  onChangeText={setLppsaPayslipDeductions}
+                  placeholder="800"
+                  placeholderTextColor={themeColors.textMuted}
+                />
+              </View>
+
+              {/* Age & Property Price Row */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary, marginBottom: 4 }}>
+                    {isBM ? "Umur Pemohon" : "Borrower Age"}
+                  </Text>
+                  <View
+                    style={{
+                      height: 46,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: themeColors.borderColor,
+                      backgroundColor: themeColors.canvasBackground,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingHorizontal: 8,
+                    }}
+                  >
+                    <TouchableOpacity
+                      onPress={() => {
+                        setLppsaBorrowerAge(Math.max(20, lppsaBorrowerAge - 1));
+                        Haptics.selectionAsync().catch(() => {});
+                      }}
+                      style={{ padding: 6 }}
+                    >
+                      <MaterialCommunityIcons name="minus" size={18} color={themeColors.textPrimary} />
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                      {lppsaBorrowerAge} {isBM ? "Thn" : "Yrs"}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setLppsaBorrowerAge(Math.min(65, lppsaBorrowerAge + 1));
+                        Haptics.selectionAsync().catch(() => {});
+                      }}
+                      style={{ padding: 6 }}
+                    >
+                      <MaterialCommunityIcons name="plus" size={18} color={themeColors.textPrimary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={{ flex: 1.3 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "600", color: themeColors.textSecondary, marginBottom: 4 }}>
+                    {isBM ? "Harga Hartanah" : "Property Price"}
+                  </Text>
+                  <TextInput
+                    style={{
+                      height: 46,
+                      borderRadius: 8,
+                      borderWidth: 1,
+                      borderColor: themeColors.borderColor,
+                      backgroundColor: themeColors.canvasBackground,
+                      paddingHorizontal: 10,
+                      fontSize: 15,
+                      fontWeight: "700",
+                      color: themeColors.textPrimary,
+                    }}
+                    keyboardType="numeric"
+                    value={lppsaPropertyPrice}
+                    onChangeText={setLppsaPropertyPrice}
+                    placeholder="400000"
+                    placeholderTextColor={themeColors.textMuted}
+                  />
+                </View>
+              </View>
+            </View>
+
+            {/* Action Buttons: WhatsApp & Copy */}
+            <View style={{ gap: 8, marginTop: 4 }}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={handleShareLppsaWhatsApp}
+                style={{
+                  height: 48,
+                  borderRadius: 12,
+                  backgroundColor: "#25D366",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                }}
+              >
+                <MaterialCommunityIcons name="whatsapp" size={20} color="#FFFFFF" />
+                <Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "700" }}>
+                  {isBM ? "Kongsi Penilaian LPPSA ke WhatsApp" : "Share LPPSA Assessment to WhatsApp"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.8}
+                onPress={handleCopyLppsa}
+                style={{
+                  height: 44,
+                  borderRadius: 12,
+                  backgroundColor: themeColors.surfaceContainer,
+                  borderColor: themeColors.borderColor,
+                  borderWidth: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <MaterialCommunityIcons name={copiedToast ? "check" : "content-copy"} size={18} color={themeColors.textPrimary} />
+                <Text style={{ color: themeColors.textPrimary, fontSize: 13, fontWeight: "700" }}>
+                  {copiedToast ? (isBM ? "Disalin ke Papan Keratan!" : "Copied to Clipboard!") : (isBM ? "Salin Ringkasan Kelayakan LPPSA" : "Copy LPPSA Eligibility Summary")}
                 </Text>
               </TouchableOpacity>
             </View>

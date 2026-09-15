@@ -33,6 +33,7 @@ import { SPACING } from "@/constants/theme";
 import { Button, InAppUpdateModal, PinKeypad } from "@/components";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { getCurrentUserProfile, signOut, getUserInitials, getUserRole } from "@/services/auth";
+import { subscribeToPendingAgents } from "@/services/admin";
 import {
   getAppLockEnabled,
   setAppLockEnabled,
@@ -60,6 +61,7 @@ export default function ProfileScreen() {
   const { theme, setTheme, language, themeColors, isDark, toggleTheme, setLanguage, t, allowScreenshots, toggleAllowScreenshots } = useAppSettings();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0);
 
   // Settings Overlay State
   const [activeSection, setActiveSection] = useState<string | null>(null);
@@ -100,8 +102,17 @@ export default function ProfileScreen() {
           setPhoneInput(user.phoneNumber);
         }
       }).catch(() => {});
+      let unsubPending = () => {};
       if (user?.uid) {
-        getUserRole(user.uid).then((r) => setIsAdmin(r === "admin")).catch(() => {});
+        getUserRole(user.uid).then((r) => {
+          const isUserAdmin = r === "admin";
+          setIsAdmin(isUserAdmin);
+          if (isUserAdmin) {
+            unsubPending = subscribeToPendingAgents((agents) => {
+              setPendingApprovalsCount(agents.length);
+            });
+          }
+        }).catch(() => {});
       }
       getUpdateNotificationsEnabled()
         .then(setUpdateAlertsEnabled)
@@ -115,6 +126,10 @@ export default function ProfileScreen() {
       getAppLockTimeout()
         .then(setAppLockTimeoutState)
         .catch(() => {});
+
+      return () => {
+        unsubPending();
+      };
     } catch (e) {
       console.warn("Profile load error:", e);
     }
@@ -122,6 +137,20 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const user = getCurrentUserProfile();
+      setProfile(user);
+      if (user?.displayName) {
+        setDisplayNameInput(user.displayName);
+      }
+      AsyncStorage.getItem("@artha_agent_phone").then((savedPhone) => {
+        if (savedPhone) {
+          setPhoneInput(savedPhone);
+          if (user) {
+            user.phoneNumber = savedPhone;
+            user.phone = savedPhone;
+          }
+        }
+      }).catch(() => {});
       getAppLockEnabled().then(setAppLockState).catch(() => {});
       getBiometricsEnabled().then(setBiometricsState).catch(() => {});
       getAppLockTimeout().then(setAppLockTimeoutState).catch(() => {});
@@ -351,11 +380,12 @@ export default function ProfileScreen() {
         setProfileRelease(release);
         setIsProfileUpdateModalVisible(true);
       } else {
+        const appVer = Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "1.5.2";
         Alert.alert(
           language === "BM" ? "Aplikasi Terkini" : "App Up to Date",
           language === "BM"
-            ? `Anda sedang menggunakan versi terkini Artha (v${Constants.expoConfig?.version || "1.1.34"}).`
-            : `You are using the latest version of Artha (v${Constants.expoConfig?.version || "1.1.34"}).`
+            ? `Anda sedang menggunakan versi terkini Artha (v${appVer}).`
+            : `You are using the latest version of Artha (v${appVer}).`
         );
       }
     } catch {
@@ -372,7 +402,8 @@ export default function ProfileScreen() {
     subtitle?: string,
     onPress?: () => void,
     badgeColor?: string,
-    isLast?: boolean
+    isLast?: boolean,
+    rightBadge?: React.ReactNode
   ) => {
     return (
       <TouchableOpacity
@@ -414,6 +445,8 @@ export default function ProfileScreen() {
             </Text>
           )}
         </View>
+
+        {rightBadge}
 
         <MaterialCommunityIcons name="chevron-right" size={18} color={themeColors.textMuted} />
       </TouchableOpacity>
@@ -506,7 +539,7 @@ export default function ProfileScreen() {
 
       // Construct CSV content with UTF-8 BOM so Excel opens it with correct encoding
       let csvContent = "\ufeff";
-      csvContent += csvRow(["DRT Master Listing CRM Report"]);
+      csvContent += csvRow(["Artha Master Listing CRM Report"]);
       csvContent += csvRow(["Generated At", `${genTime} (MYT)`]);
       csvContent += csvRow(["Total Active Cases", String(activeCases)]);
       csvContent += csvRow(["Total Portfolio Value", formattedValue]);
@@ -547,11 +580,16 @@ export default function ProfileScreen() {
       });
 
       // Show alert
-      const appVersion = Constants.expoConfig?.version || "1.1.34";
+      const appVersion = Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "1.5.2";
+      const caseCountText =
+        language === "BM"
+          ? `${activeCases} Kes`
+          : `${activeCases} ${activeCases === 1 ? "Case" : "Cases"}`;
+
       const alertMsg =
         language === "BM"
-          ? `Ringkasan Kes Artha Master Listing v${appVersion}:\n\n• Kes Aktif: ${activeCases} Hartanah\n• Nilai Keseluruhan: ${formattedValue}\n• Anggaran Komisen: ${formattedCommission}\n\nLaporan CSV berjaya dieksport!`
-          : `Artha Master Listing Summary v${appVersion}:\n\n• Active Cases: ${activeCases} Properties\n• Total Value: ${formattedValue}\n• Estimated Commission: ${formattedCommission}\n\nCSV Report exported successfully!`;
+          ? `Ringkasan Kes Artha Master Listing v${appVersion}:\n\n• Kes Aktif: ${caseCountText}\n• Nilai Keseluruhan: ${formattedValue}\n• Anggaran Komisen: ${formattedCommission}\n\nLaporan CSV berjaya dieksport!`
+          : `Artha Master Listing Summary v${appVersion}:\n\n• Active Cases: ${caseCountText}\n• Total Value: ${formattedValue}\n• Estimated Commission: ${formattedCommission}\n\nCSV Report exported successfully!`;
 
       Alert.alert(
         language === "BM" ? "📊 Laporan Kes Hartanah" : "📊 Property Cases Report",
@@ -700,10 +738,10 @@ export default function ProfileScreen() {
         contentContainerStyle={{
           paddingHorizontal: SPACING.lg,
           paddingVertical: SPACING.sm,
-          paddingBottom: Math.max(insets.bottom, 24) + 140,
+          paddingBottom: Math.max(insets.bottom, 24) + 200,
           alignItems: "center",
         }}
-        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 140 }}
+        scrollIndicatorInsets={{ bottom: Math.max(insets.bottom, 24) + 200 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Telegram-style Centered Profile Header */}
@@ -828,11 +866,28 @@ export default function ProfileScreen() {
           {isAdmin &&
             renderOptionRow(
               "shield-crown-outline",
-              t("adminPortalTitle"),
-              t("adminPortalSub"),
-              () => Linking.openURL("https://artharen.web.app/admin").catch(() => {}),
+              language === "BM" ? "Pusat Pentadbir (Admin Hub)" : "Admin Hub",
+              language === "BM"
+                ? "Pengesahan ejen, kod jemputan & siaran"
+                : "Agent approvals, invite codes & broadcasts",
+              () => router.push("/admin" as any),
               "#F59E0B",
-              true
+              true,
+              pendingApprovalsCount > 0 ? (
+                <View
+                  style={{
+                    backgroundColor: "#EF4444",
+                    paddingHorizontal: 7,
+                    paddingVertical: 2,
+                    borderRadius: 10,
+                    marginRight: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: 11, fontWeight: "800", color: "#FFFFFF" }}>
+                    {pendingApprovalsCount} {language === "BM" ? "Baru" : "New"}
+                  </Text>
+                </View>
+              ) : undefined
             )}
         </Animated.View>
 

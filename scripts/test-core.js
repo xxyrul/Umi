@@ -188,6 +188,73 @@ it("Caps notification arrays to prevent unbounded Firestore doc growth", () => {
 });
 
 // -------------------------------------------------------------
+// 5. Malaysian LPPSA (Government Loan) Formulas
+// -------------------------------------------------------------
+function calculateLPPSA({ basicSalary, fixedAllowances = 0, currentPayslipDeductions = 0, propertyPrice = 0, borrowerAge = 30, scheme = "skim1" }) {
+  const qualifyingIncome = Math.max(0, basicSalary + fixedAllowances);
+  const interestRate = 4.0;
+  const monthlyRate = interestRate / 100 / 12;
+  const ageCap = Math.max(0, 70 - borrowerAge);
+  const schemeCap = scheme === "skim1" ? 35 : 30;
+  const maxTenureYears = Math.min(schemeCap, Math.max(5, ageCap));
+  const totalMonths = maxTenureYears * 12;
+  const maxDeductionRate = scheme === "skim1" ? 0.6 : 0.5;
+  const maxMonthlyFromQualifying = qualifyingIncome * maxDeductionRate;
+  const max75Ceiling = qualifyingIncome * 0.75 - currentPayslipDeductions;
+  const maxAllowableMonthlyDeduction = Math.max(0, Math.round(Math.min(maxMonthlyFromQualifying, max75Ceiling)));
+
+  let monthlyInstallment = 0;
+  if (propertyPrice > 0 && totalMonths > 0) {
+    monthlyInstallment = Math.round(
+      (propertyPrice * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths))) /
+        (Math.pow(1 + monthlyRate, totalMonths) - 1)
+    );
+  }
+
+  let maxEligibleLoanAmount = 0;
+  if (maxAllowableMonthlyDeduction > 0 && totalMonths > 0) {
+    maxEligibleLoanAmount = Math.round(
+      (maxAllowableMonthlyDeduction * (1 - Math.pow(1 + monthlyRate, -totalMonths))) / monthlyRate
+    );
+  }
+
+  const isEligible = propertyPrice > 0 ? monthlyInstallment <= maxAllowableMonthlyDeduction : maxEligibleLoanAmount > 0;
+  const netTakeHomeAfterLoan = Math.max(0, Math.round(qualifyingIncome - currentPayslipDeductions - monthlyInstallment));
+
+  return { qualifyingIncome, maxAllowableMonthlyDeduction, monthlyInstallment, maxEligibleLoanAmount, maxTenureYears, isEligible, netTakeHomeAfterLoan };
+}
+
+console.log("\n🔹 5. LPPSA (Government Loan) Formulas:");
+it("Calculates LPPSA Skim 1 (60% limit, 35 yrs) for Gaji Pokok RM 4,500 + RM 1,150 allowances", () => {
+  const res = calculateLPPSA({
+    basicSalary: 4500,
+    fixedAllowances: 1150,
+    currentPayslipDeductions: 800,
+    propertyPrice: 400000,
+    borrowerAge: 32,
+    scheme: "skim1",
+  });
+  assert.strictEqual(res.qualifyingIncome, 5650);
+  assert.strictEqual(res.maxTenureYears, 35);
+  assert.strictEqual(res.isEligible, true);
+  assert(res.maxEligibleLoanAmount > 500000);
+  assert(res.monthlyInstallment > 0);
+  assert(res.netTakeHomeAfterLoan > 0);
+});
+
+it("Rejects LPPSA application when monthly installment exceeds 60% qualifying limit", () => {
+  const res = calculateLPPSA({
+    basicSalary: 2000,
+    fixedAllowances: 300,
+    currentPayslipDeductions: 500,
+    propertyPrice: 800000,
+    borrowerAge: 30,
+    scheme: "skim1",
+  });
+  assert.strictEqual(res.isEligible, false);
+});
+
+// -------------------------------------------------------------
 // Summary
 // -------------------------------------------------------------
 console.log("\n=========================================");

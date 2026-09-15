@@ -227,3 +227,215 @@ export function parseListingTitleAndDescription(
 export function cleanListingTitle(rawTitle?: string): string {
   return parseListingTitleAndDescription(rawTitle).cleanTitle;
 }
+
+// ---------------------------------------------------------------------------
+// MALAYSIAN REAL ESTATE LPPSA (GOVERNMENT LOAN) ENGINE
+// ---------------------------------------------------------------------------
+
+export interface LPPSACalculationInput {
+  basicSalary: number; // Gaji Pokok
+  fixedAllowances: number; // Imbuhan Tetap (ITP, ITK, BIW/COLA)
+  currentPayslipDeductions: number; // Potongan sedia ada dalam slip gaji
+  propertyPrice: number; // Harga hartanah dimohon
+  borrowerAge?: number; // Umur pemohon (max umur tamat 70 thn)
+  scheme?: "skim1" | "skim2"; // Skim 1 (Pinjaman Pertama) vs Skim 2 (Pinjaman Kedua)
+}
+
+export interface LPPSACalculationResult {
+  qualifyingIncome: number; // Gaji Pokok + Imbuhan Tetap
+  maxAllowableMonthlyDeduction: number; // Had 60% (Skim 1) atau 50% (Skim 2)
+  monthlyInstallment: number; // Ansuran bulanan untuk harga hartanah dimohon
+  maxEligibleLoanAmount: number; // Jumlah pinjaman maksimum layak
+  maxTenureYears: number; // Tempoh maksimum pinjaman (tahun)
+  interestRate: number; // Fixed 4.0%
+  isEligible: boolean; // Layak / Melebihi had
+  surplusDeficitMonthly: number; // Baki lebihan / kekurangan kelayakan sebulan
+  netTakeHomeAfterLoan: number; // Anggaran gaji bersih dibawa pulang selepas potongan LPPSA
+  rejectionReason?: string; // Sebab tidak layak jika ada
+}
+
+/**
+ * Calculates government housing financing eligibility under LPPSA (Lembaga Pembiayaan Perumahan Sektor Awam)
+ * - Fixed 4.0% per annum
+ * - Skim 1: Max 60% deduction of qualifying salary, tenure up to 35 years or age 70.
+ * - Skim 2: Max 50% deduction of qualifying salary, tenure up to 30 years or age 70.
+ * - Max total slip deductions cannot exceed 75% of gross income.
+ */
+export function calculateLPPSA(input: LPPSACalculationInput): LPPSACalculationResult {
+  const {
+    basicSalary,
+    fixedAllowances = 0,
+    currentPayslipDeductions = 0,
+    propertyPrice = 0,
+    borrowerAge = 30,
+    scheme = "skim1",
+  } = input;
+
+  const qualifyingIncome = Math.max(0, basicSalary + fixedAllowances);
+  const interestRate = 4.0; // Fixed LPPSA rate
+  const monthlyRate = interestRate / 100 / 12;
+
+  // Max tenure: up to age 70 or scheme cap (35 yrs for skim 1, 30 yrs for skim 2)
+  const ageCap = Math.max(0, 70 - borrowerAge);
+  const schemeCap = scheme === "skim1" ? 35 : 30;
+  const maxTenureYears = Math.min(schemeCap, Math.max(5, ageCap));
+  const totalMonths = maxTenureYears * 12;
+
+  // Max allowable monthly installment based on scheme rules
+  // Skim 1: 60% of qualifying income
+  // Skim 2: 50% of qualifying income
+  const maxDeductionRate = scheme === "skim1" ? 0.6 : 0.5;
+  const maxMonthlyFromQualifying = qualifyingIncome * maxDeductionRate;
+
+  // 75% total deduction ceiling constraint
+  const max75Ceiling = qualifyingIncome * 0.75 - currentPayslipDeductions;
+  const maxAllowableMonthlyDeduction = Math.max(
+    0,
+    Math.round(Math.min(maxMonthlyFromQualifying, max75Ceiling))
+  );
+
+  // Calculate monthly installment for requested property price (100% financing under LPPSA)
+  let monthlyInstallment = 0;
+  if (propertyPrice > 0 && totalMonths > 0) {
+    monthlyInstallment = Math.round(
+      (propertyPrice * (monthlyRate * Math.pow(1 + monthlyRate, totalMonths))) /
+        (Math.pow(1 + monthlyRate, totalMonths) - 1)
+    );
+  }
+
+  // Calculate maximum loan capacity based on max allowable monthly deduction
+  // PV = PMT * [1 - (1+i)^-n] / i
+  let maxEligibleLoanAmount = 0;
+  if (maxAllowableMonthlyDeduction > 0 && totalMonths > 0) {
+    maxEligibleLoanAmount = Math.round(
+      (maxAllowableMonthlyDeduction * (1 - Math.pow(1 + monthlyRate, -totalMonths))) /
+        monthlyRate
+    );
+  }
+
+  const surplusDeficitMonthly = maxAllowableMonthlyDeduction - monthlyInstallment;
+  const isEligible = propertyPrice > 0 ? monthlyInstallment <= maxAllowableMonthlyDeduction : maxEligibleLoanAmount > 0;
+  const netTakeHomeAfterLoan = Math.max(
+    0,
+    Math.round(qualifyingIncome - currentPayslipDeductions - monthlyInstallment)
+  );
+
+  let rejectionReason: string | undefined;
+  if (!isEligible && propertyPrice > 0) {
+    if (monthlyInstallment > maxMonthlyFromQualifying) {
+      rejectionReason = `Ansuran bulanan (RM ${monthlyInstallment.toLocaleString()}) melebihi had ${maxDeductionRate * 100}% gaji kelayakan (RM ${Math.round(maxMonthlyFromQualifying).toLocaleString()}).`;
+    } else if (monthlyInstallment > max75Ceiling) {
+      rejectionReason = `Potongan slip gaji sedia ada (RM ${currentPayslipDeductions.toLocaleString()}) terlalu tinggi dan melanggar had siling 75% slip gaji.`;
+    }
+  }
+
+  return {
+    qualifyingIncome,
+    maxAllowableMonthlyDeduction,
+    monthlyInstallment,
+    maxEligibleLoanAmount,
+    maxTenureYears,
+    interestRate,
+    isEligible,
+    surplusDeficitMonthly,
+    netTakeHomeAfterLoan,
+    rejectionReason,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CO-BROKE & AGENT SHARING TEMPLATE GENERATOR
+// ---------------------------------------------------------------------------
+
+export interface CoBrokeShareInput {
+  title: string;
+  price: number;
+  propertyType?: string;
+  tenure?: string;
+  lotType?: string;
+  size?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  location?: string;
+  description?: string;
+  agentName?: string;
+  agentPhone?: string;
+  agencyName?: string;
+  renNumber?: string;
+  coBrokeRatio?: string; // e.g., "50/50" or "Co-Broke Welcome"
+  listingUrl?: string;
+  language?: "BM" | "EN";
+}
+
+/**
+ * Generates a professionally structured, agency-standard Co-Broke broadcast message
+ * with property highlights and co-broke split details for fellow REN agents.
+ */
+export function generateCoBrokeShareText(input: CoBrokeShareInput): string {
+  const {
+    title,
+    price,
+    propertyType = "Hartanah",
+    tenure = "Freehold",
+    lotType = "Bumi/Non-Bumi",
+    size = "N/A",
+    bedrooms = 0,
+    bathrooms = 0,
+    location = "Malaysia",
+    description = "",
+    agentName = "REN Agent",
+    agentPhone = "",
+    agencyName = "Artha Realty",
+    renNumber = "REN",
+    coBrokeRatio = "50/50 Co-Broke Dialu-alukan (Welcome)",
+    listingUrl = "",
+    language = "BM",
+  } = input;
+
+  const isBM = language === "BM";
+  const formattedPrice = `RM ${price.toLocaleString()}`;
+
+  if (isBM) {
+    return (
+      `🤝 *[CO-BROKE LISTING] ${title.toUpperCase()}*\n\n` +
+      `💰 *Harga Jualan:* ${formattedPrice} (Boleh Runding/Nego)\n` +
+      `📍 *Lokasi:* ${location}\n` +
+      `🏠 *Jenis:* ${propertyType} | ${tenure} (${lotType})\n` +
+      `📐 *Keluasan:* ${size}\n` +
+      `🛏 *Bilik:* ${bedrooms} Bilik Tidur | 🚿 ${bathrooms} Bilik Air\n\n` +
+      (description ? `📋 *Keterangan Unit:*\n${description.trim()}\n\n` : "") +
+      `---------------------------------\n` +
+      `💼 *Syarat Co-Broke:*\n` +
+      `• Nisbah Komisen: *${coBrokeRatio}*\n` +
+      `• Status: *Direct Listing / Kunci Sedia Ada*\n` +
+      `• Viewing: *Sila maklumkan 1 hari lebih awal*\n` +
+      `---------------------------------\n` +
+      (listingUrl ? `🔗 *Pautan Info & Foto:* ${listingUrl}\n\n` : "") +
+      `📲 *Hubungi Listing Agent (Direct):*\n` +
+      `👤 *${agentName}* (${renNumber})\n` +
+      `🏢 *${agencyName}*\n` +
+      `📞 WhatsApp: wa.me/${agentPhone.replace(/[^0-9]/g, "")}`
+    );
+  }
+
+  return (
+    `🤝 *[CO-BROKE LISTING] ${title.toUpperCase()}*\n\n` +
+    `💰 *Asking Price:* ${formattedPrice} (Negotiable)\n` +
+    `📍 *Location:* ${location}\n` +
+    `🏠 *Type:* ${propertyType} | ${tenure} (${lotType})\n` +
+    `📐 *Built-up / Land:* ${size}\n` +
+    `🛏 *Layout:* ${bedrooms} Beds | 🚿 ${bathrooms} Baths\n\n` +
+    (description ? `📋 *Unit Highlights:*\n${description.trim()}\n\n` : "") +
+    `---------------------------------\n` +
+    `💼 *Co-Broke Terms:*\n` +
+    `• Commission Split: *${coBrokeRatio}*\n` +
+    `• Listing Status: *Direct Listing / Keys on Hand*\n` +
+    `• Viewing: *Please RSVP 1 day in advance*\n` +
+    `---------------------------------\n` +
+    (listingUrl ? `🔗 *Full Details & Photos:* ${listingUrl}\n\n` : "") +
+    `📲 *Contact Listing Agent (Direct):*\n` +
+    `👤 *${agentName}* (${renNumber})\n` +
+    `🏢 *${agencyName}*\n` +
+    `📞 WhatsApp: wa.me/${agentPhone.replace(/[^0-9]/g, "")}`
+  );
+}

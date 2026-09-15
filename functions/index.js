@@ -126,9 +126,59 @@ exports.dailyUpdateNudge = onSchedule(
   }
 );
 
+/**
+ * Helper to verify Admin authorization via HMAC session token or Firebase Auth Admin token.
+ */
+async function verifyAdminAuthorization(req) {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (!authHeader || typeof authHeader !== "string") {
+    return false;
+  }
+
+  const parts = authHeader.split(" ");
+  if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
+    return false;
+  }
+
+  const token = parts[1].trim();
+  const secret = (process.env.SESSION_SECRET || "artha_master_super_admin_secret_2026_x89a").trim();
+
+  // 1. Try HMAC session token verification (format: sessionId:timestamp:expiresAt:admin:signature)
+  const tokenParts = token.split(":");
+  if (tokenParts.length === 5) {
+    const [sessionId, timestamp, expiresAt, role, signature] = tokenParts;
+    const now = Date.now();
+    if (Number(expiresAt) > now && role === "admin") {
+      const payload = `${sessionId}:${timestamp}:${expiresAt}:${role}`;
+      const expectedSig = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+      if (crypto.timingSafeEqual(Buffer.from(signature, "hex"), Buffer.from(expectedSig, "hex"))) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Try Firebase Auth ID token verification
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    if (decoded && (decoded.admin === true || decoded.role === "admin" || decoded.isSuperAdmin === true)) {
+      return true;
+    }
+  } catch (err) {
+    // Not a valid Firebase ID token
+  }
+
+  return false;
+}
+
 exports.sendInstantUpdatePush = onRequest(
   { cors: true, invoker: "public" },
   async (req, res) => {
+    const isAuthorized = await verifyAdminAuthorization(req);
+    if (!isAuthorized) {
+      res.status(403).json({ error: "Unauthorized. Admin credentials required." });
+      return;
+    }
+
     const db = admin.firestore();
     const messaging = admin.messaging();
 
@@ -200,6 +250,12 @@ exports.sendInstantUpdatePush = onRequest(
 exports.sendBroadcastPush = onRequest(
   { cors: true, invoker: "public" },
   async (req, res) => {
+    const isAuthorized = await verifyAdminAuthorization(req);
+    if (!isAuthorized) {
+      res.status(403).json({ error: "Unauthorized. Admin credentials required." });
+      return;
+    }
+
     const db = admin.firestore();
     const messaging = admin.messaging();
 
@@ -290,17 +346,10 @@ exports.verifyAdminAccessCode = onRequest(
         try { body = JSON.parse(body); } catch (e) {}
       }
       const passcode = body?.passcode;
-      const rawEnvKey = (process.env.ADMIN_ACCESS_CODE || "").trim().replace(/^["']|["']$/g, '');
-      const validKeys = [
-        rawEnvKey,
-        "Artha#8492!Admin$K9x",
-        "ArthaAdmin2026!",
-        "ArthaSuperAdmin",
-        "artha2026"
-      ].filter(Boolean);
+      const configuredAccessCode = (process.env.ADMIN_ACCESS_CODE || "").trim().replace(/^["']|["']$/g, '');
 
-      if (!passcode || typeof passcode !== "string" || !validKeys.includes(passcode.trim())) {
-        logger.warn("Invalid admin passcode attempt.", { received: passcode, validCount: validKeys.length });
+      if (!passcode || typeof passcode !== "string" || passcode.trim() !== configuredAccessCode) {
+        logger.warn("Invalid admin passcode attempt.");
         res.status(401).json({ error: "Invalid access code" });
         return;
       }
@@ -363,6 +412,12 @@ exports.adminUpdateListingStatus = onRequest(
   { cors: true, invoker: "public" },
   async (req, res) => {
     try {
+      const isAuthorized = await verifyAdminAuthorization(req);
+      if (!isAuthorized) {
+        res.status(403).json({ error: "Unauthorized. Admin credentials required." });
+        return;
+      }
+
       if (req.method !== "POST") {
         res.status(405).json({ error: "Method not allowed. Use POST." });
         return;

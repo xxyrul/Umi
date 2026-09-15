@@ -31,7 +31,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { addEventToNativeCalendar } from "@/services/calendar";
-import { calculateMortgage, extractSquareFootage, parseListingTitleAndDescription } from "@/utils/loanCalculator";
+import { calculateMortgage, extractSquareFootage, parseListingTitleAndDescription, generateCoBrokeShareText } from "@/utils/loanCalculator";
 import { resolveListingLocation } from "@/utils/locationDetector";
 import { HeroCarousel } from "@/components/listing-detail/HeroCarousel";
 import { FullscreenGallery } from "@/components/listing-detail/FullscreenGallery";
@@ -622,6 +622,50 @@ export default function PropertyDetailScreen() {
       }
     } catch (e) {
       console.warn("Copy error:", e);
+    }
+  };
+
+  // 1-Tap Copy Co-Broke Broadcast Text (Agent to Agent)
+  const handleCopyCoBrokeText = async () => {
+    setIsShareModalVisible(false);
+    if (!listing) return;
+    try {
+      const coBrokeMsg = generateCoBrokeShareText({
+        title: cleanTitle || listing.tajuk || "Hartanah Untuk Dijual",
+        price: numericPrice || 0,
+        propertyType: listing.jenis,
+        tenure: listing.pegangan,
+        lotType: listing.lot,
+        size: listing.keluasan ? String(listing.keluasan) : undefined,
+        bedrooms: typeof listing.bilikTidur === "number" ? listing.bilikTidur : Number(listing.bilikTidur) || 0,
+        bathrooms: typeof listing.bilikAir === "number" ? listing.bilikAir : Number(listing.bilikAir) || 0,
+        location: locationInfo.displayLocation || listing.alamat || listing.negeri,
+        description: extractedDescription,
+        agentName: auth().currentUser?.displayName || (listing as any).agentName || "REN Agent",
+        agentPhone: auth().currentUser?.phoneNumber || (listing as any).agentPhone || "",
+        agencyName: "Artha Realty",
+        renNumber: "REN",
+        coBrokeRatio: "50/50 Co-Broke Dialu-alukan (Welcome)",
+        listingUrl: listing.id ? `https://artharen.web.app/listing/${listing.id}` : "",
+        language: language === "BM" ? "BM" : "EN",
+      });
+      await Clipboard.setStringAsync(coBrokeMsg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      if (Platform.OS === "android") {
+        ToastAndroid.show(
+          language === "BM"
+            ? "🤝 Format Co-Broke telah disalin ke papan keratan!"
+            : "🤝 Co-Broke broadcast format copied to clipboard!",
+          ToastAndroid.LONG
+        );
+      } else {
+        Alert.alert(
+          language === "BM" ? "Disalin!" : "Copied!",
+          language === "BM" ? "Format Co-Broke telah disalin." : "Co-Broke broadcast format copied."
+        );
+      }
+    } catch (e) {
+      console.warn("Co-Broke Copy error:", e);
     }
   };
 
@@ -1408,6 +1452,46 @@ export default function PropertyDetailScreen() {
                     {language === "BM"
                       ? "Salin maklumat lengkap (harga, ansuran bulanan, spesifikasi)"
                       : "Copy full broadcast text (price, monthly loan, specs, location)"}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+              </TouchableOpacity>
+
+              {/* Option 3: Co-Broke Broadcast Format (REN to REN) */}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleCopyCoBrokeText}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 16,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: themeColors.borderColor,
+                  backgroundColor: themeColors.surfaceContainer,
+                  gap: 14,
+                }}
+              >
+                <View
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: "#10B98122",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons name="handshake-outline" size={22} color="#10B981" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: themeColors.textPrimary }}>
+                    {language === "BM" ? "Salin Format Co-Broke (REN to REN)" : "Copy Co-Broke Broadcast (Agent)"}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: themeColors.textSecondary, marginTop: 3 }}>
+                    {language === "BM"
+                      ? "Format khas sesama ejen bersama nisbah komisen 50/50"
+                      : "Specialized REN format with 50/50 commission split & lock status"}
                   </Text>
                 </View>
                 <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />

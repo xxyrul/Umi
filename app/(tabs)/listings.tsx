@@ -46,7 +46,7 @@ import Animated, {
 import { useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 import { useRouter, useFocusEffect } from "expo-router";
 
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as any;
 import type { PropertyListing } from "@/types/listing";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
@@ -143,7 +143,15 @@ function formatPriceLabel(value: string | number | undefined): string {
 function formatSizeLabel(value: string | number | undefined): string {
   const raw = (value ?? "").toString().trim();
   if (!raw) return "";
-  return raw.toLowerCase().includes("sq") ? raw : `${raw} sqft`;
+  const lower = raw.toLowerCase();
+  if (lower.includes("sq") || lower.includes("kaki") || lower.includes("acre") || lower.includes("ekar") || lower.includes("ac") || lower.includes("ft")) {
+    return raw;
+  }
+  // Check if it's a dimension like 22x70, 22 x 70, 20'x70'
+  if (/[0-9]+\s*['"]?\s*[xX*]\s*[0-9]+/.test(raw)) {
+    return raw;
+  }
+  return `${raw} sqft`;
 }
 
 function formatListingDate(dateStr?: string, lang: string = "EN"): string {
@@ -1432,6 +1440,7 @@ export default function MasterListingScreen() {
         >
           {segmentBarWidth > 0 ? (
             <Animated.View
+              pointerEvents="none"
               style={[
                 styles.segmentIndicator,
                 {
@@ -1597,6 +1606,7 @@ export default function MasterListingScreen() {
           key={`${viewMode}-${activeSegment}`}
           data={sortedListings}
           numColumns={viewMode === "grid" ? 2 : 1}
+          estimatedItemSize={viewMode === "grid" ? 220 : 340}
           keyExtractor={(item: any) => item.id}
           renderItem={(viewMode === "grid" ? renderGridCard : renderListingCard) as any}
           style={{ flex: 1, width: "100%" }}

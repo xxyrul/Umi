@@ -39,69 +39,95 @@ service cloud.firestore {
       ];
     }
 
+    // 👤 User Profiles & Directory
     match /users/{userId} {
-      // Allow reading agent profiles for public listings and admin web directory.
-      allow read: if true;
+      // Authenticated users can read agent profiles for app operation and directory
+      allow read: if isAuthed();
+      
+      // Registration: User can create their own profile document, but CANNOT self-assign admin role
+      allow create: if isAuthed() && request.auth.uid == userId
+        && (!('role' in request.resource.data) || request.resource.data.role != 'admin' || isAdmin());
 
-      // Users may modify their own profile, or admins/web portal may manage agent profiles (suspend, change role).
-      allow write: if isAuthed() || isAdmin();
+      // Update: User can update their own profile, but CANNOT modify security-sensitive fields (role, approved, status) unless they are admin
+      allow update: if isAuthed() && (
+        isAdmin() || (
+          request.auth.uid == userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'approved', 'status'])
+        )
+      );
 
-      // Push registrations for update notifications.
+      // Deletion: Admin only
+      allow delete: if isAdmin();
+
+      // Push notification token registrations
       match /devices/{deviceId} {
-        allow read, write: if isAuthed() || isAdmin();
+        allow read, write: if isAuthed() && (request.auth.uid == userId || isAdmin());
       }
     }
 
+    // 🎫 Invite Codes (Used during registration)
     match /invite_codes/{code} {
-      // Unauthenticated read is required because email registration validates
-      // the invite code BEFORE creating the Firebase Auth account.
+      // Pre-registration read is allowed to validate code before Firebase Auth user creation
       allow read: if true;
-      // Agents can update codes to claim them (status → USED) after signing in,
-      // and admins can update, create, or delete invite codes.
-      allow update: if true;
-      allow create, delete: if true;
+      // Claiming an invite code (status → USED)
+      allow update: if isAuthed() || isAdmin();
+      // Only admins can create or delete invite codes
+      allow create, delete: if isAdmin();
     }
 
     match /inviteCodes/{code} {
       allow read: if true;
-      allow update: if true;
-      allow create, delete: if true;
+      allow update: if isAuthed() || isAdmin();
+      allow create, delete: if isAdmin();
     }
 
+    // 📢 System Announcements & Bulletins
     match /announcements/{annId} {
-      // Public announcements feed for mobile app and admin broadcast manager.
-      allow read, write: if true;
+      // Authenticated agents can read announcements feed
+      allow read: if isAuthed();
+      // Only admins can create, edit, or delete broadcasts
+      allow write: if isAdmin();
     }
 
-    // Agent feedback submissions (bug reports, feature requests).
+    // 🐛 Feedback & Bug Reports
     match /feedback/{docId} {
-      allow create: if isAuthed();
-      allow read, update, delete: if isAdmin();
+      // Authenticated agents can submit feedback
+      allow create: if isAuthed() && (
+        !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid
+      );
+      // Agents can read and delete only their own submissions; Admins can read/manage all
+      allow read, delete: if isAuthed() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.userEmail == request.auth.token.email ||
+        isAdmin()
+      );
+      // Only admins can update status or adminResponse
+      allow update: if isAdmin();
     }
 
-    // Self-learning geocoding cache populated by the location service.
-    // Any authenticated agent can read cached locations and contribute new ones.
+    // 📍 Location Knowledge Base (Self-learning geocoding cache)
     match /locationKnowledgeBase/{docId} {
       allow read, create, update: if isAuthed();
       allow delete: if isAdmin();
     }
 
+    // 💼 Property Cases (Deal & Pipeline Management)
     match /cases/{caseId} {
-      // Reads and deletes: existing document must belong to the caller or admin.
+      // Reads and deletes: existing document must belong to caller or admin
       allow read, delete: if isAuthed()
         && (resource.data.userId == request.auth.uid || isAdmin());
 
-      // Creates: the new document must claim the caller's UID as owner (or admin creating for an agent).
+      // Creates: new document must claim caller's UID as owner (or admin creating for an agent)
       allow create: if isAuthed()
         && (request.resource.data.userId == request.auth.uid || isAdmin());
 
-      // Updates: the existing document must belong to the caller (or admin).
+      // Updates: existing document must belong to caller (or admin)
       allow update: if isAuthed()
         && ((resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid) || isAdmin());
     }
 
+    // 🏠 Property Listings (Private Details & Documents)
     match /listings/{listingId} {
-      // Only the listing owner (agentId or userId) or admin may read/update/delete.
       allow read: if isListingOwner(resource.data) || isAdmin();
       allow create: if isAuthed()
         && (isListingOwner(request.resource.data) || isAdmin())
@@ -115,9 +141,9 @@ service cloud.firestore {
       allow delete: if isAuthed() && (isListingOwner(resource.data) || isAdmin());
     }
 
+    // 🌐 Public Listings (Safe projection for co-broking and marketplace)
     match /publicListings/{listingId} {
-      // Safe listing projection (no owner IC/documents) accessible for mobile agents and web portal
-      allow read: if true;
+      allow read: if isAuthed();
       allow create: if isAuthed()
         && (request.resource.data.agentId == request.auth.uid || isAdmin());
       allow update: if (
@@ -133,7 +159,7 @@ service cloud.firestore {
         && (resource.data.agentId == request.auth.uid || isAdmin());
     }
 
-    // Release announcement bookkeeping
+    // 🚀 App Release Notifications Bookkeeping
     match /appReleaseNotifications/{releaseId} {
       allow read: if isAuthed();
       allow write: if isAdmin();

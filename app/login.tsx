@@ -24,6 +24,7 @@ import {
   initializeGoogleSignIn,
   sendPasswordReset,
   completeGoogleRegistration,
+  requestAgentAccessGoogle,
   isUserRegistrationComplete,
   signOut,
 } from "@/services/auth";
@@ -33,7 +34,7 @@ import { useAppSettings } from "@/context/AppSettingsContext";
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
-  const { themeColors, t, language } = useAppSettings();
+  const { themeColors, t, language, isDark } = useAppSettings();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSigningUp, setIsSigningUp] = useState(false);
@@ -58,15 +59,15 @@ export default function LoginScreen() {
   const [googleInviteInput, setGoogleInviteInput] = useState("");
   const [isActivatingGoogle, setIsActivatingGoogle] = useState(false);
 
-  // Android hardware back button and swipe back gesture handler
+  // Hardware Back Handler for Modals
   useEffect(() => {
-    const backAction = () => {
-      if (isGoogleModalVisible) {
-        handleCancelGoogleModal();
-        return true;
-      }
+    const handleBackPress = () => {
       if (isResetModalVisible) {
         setIsResetModalVisible(false);
+        return true;
+      }
+      if (isGoogleModalVisible && googleUserPending) {
+        handleCancelGoogleModal();
         return true;
       }
       if (isSigningUp) {
@@ -76,18 +77,18 @@ export default function LoginScreen() {
       return false;
     };
 
-    const subscription = BackHandler.addEventListener("hardwareBackPress", backAction);
+    const subscription = BackHandler.addEventListener("hardwareBackPress", handleBackPress);
     return () => subscription.remove();
   }, [isSigningUp, isResetModalVisible, isGoogleModalVisible, googleUserPending]);
 
   useEffect(() => {
     initializeGoogleSignIn();
 
-    // Check if the current user session is missing an invite code
+    // Check if the current user session is missing an invite code or pending approval
     const checkCurrentSession = async () => {
       const curr = firebaseAuth.currentUser;
       if (curr) {
-        const { isRegistered, isSuspended } = await isUserRegistrationComplete(curr.uid);
+        const { isRegistered, isSuspended, isPending } = await isUserRegistrationComplete(curr.uid);
         if (isSuspended) {
           await signOut();
           Alert.alert(
@@ -96,6 +97,10 @@ export default function LoginScreen() {
               ? "Akaun ejen anda telah digantung oleh pentadbir agensi."
               : "Your agent account has been suspended by the agency administrator."
           );
+          return;
+        }
+        if (isPending) {
+          router.replace("/pending-approval" as any);
           return;
         }
         if (!isRegistered) {
@@ -114,11 +119,25 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     try {
       setIsLoading(true);
-      const { userProfile, isRegistered } = await signInWithGoogle();
+      const { userProfile, isRegistered, isPending, isSuspended } = await signInWithGoogle();
+      if (isSuspended) {
+        await signOut();
+        Alert.alert(
+          language === "BM" ? "Akaun Digantung" : "Account Suspended",
+          language === "BM"
+            ? "Akaun ejen anda telah digantung oleh pentadbir agensi."
+            : "Your agent account has been suspended by the agency administrator."
+        );
+        return;
+      }
+      if (isPending) {
+        router.replace("/pending-approval" as any);
+        return;
+      }
       if (isRegistered) {
         router.replace("/(tabs)");
       } else {
-        // New Google user — prompt for Invite Code before granting entry
+        // New Google user — prompt for Invite Code or Direct Request
         setGoogleUserPending(userProfile);
         setGoogleInviteInput("");
         setIsGoogleModalVisible(true);
@@ -134,13 +153,18 @@ export default function LoginScreen() {
   const handleActivateGoogleAccount = async () => {
     if (!googleUserPending) return;
     if (!googleInviteInput.trim()) {
-      Alert.alert(t("reqInfoTitle"), t("inviteCodeHint"));
+      Alert.alert(
+        t("reqInfoTitle"),
+        language === "BM"
+          ? "Sila masukkan kod jemputan, atau tekan butang 'Mohon Kelulusan' jika anda tiada kod."
+          : "Please enter an invite code, or tap 'Request Approval' below if you don't have a code."
+      );
       return;
     }
 
     try {
       setIsActivatingGoogle(true);
-      await completeGoogleRegistration(
+      const res = await completeGoogleRegistration(
         googleUserPending.uid,
         googleUserPending.email,
         googleUserPending.displayName,
@@ -148,7 +172,11 @@ export default function LoginScreen() {
       );
       setIsGoogleModalVisible(false);
       setGoogleUserPending(null);
-      router.replace("/(tabs)");
+      if (res.isPending) {
+        router.replace("/pending-approval" as any);
+      } else {
+        router.replace("/(tabs)");
+      }
     } catch (error: any) {
       console.error("Google registration error:", error);
       const errMsg = error?.message || "";
@@ -163,6 +191,26 @@ export default function LoginScreen() {
       }
 
       Alert.alert(t("authErrorTitle"), userFriendlyMsg);
+    } finally {
+      setIsActivatingGoogle(false);
+    }
+  };
+
+  const handleRequestApprovalGoogle = async () => {
+    if (!googleUserPending) return;
+    try {
+      setIsActivatingGoogle(true);
+      await requestAgentAccessGoogle(
+        googleUserPending.uid,
+        googleUserPending.email,
+        googleUserPending.displayName
+      );
+      setIsGoogleModalVisible(false);
+      setGoogleUserPending(null);
+      router.replace("/pending-approval" as any);
+    } catch (error: any) {
+      console.error("Google request access error:", error);
+      Alert.alert(t("authErrorTitle"), error?.message || (language === "BM" ? "Gagal menghantar permohonan." : "Failed to submit request."));
     } finally {
       setIsActivatingGoogle(false);
     }
@@ -214,14 +262,6 @@ export default function LoginScreen() {
       return;
     }
 
-    if (isSigningUp && !inviteCode.trim()) {
-      Alert.alert(
-        t("reqInfoTitle"),
-        t("inviteCodeHint")
-      );
-      return;
-    }
-
     try {
       setIsLoading(true);
       if (isSigningUp) {
@@ -230,11 +270,37 @@ export default function LoginScreen() {
           setIsLoading(false);
           return;
         }
-        await signUpWithEmail(cleanIdentifier, password, displayName.trim(), inviteCode.trim());
+        const newUser = await signUpWithEmail(
+          cleanIdentifier,
+          password,
+          displayName.trim(),
+          inviteCode.trim() || "DIRECT_REQUEST"
+        );
+        const { isPending } = await isUserRegistrationComplete(newUser.uid);
+        if (isPending) {
+          router.replace("/pending-approval" as any);
+        } else {
+          router.replace("/(tabs)");
+        }
       } else {
-        await signInWithEmail(cleanIdentifier, password);
+        const user = await signInWithEmail(cleanIdentifier, password);
+        const { isPending, isSuspended } = await isUserRegistrationComplete(user.uid);
+        if (isSuspended) {
+          await signOut();
+          Alert.alert(
+            language === "BM" ? "Akaun Digantung" : "Account Suspended",
+            language === "BM"
+              ? "Akaun ejen anda telah digantung oleh pentadbir."
+              : "Your account has been suspended by the administrator."
+          );
+          return;
+        }
+        if (isPending) {
+          router.replace("/pending-approval" as any);
+        } else {
+          router.replace("/(tabs)");
+        }
       }
-      router.replace("/(tabs)");
     } catch (error: any) {
       console.error("Auth error:", error);
       const code = error?.code || "";
@@ -437,12 +503,17 @@ export default function LoginScreen() {
 
               {isSigningUp && (
                 <View style={styles.inputGroup}>
-                  <Text style={[styles.label, { color: themeColors.textPrimary }]}>{t("inviteCodeLabel")}</Text>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <Text style={[styles.label, { color: themeColors.textPrimary, marginBottom: 0 }]}>{t("inviteCodeLabel")}</Text>
+                    <Text style={{ fontSize: 11, color: themeColors.textMuted }}>
+                      {language === "BM" ? "(Pilihan)" : "(Optional)"}
+                    </Text>
+                  </View>
                   <View style={[styles.inputWithIcon, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
                     <MaterialCommunityIcons name="key-outline" size={20} color={themeColors.maroonPrimary} style={{ marginLeft: 12 }} />
                     <TextInput
                       style={[styles.textInput, { color: themeColors.textPrimary, textTransform: "uppercase", fontWeight: "700", letterSpacing: 1 }]}
-                      placeholder={t("inviteCodePlaceholder")}
+                      placeholder={language === "BM" ? "Contoh: 7K9X-482A (Jika ada)" : "e.g. 7K9X-482A (If available)"}
                       placeholderTextColor={themeColors.textMuted}
                       autoCapitalize="characters"
                       value={inviteCode}
@@ -450,7 +521,9 @@ export default function LoginScreen() {
                     />
                   </View>
                   <Text style={{ fontSize: 11, color: themeColors.textMuted, marginTop: 4, lineHeight: 16 }}>
-                    {t("inviteCodeHint")}
+                    {language === "BM"
+                      ? "Ada kod jemputan? Masukkan untuk pengaktifan terus. Tiada kod? Terus tekan butang di bawah untuk memohon kelulusan."
+                      : "Have an invite code? Enter it to activate. No code? Submit below to request admin approval."}
                   </Text>
                 </View>
               )}
@@ -477,7 +550,9 @@ export default function LoginScreen() {
                   <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <Text style={styles.primaryButtonText}>
-                    {isSigningUp ? t("createAccountBtn") : t("signInBtn")}
+                    {isSigningUp
+                      ? (inviteCode.trim() ? t("createAccountBtn") : (language === "BM" ? "Mohon Kelulusan Pendaftaran" : "Submit Access Request"))
+                      : t("signInBtn")}
                   </Text>
                 )}
               </TouchableOpacity>
@@ -746,6 +821,39 @@ export default function LoginScreen() {
               ) : (
                 <Text style={styles.primaryButtonText}>{t("activateAccountBtn")}</Text>
               )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 14 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: themeColors.borderColor }} />
+              <Text style={{ marginHorizontal: 10, fontSize: 12, color: themeColors.textMuted }}>
+                {language === "BM" ? "atau" : "or"}
+              </Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: themeColors.borderColor }} />
+            </View>
+
+            {/* Request Approval Direct Button */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={handleRequestApprovalGoogle}
+              disabled={isActivatingGoogle}
+              style={{
+                backgroundColor: isDark ? "#1E293B" : "#F1F5F9",
+                borderWidth: 1,
+                borderColor: themeColors.borderColor,
+                borderRadius: 10,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                alignItems: "center",
+                flexDirection: "row",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <MaterialCommunityIcons name="account-clock-outline" size={18} color={themeColors.textPrimary} />
+              <Text style={{ fontSize: 13, fontWeight: "700", color: themeColors.textPrimary }}>
+                {language === "BM" ? "Tiada Kod? Mohon Kelulusan" : "No Code? Request Approval"}
+              </Text>
             </TouchableOpacity>
 
             {/* Cancel Button */}

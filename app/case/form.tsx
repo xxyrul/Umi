@@ -160,9 +160,8 @@ export default function CaseFormScreen() {
 
     try {
       setIsSubmitting(true);
-      const caseData = {
+      const caseData: any = {
         namaCase: namaCase.trim(),
-        tarikh: new Date().toISOString(),
         clientName: vendorName.trim(),
         vendorName: vendorName.trim(),
         vendorIC: vendorIC.trim(),
@@ -174,6 +173,10 @@ export default function CaseFormScreen() {
         status,
         catatan: catatan.trim(),
       };
+
+      if (!isEditMode) {
+        caseData.tarikh = new Date().toISOString();
+      }
 
       if (isEditMode && editCaseId) {
         await updateCase(editCaseId, caseData);

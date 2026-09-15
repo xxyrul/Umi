@@ -28,12 +28,12 @@ import Animated, {
 } from "react-native-reanimated";
 import { useScrollAwareBar } from "@/context/ScrollAwareBarContext";
 
-const AnimatedFlashList = Animated.createAnimatedComponent(FlashList);
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as any;
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SPACING } from "@/constants/theme";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAppSettings } from "@/context/AppSettingsContext";
-import { CaseCard } from "@/components";
+import { CaseCard, CaseSkeleton } from "@/components";
 import { deleteCase, updateCase } from "@/services/storage";
 import { firestore, auth } from "@/services/firebase";
 import { scheduleCaseReminder } from "@/services/notifications";
@@ -618,12 +618,18 @@ export default function CasesScreen() {
 
       {/* Main Cases FlashList */}
       {isLoading ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator size="large" color={themeColors.maroonPrimary} />
-        </View>
+        <ScrollView
+          style={{ flex: 1, width: "100%", paddingHorizontal: SPACING.lg }}
+          showsVerticalScrollIndicator={false}
+        >
+          <CaseSkeleton />
+          <CaseSkeleton />
+          <CaseSkeleton />
+        </ScrollView>
       ) : (
         <AnimatedFlashList
           data={filteredCases}
+          estimatedItemSize={210}
           keyExtractor={(item: any) => item.id}
           style={{ flex: 1, width: "100%" }}
           onScroll={scrollHandler}

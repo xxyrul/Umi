@@ -2,7 +2,7 @@
   "expo": {
     "name": "artha",
     "slug": "arul",
-    "version": "1.5.2",
+    "version": "1.6.0",
     "runtimeVersion": "1.0.0",
     "scheme": "umi",
     "orientation": "portrait",
@@ -29,7 +29,7 @@
     },
     "android": {
       "package": "com.umi.caseflow",
-      "versionCode": 57,
+      "versionCode": 58,
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",

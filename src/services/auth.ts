@@ -1,5 +1,5 @@
 import auth from "@react-native-firebase/auth";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
+import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 import { firebaseAuth, firebaseDB } from "./firebase";
 import { unregisterFromUpdateNotifications } from "./updateNotifications";
 import type { UserProfile } from "@/types/case";
@@ -34,28 +34,49 @@ export async function initializeGoogleSignIn(): Promise<void> {
 }
 
 /**
- * Check if a user is an existing registered user or new user, and check suspension
+ * Check if a user is an existing registered user or new user, and check suspension / approval status
  */
-export async function isUserRegistrationComplete(uid: string): Promise<{ isRegistered: boolean; isSuspended: boolean }> {
+export async function isUserRegistrationComplete(
+  uid: string
+): Promise<{
+  isRegistered: boolean;
+  isSuspended: boolean;
+  isPending: boolean;
+  isRejected: boolean;
+  rejectionReason?: string;
+}> {
   try {
     const doc = await firebaseDB.collection("users").doc(uid).get();
     if (doc.exists) {
       const data = doc.data();
       if (data?.status === "SUSPENDED") {
-        return { isRegistered: false, isSuspended: true };
+        return { isRegistered: true, isSuspended: true, isPending: false, isRejected: false };
+      }
+      if (data?.status === "REJECTED") {
+        return {
+          isRegistered: true,
+          isSuspended: false,
+          isPending: false,
+          isRejected: true,
+          rejectionReason: data?.rejectionReason,
+        };
+      }
+      if (data?.role !== "admin" && (data?.status === "PENDING_APPROVAL" || data?.approved === false)) {
+        return { isRegistered: true, isSuspended: false, isPending: true, isRejected: false };
       }
       // Existing user account already active in the system
-      return { isRegistered: true, isSuspended: false };
+      return { isRegistered: true, isSuspended: false, isPending: false, isRejected: false };
     }
   } catch (e) {
     console.warn("Could not check user registration status:", e);
   }
-  return { isRegistered: false, isSuspended: false };
+  return { isRegistered: false, isSuspended: false, isPending: false, isRejected: false };
 }
 
-export async function checkUserRegistrationStatus(uid: string): Promise<{ isRegistered: boolean; userDoc?: any }> {
-  const res = await isUserRegistrationComplete(uid);
-  return { isRegistered: res.isRegistered };
+export async function checkUserRegistrationStatus(
+  uid: string
+): Promise<{ isRegistered: boolean; isPending: boolean; isSuspended: boolean; userDoc?: any }> {
+  return await isUserRegistrationComplete(uid);
 }
 
 import { validateInviteCodeOnly, claimInviteCodeOnly } from "./inviteCodes";
@@ -68,12 +89,14 @@ export async function completeGoogleRegistration(
   email: string,
   displayName: string,
   inviteCode: string
-): Promise<{ success: boolean; code: string }> {
+): Promise<{ success: boolean; code: string; isPending: boolean }> {
   // 1. Validate invite code first (read-only, outside transaction)
   const { code: validatedCode, isMaster } = await validateInviteCodeOnly(inviteCode);
 
   // 2. Atomically create user doc + claim the invite code in a single transaction.
-  //    If either step fails, both are rolled back — no orphaned states.
+  //    Master codes grant immediate ACTIVE status; standard single-use codes go to PENDING_APPROVAL.
+  const isPending = !isMaster;
+
   await firebaseDB.runTransaction(async (transaction) => {
     const userRef = firebaseDB.collection("users").doc(uid);
 
@@ -85,6 +108,8 @@ export async function completeGoogleRegistration(
         displayName,
         registeredWithCode: validatedCode,
         role: "agent",
+        status: isMaster ? "ACTIVE" : "PENDING_APPROVAL",
+        approved: isMaster,
         updatedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
       },
@@ -108,13 +133,46 @@ export async function completeGoogleRegistration(
     await claimInviteCodeOnly(validatedCode, email, displayName, true).catch(() => {});
   }
 
-  return { success: true, code: validatedCode };
+  return { success: true, code: validatedCode, isPending };
+}
+
+/**
+ * Direct Access Request for Google Users (no invite code needed)
+ */
+export async function requestAgentAccessGoogle(
+  uid: string,
+  email: string,
+  displayName: string,
+  notes?: string
+): Promise<{ success: boolean; isPending: boolean }> {
+  const userRef = firebaseDB.collection("users").doc(uid);
+  await userRef.set(
+    {
+      uid,
+      email,
+      displayName,
+      registeredWithCode: "DIRECT_REQUEST",
+      requestNotes: notes || "",
+      role: "agent",
+      status: "PENDING_APPROVAL",
+      approved: false,
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  return { success: true, isPending: true };
 }
 
 /**
  * Sign in with Google
  */
-export async function signInWithGoogle(): Promise<{ userProfile: UserProfile; isRegistered: boolean }> {
+export async function signInWithGoogle(): Promise<{
+  userProfile: UserProfile;
+  isRegistered: boolean;
+  isPending: boolean;
+  isSuspended: boolean;
+}> {
   try {
     if (Platform.OS === "web") {
       throw new Error("Google Sign-In is available in the Android app.");
@@ -123,15 +181,20 @@ export async function signInWithGoogle(): Promise<{ userProfile: UserProfile; is
     await GoogleSignin.signOut().catch(() => {}); // Clear any previous sign-in state
     const userInfo = await GoogleSignin.signIn();
     
-    if (!userInfo.idToken) {
-      throw new Error("No ID token received from Google Sign-In");
+    // Check if tokens are returned in userInfo or if getTokens is needed
+    let idToken = (userInfo as any)?.data?.idToken || (userInfo as any)?.idToken;
+    if (!idToken) {
+      const tokens = await GoogleSignin.getTokens();
+      idToken = tokens.idToken;
     }
 
-    const credential = auth.GoogleAuthProvider.credential(userInfo.idToken);
-    const userCredential = await firebaseAuth.signInWithCredential(credential);
+    if (!idToken) {
+      throw new Error("No ID token returned from Google Sign-In");
+    }
 
-    // Check if this Google user is already a registered agent in Firestore
-    const { isRegistered } = await checkUserRegistrationStatus(userCredential.user.uid);
+    // Sign in to Firebase with the Google credential
+    const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+    const userCredential = await firebaseAuth.signInWithCredential(googleCredential);
 
     const userProfile: UserProfile = {
       uid: userCredential.user.uid,
@@ -140,10 +203,26 @@ export async function signInWithGoogle(): Promise<{ userProfile: UserProfile; is
       photoURL: userCredential.user.photoURL || undefined,
     };
 
-    return { userProfile, isRegistered };
-  } catch (error) {
-    console.error("Error signing in with Google:", error);
-    throw error;
+    // Check if the user already has a completed registration in Firestore
+    const { isRegistered, isPending, isSuspended } = await isUserRegistrationComplete(userCredential.user.uid);
+
+    return {
+      userProfile,
+      isRegistered,
+      isPending,
+      isSuspended,
+    };
+  } catch (error: any) {
+    if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      throw new Error("Sign in cancelled");
+    } else if (error.code === statusCodes.IN_PROGRESS) {
+      throw new Error("Sign in already in progress");
+    } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      throw new Error("Google Play Services not available or outdated");
+    } else {
+      console.error("Google Sign-In error:", error);
+      throw error;
+    }
   }
 }
 
@@ -152,14 +231,10 @@ export async function signInWithGoogle(): Promise<{ userProfile: UserProfile; is
  */
 export async function signInWithEmail(
   email: string,
-  password: string
+  pass: string
 ): Promise<UserProfile> {
   try {
-    const userCredential = await firebaseAuth.signInWithEmailAndPassword(
-      email,
-      password
-    );
-
+    const userCredential = await firebaseAuth.signInWithEmailAndPassword(email, pass);
     return {
       uid: userCredential.user.uid,
       email: userCredential.user.email || "",
@@ -173,16 +248,26 @@ export async function signInWithEmail(
 }
 
 /**
- * Create account with email, password, and required invite code
+ * Create account with email, password, and optional invite code or direct request
  */
 export async function signUpWithEmail(
   email: string,
   password: string,
   displayName: string,
-  inviteCode: string
+  inviteCode?: string,
+  notes?: string
 ): Promise<UserProfile> {
-  // 1. Validate invite code BEFORE creating account (does not consume it yet)
-  const { code: validatedCode, isMaster } = await validateInviteCodeOnly(inviteCode);
+  const codeToUse = inviteCode?.trim();
+  const isDirectRequest = !codeToUse || codeToUse.toUpperCase() === "DIRECT_REQUEST";
+
+  let validatedCode = "DIRECT_REQUEST";
+  let isMaster = false;
+
+  if (!isDirectRequest) {
+    const res = await validateInviteCodeOnly(codeToUse);
+    validatedCode = res.code;
+    isMaster = res.isMaster;
+  }
 
   try {
     const userCredential = await firebaseAuth.createUserWithEmailAndPassword(
@@ -210,7 +295,10 @@ export async function signUpWithEmail(
             email: userCredential.user.email || email,
             displayName: displayName,
             registeredWithCode: validatedCode,
+            requestNotes: notes || "",
             role: "agent",
+            status: isMaster ? "ACTIVE" : "PENDING_APPROVAL",
+            approved: isMaster,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
@@ -218,7 +306,7 @@ export async function signUpWithEmail(
         );
 
         // Claim single-use codes inside the same transaction
-        if (!isMaster) {
+        if (!isMaster && !isDirectRequest) {
           const codeRef = firebaseDB.collection("invite_codes").doc(validatedCode);
           transaction.update(codeRef, {
             status: "USED",

@@ -17,7 +17,9 @@ let allCodes = [];
 let allAgents = [];
 let allAnnouncements = [];
 let allListings = [];
+let allFeedback = [];
 let currentCodeFilter = "ALL";
+let currentFeedbackStatusFilter = "ALL";
 let lastGeneratedBatch = [];
 
 // Real-Time Listeners Unsubscribers
@@ -25,6 +27,7 @@ let unsubCodes = null;
 let unsubAgents = null;
 let unsubAnnouncements = null;
 let unsubListings = null;
+let unsubFeedback = null;
 
 // Toast helper
 function showToast(msg) {
@@ -44,11 +47,15 @@ function showView(viewId) {
 
 // Section switcher with persistence
 function switchDashboardSection(sectionId) {
-  if (!sectionId) sectionId = 'codes';
+  if (!sectionId) sectionId = 'approvals';
+  if (sectionId === 'batch') {
+    sectionId = 'codes';
+    setTimeout(() => switchCodeGeneratorMode('batch'), 50);
+  }
   localStorage.setItem('artha_admin_active_tab', sectionId);
   try { window.history.replaceState(null, '', '#' + sectionId); } catch(e) {}
 
-  ['codes', 'batch', 'broadcast', 'agents', 'listings'].forEach(s => {
+  ['approvals', 'codes', 'broadcast', 'agents', 'listings', 'feedback'].forEach(s => {
     const sec = document.getElementById('section-' + s);
     const tab = document.getElementById('tab-btn-' + s);
     if (sec) sec.style.display = (s === sectionId) ? 'block' : 'none';
@@ -56,11 +63,36 @@ function switchDashboardSection(sectionId) {
   });
 }
 
+function switchCodeGeneratorMode(mode) {
+  const isBatch = mode === 'batch';
+  const singleForm = document.getElementById('code-form-single');
+  const batchForm = document.getElementById('code-form-batch');
+  const singleBtn = document.getElementById('code-mode-btn-single');
+  const batchBtn = document.getElementById('code-mode-btn-batch');
+  const randomKeyBtn = document.getElementById('code-random-key-btn');
+
+  if (singleForm) singleForm.style.display = isBatch ? 'none' : 'block';
+  if (batchForm) batchForm.style.display = isBatch ? 'block' : 'none';
+  if (singleBtn) singleBtn.classList.toggle('active', !isBatch);
+  if (batchBtn) batchBtn.classList.toggle('active', isBatch);
+  if (randomKeyBtn) randomKeyBtn.style.display = isBatch ? 'none' : 'inline-block';
+}
+
 function restoreActiveTab() {
   const hash = (window.location.hash || '').replace('#', '').toLowerCase();
-  const validTabs = ['codes', 'batch', 'broadcast', 'agents', 'listings'];
-  const saved = localStorage.getItem('artha_admin_active_tab');
-  const targetTab = validTabs.includes(hash) ? hash : (validTabs.includes(saved) ? saved : 'codes');
+  const validTabs = ['approvals', 'codes', 'broadcast', 'agents', 'listings', 'feedback'];
+  let targetTab = 'approvals';
+  if (hash === 'batch') {
+    targetTab = 'codes';
+    setTimeout(() => switchCodeGeneratorMode('batch'), 50);
+  } else if (validTabs.includes(hash)) {
+    targetTab = hash;
+  } else {
+    const saved = localStorage.getItem('artha_admin_active_tab');
+    if (validTabs.includes(saved)) {
+      targetTab = saved;
+    }
+  }
   switchDashboardSection(targetTab);
 }
 
@@ -304,7 +336,7 @@ function startRealtimeListeners() {
     renderCodesTable();
   }, err => console.error("Codes listener error:", err));
 
-  // 2. Registered Agents
+  // 2. Registered Agents & Pending Approvals
   unsubAgents = db.collection('users').onSnapshot(snapshot => {
     allAgents = [];
     snapshot.forEach(doc => {
@@ -317,11 +349,20 @@ function startRealtimeListeners() {
     });
     allAgents.sort((a, b) => new Date(b.createdAt || b.updatedAt || 0) - new Date(a.createdAt || a.updatedAt || 0));
 
+    const pendingList = allAgents.filter(a => a.role !== 'admin' && a.status === 'PENDING_APPROVAL');
+    const registeredAgentsList = allAgents.filter(a => a.status !== 'PENDING_APPROVAL' && a.status !== 'REJECTED');
+
+    const pendingStatEl = document.getElementById('stat-pending-count');
+    const pendingBadgeEl = document.getElementById('badge-pending-approvals');
     const agentsEl = document.getElementById('stat-agents-count');
     const badgeEl = document.getElementById('badge-agents');
-    if (agentsEl) agentsEl.textContent = allAgents.length;
-    if (badgeEl) badgeEl.textContent = allAgents.length;
 
+    if (pendingStatEl) pendingStatEl.textContent = pendingList.length;
+    if (pendingBadgeEl) pendingBadgeEl.textContent = pendingList.length;
+    if (agentsEl) agentsEl.textContent = registeredAgentsList.length;
+    if (badgeEl) badgeEl.textContent = registeredAgentsList.length;
+
+    renderPendingApprovalsTable();
     renderAgentsTable();
   }, err => console.error("Agents listener error:", err));
 
@@ -360,6 +401,47 @@ function startRealtimeListeners() {
 
     renderListingsTable();
   }, err => console.error("Listings listener error:", err));
+
+  // 5. Feedback & Bug Reports
+  unsubFeedback = db.collection('feedback').onSnapshot(snapshot => {
+    allFeedback = [];
+    snapshot.forEach(doc => {
+      const d = doc.data();
+      d.id = doc.id;
+      allFeedback.push(d);
+    });
+
+    // Safe numeric timestamp comparator
+    const getMs = (val) => {
+      if (!val) return 0;
+      if (typeof val === 'number') return val;
+      if (val.toMillis) return val.toMillis();
+      if (val.seconds) return val.seconds * 1000;
+      const parsed = Date.parse(val);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+    allFeedback.sort((a, b) => getMs(b.createdAt) - getMs(a.createdAt));
+
+    const pendingCount = allFeedback.filter(f => !f.status || f.status === 'pending').length;
+    const progressCount = allFeedback.filter(f => f.status === 'in-progress').length;
+    const resolvedCount = allFeedback.filter(f => f.status === 'resolved').length;
+
+    const countEl = document.getElementById('stat-feedback-count');
+    const badgeEl = document.getElementById('badge-feedback');
+    const fbCountAll = document.getElementById('fb-count-all');
+    const fbCountPending = document.getElementById('fb-count-pending');
+    const fbCountProgress = document.getElementById('fb-count-progress');
+    const fbCountResolved = document.getElementById('fb-count-resolved');
+
+    if (countEl) countEl.textContent = allFeedback.length;
+    if (badgeEl) badgeEl.textContent = pendingCount;
+    if (fbCountAll) fbCountAll.textContent = allFeedback.length;
+    if (fbCountPending) fbCountPending.textContent = pendingCount;
+    if (fbCountProgress) fbCountProgress.textContent = progressCount;
+    if (fbCountResolved) fbCountResolved.textContent = resolvedCount;
+
+    renderFeedbackTable();
+  }, err => console.error("Feedback listener error:", err));
 }
 
 function stopRealtimeListeners() {
@@ -367,6 +449,7 @@ function stopRealtimeListeners() {
   if (unsubAgents) { unsubAgents(); unsubAgents = null; }
   if (unsubAnnouncements) { unsubAnnouncements(); unsubAnnouncements = null; }
   if (unsubListings) { unsubListings(); unsubListings = null; }
+  if (unsubFeedback) { unsubFeedback(); unsubFeedback = null; }
 }
 
 // Code Generator Helpers
@@ -496,7 +579,8 @@ function renderCodesTable() {
       '<td style="text-align: right;">' +
         '<div class="action-btn-group">' +
           '<button class="btn-icon-action" onclick="copySingleCode(\'' + c.code + '\')">📋 Copy</button>' +
-          (c.status === 'ACTIVE' ? '<button class="btn-danger-action" onclick="handleRevokeCode(\'' + c.id + '\', \'' + c.code + '\')">Revoke</button>' : '') +
+          (c.status === 'ACTIVE' ? '<button class="btn-warning-action" style="padding: 4px 8px; font-size: 11px; background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px; cursor: pointer;" onclick="handleRevokeCode(\'' + c.id + '\', \'' + c.code + '\')">Revoke</button>' : '') +
+          '<button class="btn-danger-action" style="padding: 4px 8px; font-size: 11px;" onclick="handleDeleteSingleCode(\'' + (c.code || c.id) + '\')" title="Delete Code Permanently">🗑️</button>' +
         '</div>' +
       '</td>' +
     '</tr>';
@@ -519,6 +603,16 @@ async function handleRevokeCode(id, code) {
     showToast("Code '" + targetCode + "' revoked.");
   } catch (err) {
     alert("Failed to revoke: " + err.message);
+  }
+}
+
+async function handleDeleteSingleCode(code) {
+  if (!confirm("Permanently delete invite code '" + code + "' from Firestore?")) return;
+  try {
+    await db.collection('invite_codes').doc(code).delete();
+    showToast("🗑️ Code '" + code + "' deleted permanently.");
+  } catch (err) {
+    alert("Failed to delete: " + err.message);
   }
 }
 
@@ -717,13 +811,79 @@ async function handleDeleteAnnouncement(docId) {
   }
 }
 
+// Pending Agent Approvals Desk
+function renderPendingApprovalsTable() {
+  const tbody = document.getElementById('pending-table-body');
+  if (!tbody) return;
+  const search = (document.getElementById('filter-pending-input')?.value || '').trim().toLowerCase();
+
+  let pendingList = allAgents.filter(a => a.role !== 'admin' && a.status === 'PENDING_APPROVAL');
+  if (search) {
+    pendingList = pendingList.filter(a =>
+      (a.displayName && a.displayName.toLowerCase().includes(search)) ||
+      (a.email && a.email.toLowerCase().includes(search)) ||
+      (a.registeredWithCode && a.registeredWithCode.toLowerCase().includes(search)) ||
+      (a.requestNotes && a.requestNotes.toLowerCase().includes(search))
+    );
+  }
+
+  if (pendingList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 32px;">🎉 <strong>All caught up!</strong> No pending agent registrations at this moment.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = pendingList.map(a => {
+    const appliedDate = a.createdAt ? new Date(a.createdAt).toLocaleString() : (a.updatedAt ? new Date(a.updatedAt).toLocaleString() : '-');
+    const initials = (a.displayName || 'A').split(' ').map(n => n.charAt(0)).join('').slice(0, 2).toUpperCase();
+
+    const isDirect = !a.registeredWithCode || a.registeredWithCode === 'DIRECT_REQUEST';
+    const methodBadge = isDirect
+      ? '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; font-weight: 700;">📝 Direct Request</span>'
+      : '<span class="code-pill" onclick="copySingleCode(\'' + a.registeredWithCode + '\')">' + a.registeredWithCode + '</span>';
+
+    const notesText = a.requestNotes || (isDirect ? 'Direct Application' : 'Registered with invite code');
+
+    return '<tr>' +
+      '<td>' +
+        '<div style="display: flex; align-items: center; gap: 10px;">' +
+          '<div style="width: 34px; height: 34px; border-radius: 50%; background: rgba(245, 158, 11, 0.2); color: #F59E0B; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; border: 1px solid rgba(245, 158, 11, 0.35); flex-shrink: 0;">' + initials + '</div>' +
+          '<div>' +
+            '<div style="font-weight: 700; color: var(--text-main); font-size: 13.5px;">' + (a.displayName || 'Agent Applicant') + '</div>' +
+            '<div style="font-size: 11px; color: var(--text-dim);">' + (a.phoneNumber || a.phone || '') + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</td>' +
+      '<td style="color: var(--text-muted);">' + (a.email || '-') + '</td>' +
+      '<td style="color: var(--text-muted); font-size: 12px;">' + appliedDate + '</td>' +
+      '<td>' + methodBadge + '</td>' +
+      '<td style="color: var(--text-muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + notesText + '</td>' +
+      '<td style="text-align: right;">' +
+        '<div class="action-btn-group">' +
+          '<button class="btn-primary" style="padding: 6px 14px; font-size: 12px; background: #10B981; border-color: #10B981; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);" onclick="approveAgentWeb(\'' + a.uid + '\')">✅ Approve</button>' +
+          '<button class="btn-danger-action" style="padding: 6px 12px;" onclick="rejectAgentWeb(\'' + a.uid + '\', \'' + (a.displayName || a.email || 'this agent') + '\')">❌ Reject</button>' +
+        '</div>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function rejectAgentWeb(uid, name) {
+  if (!confirm("Are you sure you want to REJECT and REMOVE application for '" + name + "'?")) return;
+  try {
+    await db.collection('users').doc(uid).delete();
+    showToast("Application rejected and removed.");
+  } catch (err) {
+    alert("Failed to reject application: " + err.message);
+  }
+}
+
 // Registered Agents
 function renderAgentsTable() {
   const tbody = document.getElementById('agents-table-body');
   if (!tbody) return;
   const search = (document.getElementById('filter-agents-input')?.value || '').trim().toLowerCase();
 
-  let filtered = allAgents;
+  let filtered = allAgents.filter(a => a.status !== 'PENDING_APPROVAL' && a.status !== 'REJECTED');
   if (search) {
     filtered = filtered.filter(a =>
       (a.displayName && a.displayName.toLowerCase().includes(search)) ||
@@ -745,10 +905,16 @@ function renderAgentsTable() {
       ? '<span class="badge badge-admin">👑 Admin</span>'
       : '<span class="badge badge-used">Agent</span>';
 
+    const isPending = a.role !== 'admin' && a.status === 'PENDING_APPROVAL';
+    const isRejected = a.status === 'REJECTED';
     const isSuspended = a.status === 'SUSPENDED';
-    const statusBadge = isSuspended
+    const statusBadge = isPending
+      ? '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; font-weight: 700;">⏳ Pending Approval</span>'
+      : (isRejected
+      ? '<span class="badge badge-revoked">❌ Rejected</span>'
+      : (isSuspended
       ? '<span class="badge badge-suspended">⛔ Suspended</span>'
-      : '<span class="badge badge-active">🟢 Active</span>';
+      : '<span class="badge badge-active">🟢 Active</span>'));
 
     const isSelf = currentUser && currentUser.uid === a.uid;
 
@@ -762,6 +928,7 @@ function renderAgentsTable() {
       '<td style="text-align: right;">' +
         '<div class="action-btn-group">' +
           (!isSelf ? 
+            (isPending ? '<button class="btn-icon-action" style="color: var(--success); font-weight: 700;" onclick="approveAgentWeb(\'' + a.uid + '\')">✅ Approve</button>' : '') +
             '<button class="btn-icon-action" onclick="toggleAgentRole(\'' + a.uid + '\', \'' + (a.role || 'agent') + '\')">' + (a.role === 'admin' ? 'Set as Agent' : '👑 Make Admin') + '</button>' +
             '<button class="btn-icon-action" style="color: ' + (isSuspended ? 'var(--success)' : 'var(--warning)') + ';" onclick="toggleAgentStatus(\'' + a.uid + '\', \'' + (a.status || 'ACTIVE') + '\')">' + (isSuspended ? '🟢 Activate' : '⛔ Suspend') + '</button>' +
             '<button class="btn-danger-action" title="Delete Agent Account" onclick="handleDeleteAgent(\'' + a.uid + '\', \'' + (a.email || a.displayName || 'this agent') + '\')">🗑️</button>'
@@ -770,6 +937,21 @@ function renderAgentsTable() {
       '</td>' +
     '</tr>';
   }).join('');
+}
+
+async function approveAgentWeb(uid) {
+  try {
+    const now = new Date().toISOString();
+    await db.collection('users').doc(uid).set({
+      status: 'ACTIVE',
+      approved: true,
+      approvedAt: now,
+      updatedAt: now
+    }, { merge: true });
+    showToast("Agent approved successfully! 🎉");
+  } catch (err) {
+    alert("Failed to approve agent: " + err.message);
+  }
 }
 
 async function toggleAgentRole(uid, currentRole) {
@@ -1073,11 +1255,221 @@ function renderListingsTable() {
   }).join('');
 }
 
+// ==========================================
+// SECTION 6: FEEDBACK & BUG DESK FUNCTIONS
+// ==========================================
+
+function setFeedbackStatusFilter(status, btn) {
+  currentFeedbackStatusFilter = status;
+  document.querySelectorAll('#section-feedback .tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderFeedbackTable();
+}
+
+function renderFeedbackTable() {
+  const tbody = document.getElementById('feedback-table-body');
+  if (!tbody) return;
+
+  const search = (document.getElementById('filter-feedback-input')?.value || '').toLowerCase().trim();
+  const categoryFilter = document.getElementById('filter-feedback-type')?.value || 'ALL';
+
+  let filtered = allFeedback.filter(item => {
+    // Status filter
+    if (currentFeedbackStatusFilter === 'pending') {
+      if (item.status && item.status !== 'pending') return false;
+    } else if (currentFeedbackStatusFilter === 'in-progress') {
+      if (item.status !== 'in-progress') return false;
+    } else if (currentFeedbackStatusFilter === 'resolved') {
+      if (item.status !== 'resolved' && item.status !== 'closed') return false;
+    }
+
+    // Category filter
+    if (categoryFilter !== 'ALL') {
+      if (item.type !== categoryFilter) return false;
+    }
+
+    // Search filter
+    if (search) {
+      const title = (item.title || '').toLowerCase();
+      const desc = (item.description || '').toLowerCase();
+      const name = (item.userName || '').toLowerCase();
+      const email = (item.userEmail || '').toLowerCase();
+      const dev = (item.deviceModel || '').toLowerCase();
+      return title.includes(search) || desc.includes(search) || name.includes(search) || email.includes(search) || dev.includes(search);
+    }
+
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 28px;">No feedback or bug tickets match the current filter.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(item => {
+    const isBug = item.type === 'Bug';
+    const isFeature = item.type === 'Feature';
+    const isPerf = item.type === 'Performance';
+    const typeColor = isBug ? '#EF4444' : (isFeature ? '#F59E0B' : (isPerf ? '#8B5CF6' : '#EC4899'));
+    const typeLabel = isBug ? '🐛 Bug' : (isFeature ? '💡 Feature' : (isPerf ? '⚡ Performance' : '⭐ General'));
+
+    const sev = item.severity || '';
+    const sevColor = sev === 'Critical' ? '#EF4444' : (sev === 'High' ? '#F97316' : (sev === 'Medium' ? '#F59E0B' : '#3B82F6'));
+    const sevBadge = sev
+      ? '<span class="badge" style="background: ' + sevColor + '20; color: ' + sevColor + '; margin-top: 4px; display: inline-block;">' + sev.toUpperCase() + '</span>'
+      : '';
+
+    const agentPhone = item.userPhone || '';
+    const waBtn = agentPhone
+      ? '<button class="btn-whatsapp" style="padding: 4px 8px; font-size: 11px;" onclick="openWhatsAppAgent(\'' + agentPhone + '\', \'' + (item.userName || 'Agent').replace(/'/g, "\\'") + '\', \'' + (item.title || 'Feedback').replace(/'/g, "\\'") + '\')">💬 WA</button>'
+      : '';
+
+    const deviceStr = (item.deviceModel || '-') + ' (' + (item.osVersion || item.platform || 'Android') + ')';
+    const versionStr = (item.appVersion ? (item.appVersion.startsWith('v') ? item.appVersion : 'v' + item.appVersion) : 'v1.5.2') + ' (b' + (item.buildNumber || '57') + ')';
+
+    // Steps to reproduce
+    let stepsHtml = '';
+    if (item.stepsToReproduce && item.stepsToReproduce.length > 0) {
+      stepsHtml = '<div style="margin-top: 6px; font-size: 11px; background: var(--bg-canvas); padding: 8px; border-radius: 8px; border: 1px solid var(--border-subtle);"><strong style="color: #FDA4AF;">Steps:</strong><ol style="margin-left: 16px; margin-top: 4px;">' +
+        item.stepsToReproduce.map(s => '<li>' + s + '</li>').join('') +
+        '</ol></div>';
+    }
+
+    if (item.expectedBehavior) {
+      stepsHtml += '<div style="font-size: 11px; color: #10B981; margin-top: 4px;"><strong>Expected:</strong> ' + item.expectedBehavior + '</div>';
+    }
+    if (item.actualBehavior) {
+      stepsHtml += '<div style="font-size: 11px; color: #EF4444; margin-top: 2px;"><strong>Actual:</strong> ' + item.actualBehavior + '</div>';
+    }
+
+    // Screenshot thumbnail
+    const screenshotHtml = item.screenshotUrl
+      ? '<div style="margin-top: 8px;"><img src="' + item.screenshotUrl + '" style="width: 50px; height: 50px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid var(--border-subtle);" onclick="openFeedbackScreenshot(\'' + item.screenshotUrl + '\')" title="Click to enlarge screenshot" /></div>'
+      : '';
+
+    const currentStatus = item.status || 'pending';
+    const adminReply = item.adminResponse || '';
+
+    const dateStr = item.createdAt ? new Date(item.createdAt).toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' }) : '-';
+
+    const ratingHtml = ((item.type === 'General' || item.type === 'rating') && item.rating)
+      ? '<div style="font-size: 11px; color: #F59E0B; margin-top: 4px; font-weight: 700;">⭐ Rating: ' + item.rating + '/5</div>'
+      : '';
+
+    return '<tr id="fb-row-' + item.id + '">' +
+      '<td>' +
+        '<div style="font-weight: 800; color: ' + typeColor + '; font-size: 12px;">' + typeLabel + '</div>' +
+        sevBadge +
+        '<div style="font-size: 10px; color: var(--text-dim); margin-top: 4px;">' + dateStr + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-weight: 700; color: var(--text-main); font-size: 13px;">' + (item.userName || 'Agent') + '</div>' +
+        '<div style="font-size: 11px; color: var(--text-muted);">' + (item.userEmail || '-') + '</div>' +
+        (agentPhone ? '<div style="margin-top: 4px;">' + waBtn + '</div>' : '') +
+      '</td>' +
+      '<td style="max-width: 280px;">' +
+        '<div style="font-weight: 800; color: var(--text-main); font-size: 13px; margin-bottom: 4px;">' + (item.title || '(No Title)') + '</div>' +
+        '<div style="font-size: 12px; color: var(--text-muted); line-height: 1.4; white-space: pre-wrap;">' + (item.description || '-') + '</div>' +
+        ratingHtml +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size: 11px; color: var(--text-main); font-weight: 600;">' + deviceStr + '</div>' +
+        '<div style="font-size: 10px; color: var(--text-dim);">' + versionStr + '</div>' +
+      '</td>' +
+      '<td style="max-width: 220px;">' +
+        stepsHtml +
+        screenshotHtml +
+      '</td>' +
+      '<td style="min-width: 220px;">' +
+        '<div style="display: flex; gap: 6px; align-items: center; margin-bottom: 6px;">' +
+          '<select class="status-select" style="padding: 4px 8px;" onchange="changeFeedbackStatus(\'' + item.id + '\', this.value)">' +
+            '<option value="pending"' + (currentStatus === 'pending' ? ' selected' : '') + '>⏳ Pending</option>' +
+            '<option value="in-progress"' + (currentStatus === 'in-progress' ? ' selected' : '') + '>🔄 In Progress</option>' +
+            '<option value="resolved"' + (currentStatus === 'resolved' ? ' selected' : '') + '>✅ Resolved</option>' +
+            '<option value="closed"' + (currentStatus === 'closed' ? ' selected' : '') + '>⛔ Closed</option>' +
+          '</select>' +
+        '</div>' +
+        '<textarea id="reply-input-' + item.id + '" class="input-control" rows="2" style="font-size: 11px; padding: 6px 8px; width: 100%;" placeholder="Admin reply to agent...">' + adminReply + '</textarea>' +
+        '<button class="btn-primary" style="padding: 4px 10px; font-size: 11px; margin-top: 4px; width: 100%; justify-content: center;" onclick="saveFeedbackReply(\'' + item.id + '\')">💾 Save & Send Reply</button>' +
+      '</td>' +
+      '<td style="text-align: right;">' +
+        '<button class="btn-danger-action" onclick="deleteFeedbackDoc(\'' + item.id + '\')" title="Delete Ticket">🗑️</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+}
+
+async function changeFeedbackStatus(feedbackId, newStatus) {
+  try {
+    const replyInput = document.getElementById('reply-input-' + feedbackId);
+    const replyText = replyInput ? replyInput.value.trim() : '';
+
+    const updateData = {
+      status: newStatus,
+      updatedAt: new Date().toISOString()
+    };
+    if (replyText) updateData.adminResponse = replyText;
+
+    await db.collection('feedback').doc(feedbackId).update(updateData);
+    showToast("✓ Status updated to " + newStatus);
+  } catch (err) {
+    alert("Failed to update status: " + err.message);
+  }
+}
+
+async function saveFeedbackReply(feedbackId) {
+  try {
+    const replyInput = document.getElementById('reply-input-' + feedbackId);
+    const replyText = replyInput ? replyInput.value.trim() : '';
+
+    await db.collection('feedback').doc(feedbackId).update({
+      adminResponse: replyText,
+      updatedAt: new Date().toISOString()
+    });
+    showToast("✓ Admin reply saved and synced to agent!");
+  } catch (err) {
+    alert("Failed to save reply: " + err.message);
+  }
+}
+
+async function deleteFeedbackDoc(feedbackId) {
+  if (!confirm("Are you sure you want to permanently delete this feedback ticket from Firestore?")) return;
+  try {
+    await db.collection('feedback').doc(feedbackId).delete();
+    showToast("🗑️ Ticket deleted successfully");
+  } catch (err) {
+    alert("Failed to delete ticket: " + err.message);
+  }
+}
+
+function openFeedbackScreenshot(url) {
+  const modal = document.getElementById('feedback-screenshot-modal');
+  const img = document.getElementById('modal-screenshot-img');
+  if (modal && img) {
+    img.src = url;
+    modal.classList.add('active');
+  }
+}
+
+function closeFeedbackScreenshotModal() {
+  const modal = document.getElementById('feedback-screenshot-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+function openWhatsAppAgent(phone, agentName, ticketTitle) {
+  if (!phone) return;
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  const formattedPhone = cleanPhone.startsWith('0') ? '6' + cleanPhone : (cleanPhone.startsWith('6') ? cleanPhone : '60' + cleanPhone);
+  const greeting = "Salam " + agentName + ", regarding your ticket in Artha (\"" + ticketTitle + "\"): ";
+  window.open("https://wa.me/" + formattedPhone + "?text=" + encodeURIComponent(greeting), "_blank");
+}
+
 // Global UX Event Listeners
 window.addEventListener('hashchange', restoreActiveTab);
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeListingModal();
+    closeFeedbackScreenshotModal();
   }
 });
 

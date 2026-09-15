@@ -197,18 +197,18 @@
     .nav-tabs {
       display: flex;
       align-items: center;
-      gap: 8px;
-      overflow-x: auto;
-      padding-bottom: 16px;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding-bottom: 12px;
       margin-bottom: 24px;
       border-bottom: 1px solid var(--border-subtle);
     }
 
     .nav-tab-btn {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 18px;
+      padding: 9px 16px;
       border-radius: 12px;
       border: 1px solid var(--border-subtle);
       background: var(--bg-surface);
@@ -802,25 +802,32 @@
     <div id="view-dashboard" style="display: none;">
       <!-- Navigation Tabs -->
       <div class="nav-tabs">
-        <button class="nav-tab-btn active" id="tab-btn-codes" onclick="switchDashboardSection('codes')">
-          🔑 Single Code Generator <span class="tab-badge" id="badge-active-codes">0</span>
+        <button class="nav-tab-btn active" id="tab-btn-approvals" onclick="switchDashboardSection('approvals')">
+          ⏳ Approvals <span class="tab-badge" id="badge-pending-approvals" style="background: rgba(239, 68, 68, 0.4); color: #FFF;">0</span>
         </button>
-        <button class="nav-tab-btn" id="tab-btn-batch" onclick="switchDashboardSection('batch')">
-          🎲 Batch Code Generator
+        <button class="nav-tab-btn" id="tab-btn-codes" onclick="switchDashboardSection('codes')">
+          🔑 Invite Codes <span class="tab-badge" id="badge-active-codes">0</span>
         </button>
         <button class="nav-tab-btn" id="tab-btn-broadcast" onclick="switchDashboardSection('broadcast')">
-          📢 Broadcast Push Notice <span class="tab-badge" id="badge-announcements">0</span>
+          📢 Broadcast <span class="tab-badge" id="badge-announcements">0</span>
         </button>
         <button class="nav-tab-btn" id="tab-btn-agents" onclick="switchDashboardSection('agents')">
-          👥 Registered Agents <span class="tab-badge" id="badge-agents">0</span>
+          👥 Agents <span class="tab-badge" id="badge-agents">0</span>
         </button>
         <button class="nav-tab-btn" id="tab-btn-listings" onclick="switchDashboardSection('listings')">
-          🏘️ Agency Master Listings <span class="tab-badge" id="badge-listings">0</span>
+          🏘️ Listings <span class="tab-badge" id="badge-listings">0</span>
+        </button>
+        <button class="nav-tab-btn" id="tab-btn-feedback" onclick="switchDashboardSection('feedback')">
+          🐛 Feedback Desk <span class="tab-badge" id="badge-feedback" style="background: rgba(239, 68, 68, 0.4); color: #FFF;">0</span>
         </button>
       </div>
 
       <!-- Stats Overview -->
       <div class="stats-grid">
+        <div class="stat-card" style="border-color: rgba(245, 158, 11, 0.35);">
+          <div class="stat-card-title" style="color: #F59E0B;">⏳ Pending Approvals</div>
+          <div class="stat-card-value" style="color: #F59E0B;" id="stat-pending-count">0</div>
+        </div>
         <div class="stat-card">
           <div class="stat-card-title">Registered Agents</div>
           <div class="stat-card-value" id="stat-agents-count">0</div>
@@ -830,78 +837,164 @@
           <div class="stat-card-value" style="color: var(--success);" id="stat-active-codes">0</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-title">Claimed (Used) Codes</div>
-          <div class="stat-card-value" style="color: var(--primary);" id="stat-used-codes">0</div>
-        </div>
-        <div class="stat-card">
           <div class="stat-card-title">Agency Listings</div>
           <div class="stat-card-value" style="color: #60A5FA;" id="stat-listings-count">0</div>
         </div>
+        <div class="stat-card" style="border-color: rgba(239, 68, 68, 0.35);">
+          <div class="stat-card-title" style="color: #FDA4AF;">🐛 Feedback Desk</div>
+          <div class="stat-card-value" style="color: #FDA4AF;" id="stat-feedback-count">0</div>
+        </div>
       </div>
 
-      <!-- ================= SECTION 1: Single Invite Code Generator ================= -->
-      <div id="section-codes">
-        <!-- Form Panel -->
-        <div class="panel-card">
+      <!-- ================= SECTION 0: Pending Agent Approvals Desk ================= -->
+      <div id="section-approvals">
+        <div class="panel-card" style="border-color: rgba(245, 158, 11, 0.35);">
           <div class="panel-header">
-            <div class="panel-title">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#E11D48"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
-              Generate Single Registration Code
+            <div class="panel-title" style="color: #FBBF24;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#F59E0B"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+              Pending Agent Sign-Up Approvals Queue
             </div>
-            <button class="btn-secondary" onclick="generateRandomCodeInput()">
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="text" id="filter-pending-input" class="input-control" placeholder="Search applicant name/email..." style="width: 260px; padding: 8px 12px; font-size: 12px;" oninput="renderPendingApprovalsTable()" />
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Applicant / Agent</th>
+                  <th>Email</th>
+                  <th>Applied Date</th>
+                  <th>Method / Code</th>
+                  <th>Notes / Agency</th>
+                  <th style="text-align: right;">Decision</th>
+                </tr>
+              </thead>
+              <tbody id="pending-table-body">
+                <tr>
+                  <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 28px;">Loading pending approvals...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= SECTION 1: Invite Codes (Single & Batch Generator + Directory) ================= -->
+      <div id="section-codes" style="display: none;">
+        <!-- Code Generator Container with Single & Batch Sub-Toggle -->
+        <div class="panel-card">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border-subtle); padding-bottom: 14px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button class="tab-btn active" id="code-mode-btn-single" onclick="switchCodeGeneratorMode('single')">⚡ Single Key (1)</button>
+              <button class="tab-btn" id="code-mode-btn-batch" onclick="switchCodeGeneratorMode('batch')">📦 Batch Pack</button>
+            </div>
+            <button class="btn-secondary" id="code-random-key-btn" onclick="generateRandomCodeInput()" style="font-size: 12px; padding: 6px 12px;">
               🎲 Random Key (XXXX-XXXX)
             </button>
           </div>
 
-          <div class="gen-grid">
-            <div class="input-group">
-              <label class="input-label">Invite Code / Key</label>
-              <input type="text" id="gen-code" class="input-control" placeholder="e.g. 7K9X-482A" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700;" />
+          <!-- Mode 1: Single Generator Form -->
+          <div id="code-form-single">
+            <div class="gen-grid">
+              <div class="input-group">
+                <label class="input-label">Invite Code / Key</label>
+                <input type="text" id="gen-code" class="input-control" placeholder="e.g. 7K9X-482A" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700;" />
+              </div>
+
+              <div class="input-group">
+                <label class="input-label">Code Type</label>
+                <select id="gen-type" class="input-control">
+                  <option value="single">Single-Use (Auto-Expires on 1 Registration)</option>
+                  <option value="team">Master Team Code (Multi-Use for All Agents)</option>
+                  <option value="admin">👑 Admin Elevation Code</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label class="input-label">Notes / Agent Name</label>
+                <input type="text" id="gen-notes" class="input-control" placeholder="e.g. For Agent Ahmad (Perak Branch)" />
+              </div>
             </div>
 
-            <div class="input-group">
-              <label class="input-label">Code Type</label>
-              <select id="gen-type" class="input-control">
-                <option value="single">Single-Use (Auto-Expires on 1 Registration)</option>
-                <option value="team">Master Team Code (Multi-Use for All Agents)</option>
-                <option value="admin">👑 Admin Elevation Code</option>
-              </select>
-            </div>
+            <button class="btn-primary" style="max-width: 260px;" onclick="handleCreateInviteCode()">
+              ➕ Create & Activate Code
+            </button>
 
-            <div class="input-group">
-              <label class="input-label">Notes / Agent Name</label>
-              <input type="text" id="gen-notes" class="input-control" placeholder="e.g. For Agent Ahmad (Perak Branch)" />
+            <!-- Share Output Card -->
+            <div id="share-card" class="share-card" style="margin-top: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+                <div>
+                  <div style="font-size: 11px; font-weight: 800; color: var(--success); text-transform: uppercase; letter-spacing: 0.5px;">✅ Code Activated</div>
+                  <div class="share-code-display" id="share-code-text">ART-8492</div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                  <button class="btn-secondary" onclick="copyShareMessage()">
+                    📋 Copy WhatsApp Invite
+                  </button>
+                  <button class="btn-primary" style="padding: 10px 16px; font-size: 13px;" onclick="openWhatsAppShare()">
+                    📲 Share to WhatsApp
+                  </button>
+                </div>
+              </div>
+              <div style="font-size: 12px; color: var(--text-muted); background: var(--bg-canvas); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-subtle);" id="share-preview-text">
+                Loading preview...
+              </div>
             </div>
           </div>
 
-          <button class="btn-primary" style="max-width: 260px;" onclick="handleCreateInviteCode()">
-            ➕ Create & Activate Code
-          </button>
-
-          <!-- Share Output Card -->
-          <div id="share-card" class="share-card">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
-              <div>
-                <div style="font-size: 11px; font-weight: 800; color: var(--success); text-transform: uppercase; letter-spacing: 0.5px;">✅ Code Activated</div>
-                <div class="share-code-display" id="share-code-text">ART-8492</div>
+          <!-- Mode 2: Batch Generator Form -->
+          <div id="code-form-batch" style="display: none;">
+            <div class="gen-grid">
+              <div class="input-group">
+                <label class="input-label">Custom Prefix (Optional)</label>
+                <input type="text" id="batch-prefix" class="input-control" value="" placeholder="Leave blank for secure keys (e.g. 7K9X-482A)" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700;" />
               </div>
-              <div style="display: flex; gap: 10px;">
-                <button class="btn-secondary" onclick="copyShareMessage()">
-                  📋 Copy WhatsApp Invite
-                </button>
-                <button class="btn-primary" style="padding: 10px 16px; font-size: 13px;" onclick="openWhatsAppShare()">
-                  📲 Share to WhatsApp
-                </button>
+
+              <div class="input-group">
+                <label class="input-label">Number of Codes</label>
+                <select id="batch-count" class="input-control">
+                  <option value="5">5 Codes</option>
+                  <option value="10" selected>10 Codes</option>
+                  <option value="25">25 Codes</option>
+                  <option value="50">50 Codes</option>
+                </select>
+              </div>
+
+              <div class="input-group">
+                <label class="input-label">Batch Notes / Cohort Tag</label>
+                <input type="text" id="batch-notes" class="input-control" placeholder="e.g. Intake Q3 - Perak Team" />
               </div>
             </div>
-            <div style="font-size: 12px; color: var(--text-muted); background: var(--bg-canvas); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-subtle);" id="share-preview-text">
-              Loading preview...
+
+            <button class="btn-primary" style="max-width: 280px;" onclick="handleBatchGenerateCodes()">
+              🎲 Generate Batch Codes in 1-Click
+            </button>
+
+            <!-- Batch Output Box -->
+            <div id="batch-output-card" class="share-card" style="margin-top: 20px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
+                <div>
+                  <div style="font-size: 11px; font-weight: 800; color: var(--success); text-transform: uppercase;">🎉 Batch Created Successfully</div>
+                  <div style="font-size: 14px; font-weight: 700; color: var(--text-main);" id="batch-summary-text">10 codes generated</div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                  <button class="btn-secondary" onclick="copyBatchWhatsAppList()">
+                    📋 Copy WhatsApp List
+                  </button>
+                  <button class="btn-primary" onclick="downloadBatchCSV()">
+                    📥 Download CSV File
+                  </button>
+                </div>
+              </div>
+              <div id="batch-pills-container" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 200px; overflow-y: auto; background: var(--bg-canvas); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);"></div>
             </div>
           </div>
         </div>
 
         <!-- Invite Codes Directory Table -->
-        <div class="panel-card">
+        <div class="panel-card" style="margin-top: 24px;">
           <div class="panel-header">
             <div class="panel-title">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="#64748B"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
@@ -941,63 +1034,6 @@
                 </tr>
               </tbody>
             </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ================= SECTION 2: Batch Invite Code Generator ================= -->
-      <div id="section-batch" style="display: none;">
-        <div class="panel-card">
-          <div class="panel-header">
-            <div class="panel-title">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="#10B981"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
-              Batch Generate Invite Codes (Bulk Onboarding)
-            </div>
-          </div>
-
-          <div class="gen-grid">
-            <div class="input-group">
-              <label class="input-label">Custom Prefix (Optional)</label>
-              <input type="text" id="batch-prefix" class="input-control" value="" placeholder="Leave blank for secure keys (e.g. 7K9X-482A)" style="text-transform: uppercase; font-family: 'JetBrains Mono', monospace; font-weight: 700;" />
-            </div>
-
-            <div class="input-group">
-              <label class="input-label">Number of Codes</label>
-              <select id="batch-count" class="input-control">
-                <option value="5">5 Codes</option>
-                <option value="10" selected>10 Codes</option>
-                <option value="25">25 Codes</option>
-                <option value="50">50 Codes</option>
-              </select>
-            </div>
-
-            <div class="input-group">
-              <label class="input-label">Batch Notes / Cohort Tag</label>
-              <input type="text" id="batch-notes" class="input-control" placeholder="e.g. Intake Q3 - Perak Team" />
-            </div>
-          </div>
-
-          <button class="btn-primary" onclick="handleBatchGenerateCodes()">
-            🎲 Generate Batch Codes in 1-Click
-          </button>
-
-          <!-- Batch Output Box -->
-          <div id="batch-output-card" class="share-card" style="margin-top: 20px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 12px;">
-              <div>
-                <div style="font-size: 11px; font-weight: 800; color: var(--success); text-transform: uppercase;">🎉 Batch Created Successfully</div>
-                <div style="font-size: 14px; font-weight: 700; color: var(--text-main);" id="batch-summary-text">10 codes generated</div>
-              </div>
-              <div style="display: flex; gap: 10px;">
-                <button class="btn-secondary" onclick="copyBatchWhatsAppList()">
-                  📋 Copy WhatsApp List
-                </button>
-                <button class="btn-primary" onclick="downloadBatchCSV()">
-                  📥 Download CSV File
-                </button>
-              </div>
-            </div>
-            <div id="batch-pills-container" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 200px; overflow-y: auto; background: var(--bg-canvas); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);"></div>
           </div>
         </div>
       </div>
@@ -1144,8 +1180,67 @@
         </div>
       </div>
 
+      <!-- ================= SECTION 6: Feedback & Bug Resolution Desk ================= -->
+      <div id="section-feedback" style="display: none;">
+        <div class="panel-card">
+          <div class="panel-header">
+            <div class="panel-title" style="color: #FDA4AF;">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="#E11D48"><path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z"/></svg>
+              Feedback & Bug Resolution Desk
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+              <select id="filter-feedback-type" class="input-control" style="width: 160px; padding: 8px 12px; font-size: 12px;" onchange="renderFeedbackTable()">
+                <option value="ALL">All Categories</option>
+                <option value="Bug">🐛 Bug Report</option>
+                <option value="Feature">💡 Feature Request</option>
+                <option value="Performance">⚡ Performance</option>
+                <option value="General">⭐ General Feedback</option>
+              </select>
+              <input type="text" id="filter-feedback-input" class="input-control" placeholder="Search title, agent, device..." style="width: 240px; padding: 8px 12px; font-size: 12px;" oninput="renderFeedbackTable()" />
+            </div>
+          </div>
+
+          <div class="tabs-row">
+            <button class="tab-btn active" id="fb-filter-all" onclick="setFeedbackStatusFilter('ALL', this)">All Tickets (<span id="fb-count-all">0</span>)</button>
+            <button class="tab-btn" id="fb-filter-pending" onclick="setFeedbackStatusFilter('pending', this)">⏳ Pending (<span id="fb-count-pending">0</span>)</button>
+            <button class="tab-btn" id="fb-filter-progress" onclick="setFeedbackStatusFilter('in-progress', this)">🔄 In Progress (<span id="fb-count-progress">0</span>)</button>
+            <button class="tab-btn" id="fb-filter-resolved" onclick="setFeedbackStatusFilter('resolved', this)">✅ Resolved (<span id="fb-count-resolved">0</span>)</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticket / Category</th>
+                  <th>Agent / Reporter</th>
+                  <th>Issue Details & Notes</th>
+                  <th>Device & Build</th>
+                  <th>Steps & Screenshot</th>
+                  <th>Status & Admin Reply</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="feedback-table-body">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 28px;">Loading feedback tickets...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
+
+  <!-- Feedback Screenshot Preview Modal -->
+  <div id="feedback-screenshot-modal" class="modal-overlay" onclick="if(event.target===this) closeFeedbackScreenshotModal()">
+    <div class="modal-card" style="max-width: 540px; text-align: center;">
+      <button class="modal-close" onclick="closeFeedbackScreenshotModal()">✕</button>
+      <h3 style="font-size: 16px; font-weight: 800; margin-bottom: 16px;">Attached Screenshot</h3>
+      <img id="modal-screenshot-img" src="" style="max-width: 100%; max-height: 70vh; border-radius: 12px; object-fit: contain; background: #000;" />
+    </div>
+  </div>
 
   <!-- Listing Details Modal -->
   <div id="listing-details-modal" class="modal-overlay" onclick="if(event.target===this) closeListingModal()">

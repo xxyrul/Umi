@@ -1,6 +1,7 @@
-import React from "react";
-import { View, Text, TouchableOpacity, Alert, Linking } from "react-native";
+import React, { memo } from "react";
+import { View, Text, TouchableOpacity, Alert, Linking, Pressable } from "react-native";
 import * as Haptics from "expo-haptics";
+import Animated, { useSharedValue, useAnimatedStyle, withSpring } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SPACING } from "@/constants/theme";
 import { StatusBadge } from "./StatusBadge";
@@ -23,8 +24,22 @@ const CASE_PROGRESS_STAGES: CaseStatus[] = [
   "Completed",
 ];
 
-export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress, onReminderPress }: CaseCardProps) {
+function CaseCardComponent({ case: caseItem, onPress, onDelete, onStatusPress, onReminderPress }: CaseCardProps) {
   const { themeColors, language, t } = useAppSettings();
+
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.98, { damping: 15, stiffness: 350 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 15, stiffness: 350 });
+  };
 
   const handleLongPress = () => {
     if (!onDelete) return;
@@ -163,24 +178,27 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress, onR
   );
 
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      onLongPress={handleLongPress}
-      activeOpacity={0.8}
-      style={{
-        backgroundColor: themeColors.cardBackground,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: themeColors.borderColor,
-        marginBottom: SPACING.md,
-        overflow: "hidden",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-        elevation: 2,
-      }}
-    >
+    <Animated.View style={animatedStyle}>
+      <TouchableOpacity
+        onPress={onPress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onLongPress={handleLongPress}
+        activeOpacity={0.9}
+        style={{
+          backgroundColor: themeColors.cardBackground,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: themeColors.borderColor,
+          marginBottom: SPACING.md,
+          overflow: "hidden",
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.04,
+          shadowRadius: 6,
+          elevation: 2,
+        }}
+      >
       {/* Top accent bar */}
       <View style={{ height: 4, backgroundColor: themeColors.maroonPrimary }} />
 
@@ -403,5 +421,9 @@ export function CaseCard({ case: caseItem, onPress, onDelete, onStatusPress, onR
         </View>
       </View>
     </TouchableOpacity>
+    </Animated.View>
   );
 }
+
+export const CaseCard = memo(CaseCardComponent);
+

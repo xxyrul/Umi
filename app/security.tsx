@@ -320,14 +320,7 @@ export default function SecurityScreen() {
           </Text>
 
           <View style={[styles.card, { backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => {
-                Haptics.selectionAsync().catch(() => {});
-                toggleAllowScreenshots();
-              }}
-              style={styles.settingRow}
-            >
+            <View style={styles.settingRow}>
               <View style={{ flex: 1, paddingRight: 12 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 }}>
                   <MaterialCommunityIcons name="monitor-screenshot" size={20} color={themeColors.maroonPrimary} />
@@ -350,7 +343,7 @@ export default function SecurityScreen() {
                 trackColor={{ false: themeColors.borderColor, true: themeColors.maroonPrimary }}
                 thumbColor="#FFF"
               />
-            </TouchableOpacity>
+            </View>
           </View>
         </Animated.View>
 

@@ -13,17 +13,18 @@ service firebase.storage {
     }
 
     // Property listing files
-    // 1. Photos (gambar_*) are public to all authenticated agents.
+    // 1. Photos (gambar_*) are readable by all authenticated agents.
     // 2. Private documents (geran, IC, SPA, etc) can ONLY be read by the owner.
+    // 3. Writes (uploads/deletes) can ONLY be performed by the listing owner.
     match /listings/{listingId}/{fileName} {
       allow read: if isAuthed() && (fileName.matches('gambar_.*') || isListingOwner(listingId));
-      allow write: if isAuthed() && request.resource.size < 200 * 1024 * 1024;
+      allow write: if isAuthed() && isListingOwner(listingId) && request.resource.size < 200 * 1024 * 1024;
     }
 
     // Catch-all for any nested sub-paths (just in case)
     match /listings/{listingId}/{subPath=**} {
       allow read: if isAuthed() && isListingOwner(listingId);
-      allow write: if isAuthed() && request.resource.size < 200 * 1024 * 1024;
+      allow write: if isAuthed() && isListingOwner(listingId) && request.resource.size < 200 * 1024 * 1024;
     }
 
     // Feedback screenshots & attachments (feedback/{feedbackId}/{fileName})

@@ -306,13 +306,31 @@ export default function DashboardScreen() {
   const metricSold = metrics.sold;
   const metricExpired = metrics.expired;
 
-  // Time-based automated greeting
-  const timeGreeting = useMemo(() => {
+  // Time-based automated greeting with matching icon
+  const { timeGreeting, timeGreetingIcon } = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return language === "BM" ? "Selamat Pagi" : "Good Morning";
-    if (hour >= 12 && hour < 15) return language === "BM" ? "Selamat Tengah Hari" : "Good Afternoon";
-    if (hour >= 15 && hour < 19) return language === "BM" ? "Selamat Petang" : "Good Evening";
-    return language === "BM" ? "Selamat Malam" : "Good Night";
+    if (hour >= 5 && hour < 12) {
+      return {
+        timeGreeting: language === "BM" ? "Selamat Pagi" : "Good Morning",
+        timeGreetingIcon: "🌅",
+      };
+    }
+    if (hour >= 12 && hour < 15) {
+      return {
+        timeGreeting: language === "BM" ? "Selamat Tengah Hari" : "Good Afternoon",
+        timeGreetingIcon: "☀️",
+      };
+    }
+    if (hour >= 15 && hour < 19) {
+      return {
+        timeGreeting: language === "BM" ? "Selamat Petang" : "Good Evening",
+        timeGreetingIcon: "🌇",
+      };
+    }
+    return {
+      timeGreeting: language === "BM" ? "Selamat Malam" : "Good Night",
+      timeGreetingIcon: "🌙",
+    };
   }, [language]);
 
   // Today's Follow-up Action Items
@@ -390,49 +408,6 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* Announcement Banner */}
-        {dismissedLoaded && announcement && !dismissedAnnIds.includes(announcement.id) && (() => {
-          const isMalay = language === "BM";
-          const annTitle = isMalay
-            ? (announcement.titleBM || announcement.title)
-            : (announcement.titleEN || announcement.title);
-          const annMessage = isMalay
-            ? (announcement.messageBM || announcement.message)
-            : (announcement.messageEN || announcement.message);
-
-          return (
-            <Animated.View entering={FadeInDown.springify()} style={{ backgroundColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#DC26261A" : (announcement.type || "").toUpperCase() === "LISTING_ALERT" ? "#2563EB1A" : themeColors.cardBackground, borderRadius: 14, borderWidth: 1, borderColor: (announcement.type || "").toUpperCase() === "URGENT" ? "#EF444440" : themeColors.borderColor, padding: 14, marginBottom: 16, flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-              <TouchableOpacity 
-                activeOpacity={0.7}
-                onPress={() => {
-                  const text = ((announcement.title || "") + " " + (announcement.message || "")).toLowerCase();
-                  if (text.includes("update") || text.includes("version")) {
-                    router.push("/updates" as any);
-                  }
-                }}
-                style={{ flex: 1 }}
-              >
-                <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 4 }}>
-                  {annTitle}
-                </Text>
-                <Text style={{ fontSize: 12, color: themeColors.textMuted, lineHeight: 17 }}>
-                  {annMessage}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation();
-                  handleDismissAnnouncement(announcement.id);
-                }}
-                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-                style={{ padding: 4 }}
-              >
-                <MaterialCommunityIcons name="close" size={18} color={themeColors.textMuted} />
-              </TouchableOpacity>
-            </Animated.View>
-          );
-        })()}
-
         {/* Welcome Section */}
         <Animated.View entering={FadeInDown.duration(180)} style={styles.welcomeSection}>
           <Text style={[styles.welcomeTitle, { color: themeColors.textPrimary }]}>
@@ -441,7 +416,7 @@ export default function DashboardScreen() {
               ? userProfile.displayName.split(" ")[0].charAt(0).toUpperCase() +
                 userProfile.displayName.split(" ")[0].slice(1)
               : "Agent"}{" "}
-            ☀️
+            {timeGreetingIcon}
           </Text>
           <Text style={[styles.welcomeSubtitle, { color: themeColors.textMuted }]}>
             {language === "BM"
@@ -450,7 +425,7 @@ export default function DashboardScreen() {
           </Text>
         </Animated.View>
 
-        {/* 📌 TODAY'S ACTION ITEMS & REMINDERS */}
+        {/* 📌 TODAY'S ACTION ITEMS & NOTICES */}
         <View style={{ marginBottom: 16 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -467,6 +442,89 @@ export default function DashboardScreen() {
               </View>
             )}
           </View>
+
+          {/* Integrated Announcement / System Notice */}
+          {dismissedLoaded && announcement && !dismissedAnnIds.includes(announcement.id) && (() => {
+            const isMalay = language === "BM";
+            const annTitle = isMalay
+              ? (announcement.titleBM || announcement.title)
+              : (announcement.titleEN || announcement.title);
+            const annMessage = isMalay
+              ? (announcement.messageBM || announcement.message)
+              : (announcement.messageEN || announcement.message);
+            const isUrgent = (announcement.type || "").toUpperCase() === "URGENT";
+
+            return (
+              <Animated.View
+                entering={FadeInDown.springify()}
+                style={{
+                  backgroundColor: isUrgent ? "rgba(220, 38, 38, 0.1)" : themeColors.cardBackground,
+                  borderColor: isUrgent ? "rgba(239, 68, 68, 0.4)" : themeColors.borderColor,
+                  borderWidth: 1,
+                  borderRadius: 14,
+                  padding: 14,
+                  marginBottom: 8,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                }}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    const text = ((announcement.title || "") + " " + (announcement.message || "")).toLowerCase();
+                    if (text.includes("update") || text.includes("version")) {
+                      router.push("/updates" as any);
+                    } else {
+                      router.push("/notifications" as any);
+                    }
+                  }}
+                  style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }}
+                >
+                  <View
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      backgroundColor: isUrgent ? "rgba(239, 68, 68, 0.15)" : "rgba(59, 130, 246, 0.15)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name={isUrgent ? "alert-decagram" : "bullhorn-outline"}
+                      size={20}
+                      color={isUrgent ? "#EF4444" : "#3B82F6"}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13.5, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 2 }}>
+                      {annTitle}
+                    </Text>
+                    <Text numberOfLines={2} style={{ fontSize: 12, color: themeColors.textMuted, lineHeight: 16 }}>
+                      {annMessage}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={themeColors.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => handleDismissAnnouncement(announcement.id)}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    backgroundColor: themeColors.surfaceContainer,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons name="close" size={14} color={themeColors.textMuted} />
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          })()}
 
           {todayActionCases.length === 0 ? (
             <View
@@ -748,16 +806,17 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* ⚡ AKSES PANTAS (Quick Tools Row with Full Labels) */}
+        {/* ⚡ AKSES PANTAS (Quick Utilities: New Case, New Listing, Calculator) */}
         <View style={{ marginBottom: 20 }}>
           <Text style={{ fontSize: 14, fontWeight: "700", color: themeColors.textPrimary, marginBottom: 8 }}>
             {language === "BM" ? "Akses Pantas" : "Quick Utilities"}
           </Text>
 
           <View style={{ flexDirection: "row", gap: 8 }}>
+            {/* New Case */}
             <TouchableOpacity
               activeOpacity={0.75}
-              onPress={() => router.push({ pathname: "/calculator" as any, params: { tab: "mortgage" } })}
+              onPress={() => router.push("/case/form" as any)}
               style={{
                 flex: 1,
                 backgroundColor: themeColors.cardBackground,
@@ -769,32 +828,13 @@ export default function DashboardScreen() {
                 gap: 6,
               }}
             >
-              <MaterialCommunityIcons name="calculator-variant" size={20} color={themeColors.maroonPrimary} />
+              <MaterialCommunityIcons name="briefcase-plus-outline" size={20} color={themeColors.maroonPrimary} />
               <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
-                {language === "BM" ? "Kalkulator Pinjaman" : "Loan Calculator"}
+                {language === "BM" ? "Tambah Kes" : "New Case"}
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              activeOpacity={0.75}
-              onPress={() => router.push({ pathname: "/calculator" as any, params: { tab: "dsr" } })}
-              style={{
-                flex: 1,
-                backgroundColor: themeColors.cardBackground,
-                borderColor: themeColors.borderColor,
-                borderWidth: 1,
-                borderRadius: 12,
-                paddingVertical: 12,
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <MaterialCommunityIcons name="percent" size={20} color="#3B82F6" />
-              <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
-                {language === "BM" ? "Kelayakan DSR" : "DSR Calculator"}
-              </Text>
-            </TouchableOpacity>
-
+            {/* New Listing */}
             <TouchableOpacity
               activeOpacity={0.75}
               onPress={() => router.push("/tambah" as any)}
@@ -809,9 +849,30 @@ export default function DashboardScreen() {
                 gap: 6,
               }}
             >
-              <MaterialCommunityIcons name="plus-circle" size={20} color="#10B981" />
+              <MaterialCommunityIcons name="home-plus-outline" size={20} color="#10B981" />
               <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
                 {language === "BM" ? "Tambah Listing" : "New Listing"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Calculator */}
+            <TouchableOpacity
+              activeOpacity={0.75}
+              onPress={() => router.push("/calculator" as any)}
+              style={{
+                flex: 1,
+                backgroundColor: themeColors.cardBackground,
+                borderColor: themeColors.borderColor,
+                borderWidth: 1,
+                borderRadius: 12,
+                paddingVertical: 12,
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <MaterialCommunityIcons name="calculator-variant-outline" size={20} color="#3B82F6" />
+              <Text style={{ fontSize: 11, fontWeight: "700", color: themeColors.textPrimary, textAlign: "center" }}>
+                {language === "BM" ? "Kalkulator" : "Calculator"}
               </Text>
             </TouchableOpacity>
           </View>

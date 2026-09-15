@@ -98,6 +98,8 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
     const inOnboarding = rootSegment === "onboarding";
     const inLogin = rootSegment === "login";
 
+    const inPendingApproval = rootSegment === "pending-approval";
+
     if (!hasCompletedOnboarding) {
       if (firebaseAuth.currentUser) {
         firebaseAuth.signOut().catch(() => {});
@@ -116,9 +118,9 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
         router.replace("/login");
       }
     } else {
-      // Enforce Invite Code Gate & Suspension check before entering (tabs)
+      // Enforce Invite Code Gate, Pending Approval & Suspension check before entering (tabs)
       isUserRegistrationComplete(activeUser.uid)
-        .then(({ isRegistered, isSuspended }) => {
+        .then(({ isRegistered, isSuspended, isPending }) => {
           if (!isMounted) return;
           if (!firebaseAuth.currentUser) {
             if (!inLogin) router.replace("/login");
@@ -129,8 +131,14 @@ function AuthGuard({ user, authLoaded }: { user: User | null; authLoaded: boolea
             if (!inLogin) router.replace("/login");
             return;
           }
+          if (isPending) {
+            if (!inPendingApproval) {
+              router.replace("/pending-approval" as any);
+            }
+            return;
+          }
           if (isRegistered) {
-            if (inLogin || inOnboarding) {
+            if (inLogin || inOnboarding || inPendingApproval) {
               router.replace("/(tabs)");
             }
           } else {
@@ -352,6 +360,11 @@ function RootLayoutInner({
           <Stack.Screen name="case/[id]" options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="case/form" options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="security" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="admin/index" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="pending-approval" options={{ headerShown: false }} />
+          <Stack.Screen name="help" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="account" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="notification-settings" options={{ animation: "slide_from_right" }} />
         </Stack>
       </View>
 

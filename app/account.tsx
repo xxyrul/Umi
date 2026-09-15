@@ -16,10 +16,12 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import { useAppSettings } from "@/context/AppSettingsContext";
 import { Image as ExpoImage } from "expo-image";
 import { getCurrentUserProfile, getUserInitials } from "@/services/auth";
 import { firestore, auth } from "@/services/firebase";
+import { uploadUserAvatar } from "@/services/storage";
 import { SPACING } from "@/constants/theme";
 import type { UserProfile } from "@/types/case";
 
@@ -32,6 +34,7 @@ export default function AccountScreen() {
   const [displayNameInput, setDisplayNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   useEffect(() => {
     const user = getCurrentUserProfile();
@@ -47,6 +50,73 @@ export default function AccountScreen() {
       }
     }).catch(() => {});
   }, []);
+
+  const handlePickAvatar = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          isBM ? "Kebenaran Diperlukan" : "Permission Required",
+          isBM
+            ? "Sila benarkan akses ke galeri untuk memuat naik gambar profil."
+            : "Please allow media library access to upload a profile photo."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) {
+        return;
+      }
+
+      const selectedUri = result.assets[0].uri;
+      const currentUser = auth().currentUser;
+      if (!currentUser) {
+        Alert.alert(
+          isBM ? "Ralat" : "Error",
+          isBM ? "Pengguna tidak disahkan." : "User not authenticated."
+        );
+        return;
+      }
+
+      setIsUploadingAvatar(true);
+      const downloadUrl = await uploadUserAvatar(selectedUri, currentUser.uid);
+
+      if (downloadUrl) {
+        await Promise.all([
+          currentUser.updateProfile({ photoURL: downloadUrl }).catch(() => {}),
+          firestore().collection("users").doc(currentUser.uid).set(
+            {
+              photoURL: downloadUrl,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(() => {}),
+        ]);
+
+        setProfile((prev) => (prev ? { ...prev, photoURL: downloadUrl } : null));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        Alert.alert(
+          isBM ? "Foto Profil Dikemaskini" : "Profile Photo Updated",
+          isBM ? "Gambar profil anda telah berjaya disimpan." : "Your profile photo has been updated successfully."
+        );
+      }
+    } catch (err: any) {
+      console.error("Avatar upload error:", err);
+      Alert.alert(
+        isBM ? "Ralat Muat Naik" : "Upload Error",
+        isBM ? "Gagal memuat naik gambar profil." : "Failed to upload profile photo."
+      );
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!displayNameInput.trim()) {
@@ -151,44 +221,78 @@ export default function AccountScreen() {
               marginBottom: SPACING.xl,
             }}
           >
-            {profile?.photoURL || auth().currentUser?.photoURL ? (
-              <ExpoImage
-                source={{ uri: profile?.photoURL || auth().currentUser?.photoURL || "" }}
-                style={{
-                  width: 84,
-                  height: 84,
-                  borderRadius: 42,
-                  marginBottom: 12,
-                  borderWidth: 2.5,
-                  borderColor: themeColors.maroonPrimary,
-                }}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                transition={200}
-              />
-            ) : (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={handlePickAvatar}
+              disabled={isUploadingAvatar}
+              style={{ position: "relative", marginBottom: 12 }}
+            >
+              {profile?.photoURL || auth().currentUser?.photoURL ? (
+                <ExpoImage
+                  source={{ uri: profile?.photoURL || auth().currentUser?.photoURL || "" }}
+                  style={{
+                    width: 88,
+                    height: 88,
+                    borderRadius: 44,
+                    borderWidth: 2.5,
+                    borderColor: themeColors.maroonPrimary,
+                  }}
+                  contentFit="cover"
+                  cachePolicy="memory-disk"
+                  transition={200}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 88,
+                    height: 88,
+                    borderRadius: 44,
+                    backgroundColor: themeColors.surfaceContainer,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderWidth: 2,
+                    borderColor: themeColors.borderColor,
+                  }}
+                >
+                  {displayNameInput.trim() ? (
+                    <Text style={{ fontSize: 28, fontWeight: "800", color: themeColors.maroonPrimary }}>
+                      {getUserInitials(displayNameInput)}
+                    </Text>
+                  ) : (
+                    <MaterialCommunityIcons name="account" size={44} color={themeColors.textMuted} />
+                  )}
+                </View>
+              )}
+
+              {/* Camera Action Badge */}
               <View
                 style={{
-                  width: 84,
-                  height: 84,
-                  borderRadius: 42,
-                  backgroundColor: themeColors.surfaceContainer,
-                  alignItems: "center",
+                  position: "absolute",
+                  bottom: 0,
+                  right: 0,
+                  backgroundColor: themeColors.maroonPrimary,
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
                   justifyContent: "center",
-                  marginBottom: 12,
-                  borderWidth: 2,
-                  borderColor: themeColors.borderColor,
+                  alignItems: "center",
+                  borderWidth: 2.5,
+                  borderColor: themeColors.canvasBackground,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.15,
+                  shadowRadius: 3,
+                  elevation: 4,
                 }}
               >
-                {displayNameInput.trim() ? (
-                  <Text style={{ fontSize: 26, fontWeight: "800", color: themeColors.maroonPrimary }}>
-                    {getUserInitials(displayNameInput)}
-                  </Text>
+                {isUploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <MaterialCommunityIcons name="account" size={40} color={themeColors.textMuted} />
+                  <MaterialCommunityIcons name="camera" size={15} color="#FFFFFF" />
                 )}
               </View>
-            )}
+            </TouchableOpacity>
+
             <View
               style={{
                 backgroundColor: "rgba(16, 185, 129, 0.15)",
