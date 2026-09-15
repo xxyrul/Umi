@@ -947,7 +947,7 @@ function openListingModal(listingId) {
   const galleryEl = document.getElementById('modal-gallery');
   if (images.length > 0) {
     galleryEl.style.display = 'flex';
-    galleryEl.innerHTML = images.map(img => '<img src="' + img + '" style="width: 120px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; cursor: pointer;" onclick="window.open(\'' + img + \', \'_blank\')" />').join('');
+    galleryEl.innerHTML = images.map(img => '<img src="' + img + '" style="width: 120px; height: 90px; border-radius: 10px; object-fit: cover; border: 1px solid var(--border-subtle); flex-shrink: 0; cursor: pointer;" onclick="window.open(\'' + img + '\', \'_blank\')" />').join('');
   } else {
     galleryEl.style.display = 'none';
   }
