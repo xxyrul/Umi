@@ -310,6 +310,8 @@ function startRealtimeListeners() {
     snapshot.forEach(doc => {
       if (doc.id.startsWith('super_admin') || doc.id.startsWith('system_')) return;
       const d = doc.data();
+      // Ignore temporary unauthenticated device sessions
+      if (!d.displayName && !d.email && !d.phoneNumber && !d.registeredWithCode && !d.role) return;
       d.uid = doc.id;
       allAgents.push(d);
     });
