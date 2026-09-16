@@ -1,4 +1,4 @@
-﻿# 🏢 Artha (Umi) — Real Estate CaseFlow & Master Listing CRM
+# 🏢 Artha (Umi) — Real Estate CaseFlow & Master Listing CRM
 
 [![Version](https://img.shields.io/badge/version-1.6.1%20(Build%2059)-E11D48.svg)](https://artharen.web.app)
 [![Vibecoded](https://img.shields.io/badge/built%20with-vibecoding%20⚡-8B5CF6.svg)](#)
@@ -11,7 +11,6 @@
 **Artha** is the all-in-one Master Listing CRM and Case Transaction Management Suite engineered specifically for Malaysian Real Estate Negotiators (RENs).
 
 🔗 **Official Web Portal & Landing Page**: [https://artharen.web.app](https://artharen.web.app)  
-🛡️ **Agency Web Admin Suite**: [https://artharen.web.app/admin](https://artharen.web.app/admin)  
 📲 **Direct APK Download**: [artha-1.6.1.apk](https://artharen.web.app/releases/artha-latest.apk)
 
 ---
@@ -47,8 +46,7 @@
 - **Milestone Stepper Pipeline**: Visual tracking from Booking Paid $\rightarrow$ Loan Approval $\rightarrow$ SPA Signed $\rightarrow$ Handover.
 - **Follow-up Reminders**: Scheduled client reminders integrated directly with native calendar and WhatsApp.
 
-### 🛡️ Admin Suite & In-App APK Updater
-- **Dual-Channel Admin Suite**: Mobile Admin Hub + Web Admin Console powered by server-side Firebase Admin SDK.
+### 📲 Smart Updates & Automation
 - **Self-Healing In-App Updater**: Background APK downloads with progress reporting, dual-domain CDN resolution, and direct native installation.
 - **9:00 AM Daily Morning Briefing**: Cloud Function cron delivering daily active pipeline summaries directly to agent notification centers.
 
