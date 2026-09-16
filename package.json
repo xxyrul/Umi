@@ -11,7 +11,8 @@
     "android": "expo run:android",
     "start": "expo start",
     "verify:release": "node scripts/verify-release.mjs",
-    "deploy:release": "node scripts/verify-release.mjs && firebase deploy --only hosting",
+    "sync:readme": "node scripts/sync-readme.mjs",
+    "deploy:release": "node scripts/sync-readme.mjs && node scripts/verify-release.mjs && firebase deploy --only hosting",
     "notify:release": "node scripts/notify-release.mjs",
     "notify:nudge": "node scripts/notify-release.mjs --nudge",
     "postinstall": "patch-package"
