@@ -164,17 +164,18 @@ if (sessionStorage.getItem('artha_admin_unlocked') === 'true') {
   document.documentElement.classList.add('artha-unlocked');
   document.getElementById('auth-nav').style.display = 'block';
   document.getElementById('user-email-display').textContent = 'Super Admin';
-  const savedToken = sessionStorage.getItem('artha_admin_custom_token');
-  if (savedToken && !auth.currentUser) {
-    auth.signInWithCustomToken(savedToken).catch(() => {
-      if (!auth.currentUser) auth.signInAnonymously().catch(() => {});
-    });
-  } else if (!auth.currentUser) {
-    auth.signInAnonymously().catch(() => {});
-  }
   showView('view-dashboard');
   restoreActiveTab();
-  startRealtimeListeners();
+
+  // Re-establish Firebase Auth THEN start listeners (auth must settle first for Firestore reads)
+  const savedToken = sessionStorage.getItem('artha_admin_custom_token');
+  const authReady = savedToken
+    ? auth.signInWithCustomToken(savedToken).catch(() => auth.signInAnonymously().catch(() => null))
+    : auth.signInAnonymously().catch(() => null);
+
+  authReady.then(() => {
+    startRealtimeListeners();
+  });
 }
 
 // Google Sign-In
@@ -272,7 +273,8 @@ auth.onAuthStateChanged(async (user) => {
       const userDoc = await db.collection('users').doc(user.uid).get().catch(() => null);
       const hasAdminDoc = userDoc && userDoc.exists && userDoc.data().role === 'admin';
 
-      if (hasAdminClaim || hasAdminDoc || user.uid === 'super_admin_web_portal' || user.uid === 'admin_super_portal') {
+      if (hasAdminClaim || hasAdminDoc || user.uid === 'super_admin_web_portal' || user.uid === 'admin_super_portal' ||
+          (sessionStorage.getItem('artha_admin_unlocked') === 'true' && sessionStorage.getItem('artha_admin_session_token'))) {
         currentRole = 'admin';
         sessionStorage.setItem('artha_admin_unlocked', 'true');
         document.documentElement.classList.add('artha-unlocked');
