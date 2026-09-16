@@ -5,7 +5,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import { Alert, Linking, Platform } from "react-native";
 
 const UPDATE_MANIFEST_URL = "https://artharen.web.app/releases/latest.json";
-const RELEASE_HOSTNAME = "artharen.web.app";
+const TRUSTED_RELEASE_HOSTNAMES = ["artharen.web.app", "umiren-d6a66.web.app"];
 const PACKAGE_NAME = "com.umi.caseflow";
 const LAST_DISMISSED_UPDATE_KEY = "artha_last_dismissed_update_timestamp";
 const NUDGE_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 Days
@@ -44,7 +44,7 @@ export function getCurrentVersionCode() {
 function isSafeDownloadUrl(downloadUrl: string) {
   try {
     const url = new URL(downloadUrl);
-    return url.protocol === "https:" && url.hostname === RELEASE_HOSTNAME;
+    return url.protocol === "https:" && TRUSTED_RELEASE_HOSTNAMES.includes(url.hostname);
   } catch {
     return false;
   }

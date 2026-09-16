@@ -98,6 +98,27 @@ export default function CaseFormScreen() {
   const [finance, setFinance] = useState<FinanceType>("Bank Loan");
   const [status, setStatus] = useState<CaseStatus>("Viewing");
   const [catatan, setCatatan] = useState("");
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Load existing case data if editing
   useEffect(() => {
@@ -253,7 +274,16 @@ export default function CaseFormScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true} contentContainerStyle={{ padding: SPACING.lg, paddingBottom: insets.bottom + 80 }}>
+      <ScrollView
+        ref={scrollViewRef}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        contentContainerStyle={{
+          padding: SPACING.lg,
+          paddingBottom: insets.bottom + (keyboardHeight > 0 ? keyboardHeight + 60 : 80),
+        }}
+      >
         {/* Case Info section */}
         <Text style={[styles.sectionTitle, { color: themeColors.maroonPrimary }]}>
           {language === "BM" ? "Maklumat Hartanah / Kes" : "Property / Case Info"}
@@ -488,6 +518,11 @@ export default function CaseFormScreen() {
           numberOfLines={4}
           value={catatan}
           onChangeText={setCatatan}
+          onFocus={() => {
+            setTimeout(() => {
+              scrollViewRef.current?.scrollToEnd({ animated: true });
+            }, 180);
+          }}
           style={[styles.input, styles.multilineInput, { color: themeColors.textPrimary, backgroundColor: themeColors.cardBackground, borderColor: themeColors.borderColor }]}
         />
 
