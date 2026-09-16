@@ -32,6 +32,9 @@ import {
   subscribeToAllAgents,
   approveAgent,
   rejectOrSuspendAgent,
+  suspendAgent,
+  activateAgent,
+  deleteAgent,
   updateAgentRole,
   subscribeToInviteCodes,
   generateBatchInviteCodes,
@@ -252,6 +255,83 @@ export default function AdminHubScreen() {
             } finally {
               setProcessingUid(null);
             }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRemoveUser = (agent: AdminAgent) => {
+    const isSuspended = agent.status === "SUSPENDED";
+    const name = agent.displayName || agent.email || "Ejen";
+
+    Alert.alert(
+      language === "BM" ? `Urus Akaun: ${name}` : `Manage Account: ${name}`,
+      language === "BM"
+        ? "Pilih tindakan untuk akaun ejen ini:"
+        : "Choose an action for this agent account:",
+      [
+        { text: language === "BM" ? "Batal" : "Cancel", style: "cancel" },
+        {
+          text: isSuspended
+            ? (language === "BM" ? "🟢 Aktifkan Semula (Unsuspend)" : "🟢 Unsuspend Account")
+            : (language === "BM" ? "⛔ Gantung Akaun (Suspend)" : "⛔ Suspend Account"),
+          onPress: async () => {
+            try {
+              setProcessingUid(agent.uid);
+              if (isSuspended) {
+                await activateAgent(agent.uid);
+                Alert.alert(
+                  language === "BM" ? "Akaun Diaktifkan" : "Account Activated",
+                  language === "BM" ? "Akaun kini aktif semula." : "Account is now active."
+                );
+              } else {
+                await suspendAgent(agent.uid, "Digantung oleh pentadbir.");
+                Alert.alert(
+                  language === "BM" ? "Akaun Digantung" : "Account Suspended",
+                  language === "BM" ? "Akaun telah digantung dari sistem." : "Account has been suspended."
+                );
+              }
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to update status.");
+            } finally {
+              setProcessingUid(null);
+            }
+          },
+        },
+        {
+          text: language === "BM" ? "🗑️ Padam Kekal (Delete)" : "🗑️ Delete Permanently",
+          style: "destructive",
+          onPress: () => {
+            Alert.alert(
+              language === "BM" ? "Padam Akaun Kekal?" : "Permanently Delete Account?",
+              language === "BM"
+                ? `Adakah anda pasti untuk memadam ${name} secara kekal? Tindakan ini tidak boleh dibatalkan.`
+                : `Are you sure you want to permanently delete ${name}? This cannot be undone.`,
+              [
+                { text: language === "BM" ? "Batal" : "Cancel", style: "cancel" },
+                {
+                  text: language === "BM" ? "Ya, Padam" : "Yes, Delete",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      setProcessingUid(agent.uid);
+                      await deleteAgent(agent.uid);
+                      Alert.alert(
+                        language === "BM" ? "Akaun Dipadam" : "Account Deleted",
+                        language === "BM"
+                          ? "Profil dan akaun pengguna telah dipadam dari sistem."
+                          : "User profile and credentials have been permanently deleted."
+                      );
+                    } catch (err: any) {
+                      Alert.alert("Error", err.message || "Failed to delete account.");
+                    } finally {
+                      setProcessingUid(null);
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -1246,6 +1326,7 @@ export default function AdminHubScreen() {
                         <TouchableOpacity
                           activeOpacity={0.7}
                           onPress={() => handleToggleRole(agent)}
+                          disabled={processingUid === agent.uid}
                           style={{
                             width: 36,
                             height: 36,
@@ -1258,6 +1339,32 @@ export default function AdminHubScreen() {
                           }}
                         >
                           <MaterialCommunityIcons name="shield-account-outline" size={20} color={themeColors.textPrimary} />
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          activeOpacity={0.7}
+                          onPress={() => handleRemoveUser(agent)}
+                          disabled={processingUid === agent.uid}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 12,
+                            backgroundColor: isSuspended ? "rgba(16, 185, 129, 0.12)" : "rgba(239, 68, 68, 0.12)",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            borderWidth: 1,
+                            borderColor: isSuspended ? "#10B981" : "rgba(239, 68, 68, 0.3)",
+                          }}
+                        >
+                          {processingUid === agent.uid ? (
+                            <ActivityIndicator size="small" color="#EF4444" />
+                          ) : (
+                            <MaterialCommunityIcons
+                              name={isSuspended ? "account-check-outline" : "account-remove-outline"}
+                              size={20}
+                              color={isSuspended ? "#10B981" : "#EF4444"}
+                            />
+                          )}
                         </TouchableOpacity>
                       </View>
                     </View>

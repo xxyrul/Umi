@@ -146,13 +146,20 @@ async function verifyAdminAuthorization(req, accessCodeSecret, sessionSecretValu
   // 2. Try Firebase Auth ID token verification
   try {
     const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded && (
-      decoded.admin === true ||
-      decoded.role === "admin" ||
-      decoded.isSuperAdmin === true ||
-      decoded.uid === "super_admin_web_portal"
-    )) {
-      return true;
+    if (decoded) {
+      if (
+        decoded.admin === true ||
+        decoded.role === "admin" ||
+        decoded.isSuperAdmin === true ||
+        decoded.uid === "super_admin_web_portal"
+      ) {
+        return true;
+      }
+      // Check user document in Firestore for admin role
+      const userDoc = await admin.firestore().collection("users").doc(decoded.uid).get();
+      if (userDoc.exists && userDoc.data().role === "admin") {
+        return true;
+      }
     }
   } catch (err) {
     // Not a valid Firebase ID token — continue
@@ -457,6 +464,185 @@ exports.adminUpdateListingStatus = onRequest(
       res.json({ success: true, listingId, status });
     } catch (error) {
       logger.error("adminUpdateListingStatus error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * 👥 Unified Admin User Management Endpoint
+ * Actions: approve, reject, suspend, activate, updateRole, delete
+ * Bypasses Firestore rules via Admin SDK and deletes Auth accounts permanently.
+ */
+exports.adminManageUser = onRequest(
+  { cors: true, invoker: "public", secrets: [SESSION_SECRET] },
+  async (req, res) => {
+    try {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method Not Allowed" });
+        return;
+      }
+
+      const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
+      if (!isAuthorized) {
+        res.status(403).json({ error: "Unauthorized. Admin credentials required." });
+        return;
+      }
+
+      let body = req.body;
+      if (Buffer.isBuffer(body)) {
+        try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+      } else if (typeof body === "string") {
+        try { body = JSON.parse(body); } catch (e) {}
+      }
+
+      const { action, uid, role, reason } = body || {};
+      if (!uid || !action) {
+        res.status(400).json({ error: "action and uid are required." });
+        return;
+      }
+
+      const db = admin.firestore();
+      const now = new Date().toISOString();
+      const userRef = db.collection("users").doc(uid);
+
+      if (action === "approve") {
+        await userRef.set(
+          { status: "ACTIVE", approved: true, approvedAt: now, updatedAt: now },
+          { merge: true }
+        );
+        res.json({ success: true, action, uid });
+        return;
+      }
+
+      if (action === "reject") {
+        await userRef.set(
+          {
+            status: "REJECTED",
+            approved: false,
+            rejectedAt: now,
+            rejectionReason: reason || "Permohonan ditolak oleh pentadbir.",
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        res.json({ success: true, action, uid });
+        return;
+      }
+
+      if (action === "suspend") {
+        await userRef.set(
+          {
+            status: "SUSPENDED",
+            approved: false,
+            suspendedAt: now,
+            suspensionReason: reason || "Akaun digantung oleh pentadbir.",
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        res.json({ success: true, action, uid });
+        return;
+      }
+
+      if (action === "activate") {
+        await userRef.set(
+          { status: "ACTIVE", approved: true, updatedAt: now },
+          { merge: true }
+        );
+        res.json({ success: true, action, uid });
+        return;
+      }
+
+      if (action === "updateRole") {
+        if (role !== "admin" && role !== "agent") {
+          res.status(400).json({ error: "Invalid role. Must be 'admin' or 'agent'." });
+          return;
+        }
+        await userRef.set({ role, updatedAt: now }, { merge: true });
+        res.json({ success: true, action, uid, role });
+        return;
+      }
+
+      if (action === "delete") {
+        if (uid === "super_admin_web_portal") {
+          res.status(400).json({ error: "Cannot delete master super admin account." });
+          return;
+        }
+
+        // 1. Delete devices subcollection
+        const devicesSnap = await userRef.collection("devices").get();
+        if (!devicesSnap.empty) {
+          const batch = db.batch();
+          devicesSnap.docs.forEach((doc) => batch.delete(doc.ref));
+          await batch.commit();
+        }
+
+        // 2. Delete Firestore user document
+        await userRef.delete();
+
+        // 3. Delete Firebase Auth user account permanently
+        try {
+          await admin.auth().deleteUser(uid);
+        } catch (authErr) {
+          logger.warn(`Auth user delete for ${uid}:`, authErr.message);
+        }
+
+        res.json({ success: true, action: "delete", uid });
+        return;
+      }
+
+      res.status(400).json({ error: `Unknown action: ${action}` });
+    } catch (error) {
+      logger.error("adminManageUser error:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+/**
+ * 🗑️ Admin Delete Announcement Endpoint
+ */
+exports.adminDeleteAnnouncement = onRequest(
+  { cors: true, invoker: "public", secrets: [SESSION_SECRET] },
+  async (req, res) => {
+    try {
+      if (req.method === "OPTIONS") {
+        res.status(204).send("");
+        return;
+      }
+      if (req.method !== "POST") {
+        res.status(405).json({ error: "Method Not Allowed" });
+        return;
+      }
+
+      const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
+      if (!isAuthorized) {
+        res.status(403).json({ error: "Unauthorized. Admin credentials required." });
+        return;
+      }
+
+      let body = req.body;
+      if (Buffer.isBuffer(body)) {
+        try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+      } else if (typeof body === "string") {
+        try { body = JSON.parse(body); } catch (e) {}
+      }
+
+      const { announcementId } = body || {};
+      if (!announcementId) {
+        res.status(400).json({ error: "announcementId is required." });
+        return;
+      }
+
+      await admin.firestore().collection("announcements").doc(announcementId).delete();
+      res.json({ success: true, announcementId });
+    } catch (error) {
+      logger.error("adminDeleteAnnouncement error:", error);
       res.status(500).json({ error: error.message });
     }
   }

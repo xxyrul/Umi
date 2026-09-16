@@ -1,6 +1,35 @@
-import { firebaseDB } from "@/services/firebase";
+import { firebaseDB, firebaseAuth } from "@/services/firebase";
 import { createInviteCode, revokeInviteCode, InviteCodeDoc } from "@/services/inviteCodes";
 import { FeedbackSubmission, FeedbackStatus } from "@/services/feedback";
+
+const ADMIN_MANAGE_USER_URL = "https://adminmanageuser-qmzvmlyqza-uc.a.run.app";
+const ADMIN_DELETE_ANNOUNCEMENT_URL = "https://admindeleteannouncement-qmzvmlyqza-uc.a.run.app";
+
+async function getAdminAuthHeaders(): Promise<Record<string, string>> {
+  const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+export async function manageUserAsAdmin(
+  action: "approve" | "reject" | "suspend" | "activate" | "updateRole" | "delete",
+  uid: string,
+  extra: { role?: "admin" | "agent"; reason?: string } = {}
+): Promise<void> {
+  const headers = await getAdminAuthHeaders();
+  const res = await fetch(ADMIN_MANAGE_USER_URL, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ action, uid, ...extra }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Request failed" }));
+    throw new Error(err.error || `Failed to ${action} user`);
+  }
+}
 
 export interface AdminAgent {
   uid: string;
@@ -85,7 +114,7 @@ export function subscribeToAllAgents(callback: (agents: AdminAgent[]) => void): 
             agents.push({ ...data, uid: doc.id });
           }
         });
-        agents.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+        agents.sort((a, b) => (a.displayName || a.email || "").localeCompare(b.displayName || b.email || ""));
         callback(agents);
       },
       (error) => {
@@ -99,60 +128,123 @@ export function subscribeToAllAgents(callback: (agents: AdminAgent[]) => void): 
  * Approve a pending agent, granting immediate full CRM access
  */
 export async function approveAgent(uid: string): Promise<void> {
-  const now = new Date().toISOString();
-  await firebaseDB.collection("users").doc(uid).set(
-    {
-      status: "ACTIVE",
-      approved: true,
-      approvedAt: now,
-      updatedAt: now,
-    },
-    { merge: true }
-  );
+  try {
+    await manageUserAsAdmin("approve", uid);
+  } catch (cfErr) {
+    console.warn("CF approveAgent failed, falling back to Firestore:", cfErr);
+    const now = new Date().toISOString();
+    await firebaseDB.collection("users").doc(uid).set(
+      { status: "ACTIVE", approved: true, approvedAt: now, updatedAt: now },
+      { merge: true }
+    );
+  }
 }
 
 /**
- * Reject a pending agent application (removes from agency directory)
+ * Reject a pending agent application (sets status to REJECTED)
  */
 export async function rejectOrSuspendAgent(uid: string, reason?: string): Promise<void> {
-  await firebaseDB.collection("users").doc(uid).delete();
+  try {
+    await manageUserAsAdmin("reject", uid, { reason });
+  } catch (cfErr) {
+    console.warn("CF rejectAgent failed, falling back to Firestore:", cfErr);
+    const now = new Date().toISOString();
+    await firebaseDB.collection("users").doc(uid).set(
+      {
+        status: "REJECTED",
+        approved: false,
+        rejectedAt: now,
+        rejectionReason: reason || "Pendaftaran ditolak oleh pentadbir.",
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  }
 }
 
 /**
  * Suspend an existing agent account
  */
-export async function suspendAgent(uid: string): Promise<void> {
-  const now = new Date().toISOString();
-  await firebaseDB.collection("users").doc(uid).set(
-    {
-      status: "SUSPENDED",
-      approved: false,
-      suspendedAt: now,
-      updatedAt: now,
-    },
-    { merge: true }
-  );
+export async function suspendAgent(uid: string, reason?: string): Promise<void> {
+  try {
+    await manageUserAsAdmin("suspend", uid, { reason });
+  } catch (cfErr) {
+    console.warn("CF suspendAgent failed, falling back to Firestore:", cfErr);
+    const now = new Date().toISOString();
+    await firebaseDB.collection("users").doc(uid).set(
+      {
+        status: "SUSPENDED",
+        approved: false,
+        suspendedAt: now,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  }
 }
 
 /**
- * Permanently delete an agent profile
+ * Reactivate / Unsuspend an existing agent account
+ */
+export async function activateAgent(uid: string): Promise<void> {
+  try {
+    await manageUserAsAdmin("activate", uid);
+  } catch (cfErr) {
+    console.warn("CF activateAgent failed, falling back to Firestore:", cfErr);
+    const now = new Date().toISOString();
+    await firebaseDB.collection("users").doc(uid).set(
+      { status: "ACTIVE", approved: true, updatedAt: now },
+      { merge: true }
+    );
+  }
+}
+
+/**
+ * Permanently delete an agent profile and Auth credentials
  */
 export async function deleteAgent(uid: string): Promise<void> {
-  await firebaseDB.collection("users").doc(uid).delete();
+  try {
+    await manageUserAsAdmin("delete", uid);
+  } catch (cfErr) {
+    console.warn("CF deleteAgent failed, falling back to Firestore:", cfErr);
+    await firebaseDB.collection("users").doc(uid).delete();
+  }
 }
 
 /**
  * Update an agent's role (promote to admin or demote to agent)
  */
 export async function updateAgentRole(uid: string, role: "admin" | "agent"): Promise<void> {
-  const now = new Date().toISOString();
-  await firebaseDB.collection("users").doc(uid).set(
-    {
-      role,
-      updatedAt: now,
-    },
-    { merge: true }
-  );
+  try {
+    await manageUserAsAdmin("updateRole", uid, { role });
+  } catch (cfErr) {
+    console.warn("CF updateAgentRole failed, falling back to Firestore:", cfErr);
+    const now = new Date().toISOString();
+    await firebaseDB.collection("users").doc(uid).set(
+      { role, updatedAt: now },
+      { merge: true }
+    );
+  }
+}
+
+/**
+ * Delete an announcement from noticeboard as admin
+ */
+export async function deleteAnnouncementAsAdmin(announcementId: string): Promise<void> {
+  try {
+    const headers = await getAdminAuthHeaders();
+    const res = await fetch(ADMIN_DELETE_ANNOUNCEMENT_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ announcementId }),
+    });
+    if (!res.ok) {
+      throw new Error("Failed to delete announcement via API");
+    }
+  } catch (cfErr) {
+    console.warn("CF deleteAnnouncement failed, falling back to Firestore:", cfErr);
+    await firebaseDB.collection("announcements").doc(announcementId).delete();
+  }
 }
 
 /**

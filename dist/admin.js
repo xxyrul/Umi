@@ -819,10 +819,26 @@ function renderAnnouncementsTable() {
 async function handleDeleteAnnouncement(docId) {
   if (!confirm("Delete this broadcast announcement?")) return;
   try {
-    await db.collection('announcements').doc(docId).delete();
+    const token = await getAdminApiAuthToken();
+    const res = await fetch("https://admindeleteannouncement-qmzvmlyqza-uc.a.run.app", {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? ('Bearer ' + token) : ''
+      },
+      body: JSON.stringify({ announcementId: docId, sessionToken: token })
+    });
+    if (!res.ok) {
+      await db.collection('announcements').doc(docId).delete();
+    }
     showToast("Announcement deleted.");
   } catch (err) {
-    alert("Failed to delete announcement: " + err.message);
+    try {
+      await db.collection('announcements').doc(docId).delete();
+      showToast("Announcement deleted.");
+    } catch (e) {
+      alert("Failed to delete announcement: " + err.message);
+    }
   }
 }
 
@@ -882,13 +898,48 @@ function renderPendingApprovalsTable() {
   }).join('');
 }
 
+async function getAdminApiAuthToken() {
+  let token = sessionStorage.getItem('artha_admin_session_token');
+  if (!token && auth.currentUser) {
+    token = await auth.currentUser.getIdToken().catch(() => null);
+  }
+  return token;
+}
+
+async function callAdminManageUser(action, uid, extra = {}) {
+  const token = await getAdminApiAuthToken();
+  const url = "https://adminmanageuser-qmzvmlyqza-uc.a.run.app";
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': token ? ('Bearer ' + token) : ''
+    },
+    body: JSON.stringify({ action, uid, sessionToken: token, ...extra })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || `Failed to ${action} user`);
+  }
+  return res.json();
+}
+
 async function rejectAgentWeb(uid, name) {
-  if (!confirm("Are you sure you want to REJECT and REMOVE application for '" + name + "'?")) return;
+  if (!confirm("Are you sure you want to REJECT application for '" + name + "'?")) return;
   try {
-    await db.collection('users').doc(uid).delete();
-    showToast("Application rejected and removed.");
+    await callAdminManageUser('reject', uid);
+    showToast("Application rejected.");
   } catch (err) {
-    alert("Failed to reject application: " + err.message);
+    try {
+      await db.collection('users').doc(uid).set({
+        status: 'REJECTED',
+        approved: false,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      showToast("Application rejected.");
+    } catch (e) {
+      alert("Failed to reject application: " + err.message);
+    }
   }
 }
 
@@ -956,46 +1007,67 @@ function renderAgentsTable() {
 
 async function approveAgentWeb(uid) {
   try {
-    const now = new Date().toISOString();
-    await db.collection('users').doc(uid).set({
-      status: 'ACTIVE',
-      approved: true,
-      approvedAt: now,
-      updatedAt: now
-    }, { merge: true });
+    await callAdminManageUser('approve', uid);
     showToast("Agent approved successfully! 🎉");
   } catch (err) {
-    alert("Failed to approve agent: " + err.message);
+    try {
+      const now = new Date().toISOString();
+      await db.collection('users').doc(uid).set({
+        status: 'ACTIVE',
+        approved: true,
+        approvedAt: now,
+        updatedAt: now
+      }, { merge: true });
+      showToast("Agent approved successfully! 🎉");
+    } catch (e) {
+      alert("Failed to approve agent: " + err.message);
+    }
   }
 }
 
 async function toggleAgentRole(uid, currentRole) {
   const newRole = currentRole === 'admin' ? 'agent' : 'admin';
   try {
-    await db.collection('users').doc(uid).update({ role: newRole });
+    await callAdminManageUser('updateRole', uid, { role: newRole });
     showToast("Agent role updated to " + newRole);
   } catch (err) {
-    alert("Failed to update role: " + err.message);
+    try {
+      await db.collection('users').doc(uid).update({ role: newRole });
+      showToast("Agent role updated to " + newRole);
+    } catch (e) {
+      alert("Failed to update role: " + err.message);
+    }
   }
 }
 
 async function toggleAgentStatus(uid, currentStatus) {
   const newStatus = currentStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+  const action = newStatus === 'SUSPENDED' ? 'suspend' : 'activate';
   try {
-    await db.collection('users').doc(uid).update({ status: newStatus });
+    await callAdminManageUser(action, uid);
     showToast("Agent account " + (newStatus === 'SUSPENDED' ? 'suspended' : 'activated'));
   } catch (err) {
-    alert("Failed to update status: " + err.message);
+    try {
+      await db.collection('users').doc(uid).update({ status: newStatus });
+      showToast("Agent account " + (newStatus === 'SUSPENDED' ? 'suspended' : 'activated'));
+    } catch (e) {
+      alert("Failed to update status: " + err.message);
+    }
   }
 }
 
 async function handleDeleteAgent(uid, identifier) {
-  if (!confirm("Are you sure you want to PERMANENTLY DELETE agent '" + identifier + "'?\n\nThis will remove their profile record from Firestore.")) return;
+  if (!confirm("Are you sure you want to PERMANENTLY DELETE agent '" + identifier + "'?\n\nThis will remove their profile record AND Firebase Auth login account.")) return;
   try {
-    await db.collection('users').doc(uid).delete();
+    await callAdminManageUser('delete', uid);
     showToast("Agent '" + identifier + "' deleted successfully");
   } catch (err) {
-    alert("Failed to delete agent: " + err.message);
+    try {
+      await db.collection('users').doc(uid).delete();
+      showToast("Agent '" + identifier + "' deleted from Firestore.");
+    } catch (e) {
+      alert("Failed to delete agent: " + err.message);
+    }
   }
 }
 
