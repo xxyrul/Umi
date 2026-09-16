@@ -452,8 +452,11 @@ export default function UpdatesScreen() {
               </Animated.Text>
 
               {displayedHistory.map((rel, idx) => {
-                const isLatest = !availableRelease && idx === 0;
-                const isExpanded = expandedVersions[rel.versionName] ?? isLatest;
+                const isInstalledVersion =
+                  Number(rel.versionCode) === Number(currentVersionCode) ||
+                  rel.versionName === currentVersion;
+                const isExpanded =
+                  expandedVersions[rel.versionName] ?? (isInstalledVersion || idx === 0);
                 const notes = Array.isArray(rel.releaseNotes) ? rel.releaseNotes : [rel.releaseNotes].filter(Boolean);
 
                 return (
@@ -464,7 +467,7 @@ export default function UpdatesScreen() {
                       styles.card,
                       {
                         backgroundColor: themeColors.cardBackground,
-                        borderColor: isLatest ? themeColors.maroonPrimary : themeColors.borderColor,
+                        borderColor: isInstalledVersion ? themeColors.maroonPrimary : themeColors.borderColor,
                       },
                     ]}
                   >
@@ -474,7 +477,7 @@ export default function UpdatesScreen() {
                       style={styles.historyHeader}
                     >
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <Text style={[styles.historyVersion, { color: isLatest ? themeColors.maroonPrimary : themeColors.textPrimary }]}>
+                        <Text style={[styles.historyVersion, { color: isInstalledVersion ? themeColors.maroonPrimary : themeColors.textPrimary }]}>
                           v{rel.versionName}
                         </Text>
                         {rel.versionCode && (
@@ -484,7 +487,7 @@ export default function UpdatesScreen() {
                             </Text>
                           </View>
                         )}
-                        {isLatest && (
+                        {isInstalledVersion && (
                           <View style={[styles.latestBadge, { backgroundColor: themeColors.maroonLight }]}>
                             <Text style={{ fontSize: 10, fontWeight: "800", color: themeColors.maroonPrimary }}>
                               CURRENT

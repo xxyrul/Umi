@@ -1,0 +1,243 @@
+[
+  {
+    "versionName": "1.6.1",
+    "versionCode": 59,
+    "downloadUrl": "https://artharen.web.app/releases/artha-1.6.1.apk",
+    "releaseDate": "2026-09-16",
+    "releaseNotes": [
+      "📱 Fixed Android Keyboard Overlay: Add Listing description, notes, and Next button now dynamically lift cleanly above the keyboard on all Android devices.",
+      "🏛️ LPPSA Government Loan Calculator: Dedicated civil servant financing suite with automatic 60%/50% salary deduction limits, 4.0% fixed rate, and WhatsApp summary dispatch.",
+      "🤝 Co-Broke Broadcast Share Kit: 1-tap REN-to-REN WhatsApp broadcast formatting in listing share sheets.",
+      "⚡ Consolidated Quick Utilities: Streamlined 3-button action hub on homescreen (New Case, New Listing, Calculator).",
+      "📢 Integrated Notices & Action Items: System announcements now live seamlessly inside Today's Action Items.",
+      "✨ Fluid Card Physics & Shimmer Skeletons: Interactive spring touch feedback and smooth shimmer skeleton placeholders on case lists.",
+      "🛡️ Comprehensive Security Hardening: Locked down Firestore rules against privilege escalation, secured Storage document vaults, and protected Cloud Function endpoints."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 62175951
+  },
+  {
+    "versionName": "1.6.0",
+    "versionCode": 58,
+    "downloadUrl": "https://artharen.web.app/releases/artha-1.6.0.apk",
+    "releaseDate": "2026-09-16",
+    "releaseNotes": [
+      "🏛️ LPPSA Government Loan Calculator: Dedicated civil servant financing suite with automatic 60%/50% salary deduction limits, 4.0% fixed rate, and WhatsApp summary dispatch.",
+      "🤝 Co-Broke Broadcast Share Kit: 1-tap REN-to-REN WhatsApp broadcast formatting in listing share sheets.",
+      "⚡ Consolidated Quick Utilities: Streamlined 3-button action hub on homescreen (New Case, New Listing, Calculator).",
+      "📢 Integrated Notices & Action Items: System announcements now live seamlessly inside Today's Action Items.",
+      "✨ Fluid Card Physics & Shimmer Skeletons: Interactive spring touch feedback and smooth shimmer skeleton placeholders on case lists.",
+      "🛡️ Comprehensive Security Hardening: Locked down Firestore rules against privilege escalation, secured Storage document vaults, and protected Cloud Function endpoints."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 62163263
+  },
+  {
+    "versionName": "1.5.2",
+    "versionCode": 57,
+    "downloadUrl": "https://artharen.web.app/releases/artha-1.5.2.apk",
+    "releaseDate": "2026-09-16",
+    "releaseNotes": [
+      "🧮 Loan Insurance Calculator: Added MRTT / MRTA (age 25–50) and Houseowner / Fire Insurance calculations with option to finance into loan or pay cash upfront.",
+      "🔄 Seamless Navigation: Floating bottom navigation bar automatically restores when using Android back gesture from listings.",
+      "📐 Bottom Screen Clearance: Fixed tab screen padding so all case action buttons and follow-up rows remain unobstructed.",
+      "✨ Instant Listing Sync: Creating a property now auto-refreshes Listings, scrolls to the top, and displays a success toast."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 62006323
+  },
+  {
+    "versionName": "1.5.1",
+    "versionCode": 56,
+    "downloadUrl": "https://artharen.web.app/releases/artha-1.5.1.apk",
+    "releaseDate": "2026-08-23",
+    "releaseNotes": [
+      "📱 Fresh & Compact Dashboard: The entire dashboard now fits cleanly on your screen with zero abbreviations on pipeline and quick tools.",
+      "🏠 First-Time Home Buyer Exemption: 1-tap toggle for 100% MOT Stamp Duty exemption with live cash savings display.",
+      "📈 Visual DSR Health Gauge: Color-coded progress bar showing loan approval chances at a glance, plus 1-tap bank limit chips and dedicated PTPTN loan deductions.",
+      "🧮 Enhanced Calculators: Improved 6-month average income tool for variable/OT salary, plus instant cross-tab loan calculation bridge.",
+      "🔄 Smoother Navigation & Cleaner Sharing: Back button from calculator returns directly to the exact listing, with symmetric WhatsApp and Copy buttons.",
+      "📰 Daily Digest Briefing (9:00 AM): Automatically receive your morning active case summary from Firebase Cloud (Turn ON in Profile > Notification Settings)."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 62150000
+  },
+  {
+    "versionName": "1.5.0",
+    "versionCode": 55,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.5.0.apk",
+    "releaseDate": "2026-08-23",
+    "releaseNotes": [
+      "✨ Dedicated Settings Pages: Account, Notifications, and Help & Support now open as clean, full-screen pages with smooth back navigation.",
+      "📐 Grid Alignment & Share Button: Master Listing grid cards now have equalized heights with perfectly aligned Share buttons.",
+      "🔍 My Listings Filter Fix: All your properties (Active, Booking, Sold, Draft) are now always visible under My Listings by default.",
+      "🛡️ Redesigned Feedback & Bug Report: Easily report issues and attach screenshots with comfortable safe-area spacing and gesture back support.",
+      "⚡ Lightning Performance: Optimized data loading and smart caching across dashboard and listings.",
+      "🔒 Enhanced Privacy & Security: Complete control over PIN app lock, biometrics, and anti-screenshot protection."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
+    "versionName": "1.4.2",
+    "versionCode": 54,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.2.apk",
+    "releaseDate": "2026-08-22",
+    "releaseNotes": [
+      "🔔 Smarter Notification Inbox: Notifications you've already read or cleared stay cleared on your account, even if you reinstall the app or clear data.",
+      "⚡ Real-Time In-App Sync: New announcements and release notes now appear instantly in your Notification Inbox without refreshing.",
+      "📲 Direct Notification Routing: Tapping any update or announcement notification opens your Notification Inbox directly."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
+    "versionName": "1.4.1",
+    "versionCode": 53,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.1.apk",
+    "releaseDate": "2026-08-22",
+    "releaseNotes": [
+      "📱 Better Display on All Phones: Buttons, cards, and text now automatically fit and scale cleanly on every Android screen size and zoom level.",
+      "📸 Cleaner Photo Uploads: Neater square photo tiles with easy-to-tap controls when adding and editing listings.",
+      "⚡ Glitch-Free Listing Views: Fixed photos occasionally mixing up when switching between My Listings and All Listings.",
+      "🔒 Enhanced Security: Server-side admin authentication and direct navigation."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
+    "versionName": "1.4.0",
+    "versionCode": 52,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.4.0.apk",
+    "releaseDate": "2026-08-21",
+    "releaseNotes": [
+      "📸 Streamlined 2-Option Share Sheet: Share multi-photo albums with live download progress.",
+      "💡 Universal Android Guidance: Send clean albums with auto-caption without repeated text on all Android brands.",
+      "📋 1-Tap Copywriting: Instant copy with price/sqft and monthly loan estimates."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61850000
+  },
+  {
+    "versionName": "1.3.2-2",
+    "versionCode": 51,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2-2.apk",
+    "releaseDate": "2026-08-21",
+    "releaseNotes": [
+      "🔔 Notifications Inbox: View all past agency announcements anytime from the new bell icon on your Dashboard.",
+      "📲 Direct Phone Notifications: Receive important announcements directly in your phone notification center.",
+      "🌐 Language Matching: Announcements now seamlessly adapt to your preferred language (English / Bahasa Melayu).",
+      "✨ Smarter Dashboard: Dismissed announcement banners stay closed permanently with zero startup flash."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow",
+    "fileSizeBytes": 61799847
+  },
+  {
+    "versionName": "1.3.2",
+    "versionCode": 49,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.2.apk",
+    "releaseDate": "2026-08-20",
+    "releaseNotes": [
+      "Fixed AuthGuard cold-start: App strictly returns to login after signing out.",
+      "Added [← Sign In] back button on registration screen.",
+      "Full multi-language support (English & Bahasa Melayu) on Login & Register.",
+      "Enhanced registration reliability with automatic Firestore user database sync.",
+      "Redesigned App Updates page: Consolidated hero status, removed cache clutter, and added Android install permission tips.",
+      "Collapsible Release History accordions with easy changelog browsing."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow"
+  },
+  {
+    "versionName": "1.3.1",
+    "versionCode": 47,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.1.apk",
+    "releaseDate": "2026-08-19",
+    "releaseNotes": [
+      "Unified 3-Step Listing Wizard with interactive GPS geocoding & address sync.",
+      "Interactive 'Locate Me' GPS button on Master Map View.",
+      "Clean Active listing feed default with human-readable date recency badges.",
+      "Posted date display on Property Detail page.",
+      "Fluid motion and snappy, zero-bounce transitions across tabs and cards.",
+      "Fixed sold status badge icon and improved multi-photo WhatsApp sharing."
+    ],
+    "isCritical": false,
+    "packageName": "com.umi.caseflow"
+  },
+  {
+    "versionName": "1.3.0",
+    "versionCode": 46,
+    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.3.0.apk",
+    "releaseDate": "2026-08-19",
+    "releaseNotes": [
+      "Fixed MapView UI overlapping with FAB and Android navigation buttons.",
+      "Added Interactive Map Location Picker for new listings.",
+      "Added automatic parsing of Google Maps and Waze URLs.",
+      "Fixed overlapping UI issues across the app."
+    ],
+    "isCritical": true,
+    "packageName": "com.umi.caseflow"
+  },
+  {
+    "versionName": "1.2.1",
+    "versionCode": 45,
+    "fileSizeBytes": 61827554,
+    "date": "2026-08-19",
+    "releaseNotes": [
+      "Fixed navigation bar overlap on 3-button navigation devices.",
+      "Improved Firestore realtime listener stability and memory efficiency.",
+      "Search filter null-safety and stability improvements."
+    ]
+  },
+  {
+    "versionName": "1.2.0",
+    "versionCode": 44,
+    "date": "2026-08-19",
+    "releaseNotes": [
+      "Bug fixes and stability improvements.",
+      "Fixed navigation bar theming and layout.",
+      "Improved Loan Calculator and Listing creation flows."
+    ]
+  },
+  {
+    "versionName": "1.1.37",
+    "versionCode": 43,
+    "date": "2026-08-15",
+    "releaseNotes": [
+      "Refined Multi-Photo WhatsApp Sharing: Enhanced photo gallery preparation and formatted caption attachment.",
+      "Adaptive Light & Dark Mode Navigation Dock: Dynamic background and active highlight switching.",
+      "Android 3-Button Navigation Bar Clearance: Bottom sheet modals now have full clearance above Back/Home/Recents buttons.",
+      "Seamless In-App APK Updater with automatic storage cache cleanup."
+    ]
+  },
+  {
+    "versionName": "1.1.36",
+    "versionCode": 42,
+    "date": "2026-08-10",
+    "releaseNotes": [
+      "Bug fixes and stability improvements",
+      "Minor UI enhancements"
+    ]
+  },
+  {
+    "versionName": "1.1.35",
+    "versionCode": 41,
+    "date": "2026-08-01",
+    "releaseNotes": [
+      "Rebranded to Artha (Master Listing CRM)",
+      "In-app APK updater with live download bar",
+      "Zero-clutter automatic storage cleanup",
+      "High-speed 60FPS virtualized photo gallery",
+      "Automated password reset email sheet"
+    ]
+  }
+]

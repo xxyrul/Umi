@@ -90,11 +90,6 @@
           "source": "/admin",
           "destination": "https://artharen.web.app/admin",
           "type": 301
-        },
-        {
-          "source": "/:all*",
-          "destination": "https://artharen.web.app/:all*",
-          "type": 301
         }
       ]
     }
