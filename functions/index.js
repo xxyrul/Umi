@@ -28,7 +28,6 @@ exports.dailyUpdateNudge = onSchedule(
     const messaging = admin.messaging();
 
     try {
-      // 1. Fetch live latest manifest from hosting
       const manifestRes = await fetch("https://artharen.web.app/releases/latest.json", {
         headers: { "Cache-Control": "no-cache" },
       });
@@ -43,18 +42,21 @@ exports.dailyUpdateNudge = onSchedule(
       }
 
       const devicesSnap = await db.collectionGroup("devices").get();
+
+      // Deduplicate: one notification per unique FCM token
+      const seenTokens = new Set();
       let nudgedCount = 0;
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
         if (data.enabled === false) continue;
         const token = data.token;
-        if (!token) continue;
+        if (!token || seenTokens.has(token)) continue;
+        seenTokens.add(token);
 
         const deviceVersion = Number(data.appVersionCode || 0);
         if (deviceVersion >= latestCode) continue;
 
-        // Cooldown check
         const lastNudged = data.lastNudgedAt ? new Date(data.lastNudgedAt).getTime() : 0;
         if (Date.now() - lastNudged < NUDGE_COOLDOWN_MS) continue;
 
@@ -64,38 +66,31 @@ exports.dailyUpdateNudge = onSchedule(
           ? "Kemaskini baharu dengan ciri-ciri dan penambahbaikan terkini. Ketik untuk muat turun."
           : "New update with the latest features and improvements. Tap to download.";
 
-        const message = {
-          token,
-          notification: { title, body },
-          data: {
-            kind: "update-nudge",
-            versionName: latestName,
-            versionCode: String(latestCode),
-          },
-          android: {
-            priority: "normal",
-            notification: {
-              channel_id: "updates",
-              icon: "ic_notification",
-            },
-          },
-        };
-
         try {
-          await messaging.send(message);
+          await messaging.send({
+            token,
+            notification: { title, body },
+            data: { kind: "update-nudge", versionName: latestName, versionCode: String(latestCode) },
+            android: { priority: "normal", notification: { channel_id: "updates", icon: "ic_notification" } },
+          });
           await doc.ref.update({ lastNudgedAt: new Date().toISOString() });
           nudgedCount++;
         } catch (err) {
           logger.warn(`Failed nudge to ${doc.id}:`, err.message);
+          if (err.code === "messaging/registration-token-not-registered" ||
+              err.code === "messaging/invalid-registration-token") {
+            await doc.ref.delete().catch(() => {});
+          }
         }
       }
 
-      logger.info(`Daily nudge complete. Nudged ${nudgedCount} outdated devices.`);
+      logger.info(`Daily nudge complete. Nudged ${nudgedCount} unique devices.`);
     } catch (err) {
       logger.error("dailyUpdateNudge error:", err);
     }
   }
 );
+
 
 /**
  * Helper to verify Admin authorization via HMAC session token or Firebase Auth Admin token.
@@ -188,13 +183,15 @@ exports.sendInstantUpdatePush = onRequest(
       const latestName = manifest.versionName;
 
       const devicesSnap = await db.collectionGroup("devices").get();
+      const seenTokens = new Set();
       let sentCount = 0;
 
       for (const doc of devicesSnap.docs) {
         const data = doc.data();
         if (data.enabled === false) continue;
         const token = data.token;
-        if (!token) continue;
+        if (!token || seenTokens.has(token)) continue;
+        seenTokens.add(token);
 
         const isMalay = data.language === "BM";
         const title = isMalay
@@ -271,6 +268,7 @@ exports.sendBroadcastPush = onRequest(
       }
 
       const devicesSnap = await db.collectionGroup("devices").get();
+      const seenTokens = new Set();
       let sentCount = 0;
       let failCount = 0;
 
@@ -278,7 +276,8 @@ exports.sendBroadcastPush = onRequest(
         const data = doc.data();
         if (data.enabled === false) continue;
         const token = data.token;
-        if (!token) continue;
+        if (!token || seenTokens.has(token)) continue;
+        seenTokens.add(token);
 
         const isMalay = data.language === "BM";
         const title = isMalay ? (titleBM || titleEN) : titleEN;
@@ -480,6 +479,9 @@ exports.dailyDigestBriefingCron = onSchedule(
       logger.info("Starting 9:00 AM Daily Digest Briefing job...");
 
       const devicesSnap = await db.collectionGroup("devices").get();
+
+      // Deduplicate: one notification per unique FCM token
+      const seenTokens = new Set();
       let sentCount = 0;
 
       for (const doc of devicesSnap.docs) {
@@ -487,7 +489,8 @@ exports.dailyDigestBriefingCron = onSchedule(
         if (data.enabled === false) continue;
         const token = data.token;
         const uid = data.uid || doc.ref.parent.parent?.id;
-        if (!token) continue;
+        if (!token || seenTokens.has(token)) continue;
+        seenTokens.add(token);
 
         const isMalay = data.language === "BM";
 
@@ -514,22 +517,16 @@ exports.dailyDigestBriefingCron = onSchedule(
             ? `Good morning! You have ${activeCount} active cases in your transaction pipeline today.`
             : "Good morning! Open Artha to review your property listings and tasks for today.";
 
-        const message = {
-          token,
-          notification: { title, body },
-          data: { screen: "dashboard", type: "daily_digest" },
-          android: {
-            priority: "high",
-            notification: {
-              channel_id: "daily-digest",
-              color: "#F59E0B",
-              sound: "default",
-            },
-          },
-        };
-
         try {
-          await messaging.send(message);
+          await messaging.send({
+            token,
+            notification: { title, body },
+            data: { screen: "dashboard", type: "daily_digest" },
+            android: {
+              priority: "high",
+              notification: { channel_id: "daily-digest", color: "#F59E0B", sound: "default" },
+            },
+          });
           sentCount++;
         } catch (err) {
           if (
@@ -541,7 +538,7 @@ exports.dailyDigestBriefingCron = onSchedule(
         }
       }
 
-      logger.info(`Daily Digest Complete: Delivered to ${sentCount} devices.`);
+      logger.info(`Daily Digest Complete: Delivered to ${sentCount} unique devices.`);
     } catch (error) {
       logger.error("Daily digest briefing cron failed:", error);
     }
