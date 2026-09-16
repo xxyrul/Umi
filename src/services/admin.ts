@@ -2,8 +2,8 @@ import { firebaseDB, firebaseAuth } from "@/services/firebase";
 import { createInviteCode, revokeInviteCode, InviteCodeDoc } from "@/services/inviteCodes";
 import { FeedbackSubmission, FeedbackStatus } from "@/services/feedback";
 
-const ADMIN_MANAGE_USER_URL = "https://adminmanageuser-qmzvmlyqza-uc.a.run.app";
-const ADMIN_DELETE_ANNOUNCEMENT_URL = "https://admindeleteannouncement-qmzvmlyqza-uc.a.run.app";
+const ADMIN_MANAGE_USER_URL = "https://us-central1-umiren-d6a66.cloudfunctions.net/adminManageUser";
+const ADMIN_DELETE_ANNOUNCEMENT_URL = "https://us-central1-umiren-d6a66.cloudfunctions.net/adminDeleteAnnouncement";
 
 async function getAdminAuthHeaders(): Promise<Record<string, string>> {
   const token = await firebaseAuth.currentUser?.getIdToken().catch(() => null);

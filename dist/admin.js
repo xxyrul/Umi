@@ -820,7 +820,7 @@ async function handleDeleteAnnouncement(docId) {
   if (!confirm("Delete this broadcast announcement?")) return;
   try {
     const token = await getAdminApiAuthToken();
-    const res = await fetch("https://admindeleteannouncement-qmzvmlyqza-uc.a.run.app", {
+    const res = await fetch("https://us-central1-umiren-d6a66.cloudfunctions.net/adminDeleteAnnouncement", {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -908,7 +908,7 @@ async function getAdminApiAuthToken() {
 
 async function callAdminManageUser(action, uid, extra = {}) {
   const token = await getAdminApiAuthToken();
-  const url = "https://adminmanageuser-qmzvmlyqza-uc.a.run.app";
+  const url = "https://us-central1-umiren-d6a66.cloudfunctions.net/adminManageUser";
   const res = await fetch(url, {
     method: 'POST',
     headers: {
