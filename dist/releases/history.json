@@ -2,17 +2,20 @@
   {
     "versionName": "1.6.1",
     "versionCode": 59,
-    "downloadUrl": "https://umiren-d6a66.web.app/releases/artha-1.6.1.apk",
+    "downloadUrl": "https://artharen.web.app/releases/artha-1.6.1.apk",
     "releaseDate": "2026-09-16",
     "releaseNotes": [
-      "📱 Fixed Case Form Keyboard: Keyboard no longer covers notes or the Create Case button.",
-      "👤 Delete & Suspend Agents: Admins can now suspend, unsuspend, or permanently delete accounts directly in the app.",
-      "🔄 Fixed App Updates: Fixed older versions (v1.5.1) not detecting the new update.",
-      "🌐 Fixed Website Display: Website now shows latest version properly without flickering."
+      "📱 Fixed Android Keyboard Overlay: Add Listing description, notes, and Next button now dynamically lift cleanly above the keyboard on all Android devices.",
+      "🏛️ LPPSA Government Loan Calculator: Dedicated civil servant financing suite with automatic 60%/50% salary deduction limits, 4.0% fixed rate, and WhatsApp summary dispatch.",
+      "🤝 Co-Broke Broadcast Share Kit: 1-tap REN-to-REN WhatsApp broadcast formatting in listing share sheets.",
+      "⚡ Consolidated Quick Utilities: Streamlined 3-button action hub on homescreen (New Case, New Listing, Calculator).",
+      "📢 Integrated Notices & Action Items: System announcements now live seamlessly inside Today's Action Items.",
+      "✨ Fluid Card Physics & Shimmer Skeletons: Interactive spring touch feedback and smooth shimmer skeleton placeholders on case lists.",
+      "🛡️ Comprehensive Security Hardening: Locked down Firestore rules against privilege escalation, secured Storage document vaults, and protected Cloud Function endpoints."
     ],
     "isCritical": false,
     "packageName": "com.umi.caseflow",
-    "fileSizeBytes": 62174071
+    "fileSizeBytes": 62175951
   },
   {
     "versionName": "1.6.0",

@@ -12,6 +12,7 @@ import {
   Alert,
   Linking,
   Switch,
+  Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -27,6 +28,27 @@ export default function CalculatorScreen() {
   const params = useLocalSearchParams<{ price?: string; tab?: string }>();
   const { themeColors, t, language } = useAppSettings();
   const isBM = language === "BM";
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Top level tab: "mortgage" (Home Loan) vs "dsr" (DSR Eligibility) vs "lppsa" (Government Loan)
   const [primaryTab, setPrimaryTab] = useState<"mortgage" | "dsr" | "lppsa">(
@@ -531,7 +553,7 @@ export default function CalculatorScreen() {
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: 16,
-          paddingBottom: Math.max(insets.bottom, 24) + 64,
+          paddingBottom: Math.max(insets.bottom, 24) + (keyboardHeight > 0 ? keyboardHeight + 60 : 64),
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"

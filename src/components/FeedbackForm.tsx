@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
   StyleSheet,
   KeyboardAvoidingView,
+  Keyboard,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -62,6 +63,26 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Diagnostics metadata
   const appVersion = Constants.nativeApplicationVersion || Constants.expoConfig?.version || "1.5.2";
@@ -229,7 +250,7 @@ export const FeedbackForm: React.FC<FeedbackFormProps> = ({
         <ScrollView
           contentContainerStyle={{
             padding: 16,
-            paddingBottom: Math.max(insets.bottom, 24) + 40,
+            paddingBottom: Math.max(insets.bottom, 24) + (keyboardHeight > 0 ? keyboardHeight + 40 : 40),
             gap: 16,
           }}
           keyboardShouldPersistTaps="handled"

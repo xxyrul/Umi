@@ -107,15 +107,44 @@ export default function TambahScreen() {
   const { themeColors, t, language } = useAppSettings();
   const scrollRef = useRef<ScrollView>(null);
 
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const handleScrollToEnd = useCallback(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    }, 180);
+  }, []);
+
   const handleInputFocus = (event: any) => {
-    const node = findNodeHandle(event.target);
-    if (node && scrollRef.current) {
-      scrollRef.current.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(
-        node,
-        140, 
-        true
-      );
-    }
+    setTimeout(() => {
+      const node = findNodeHandle(event.target);
+      if (node && scrollRef.current) {
+        scrollRef.current.getScrollResponder()?.scrollResponderScrollNativeHandleToKeyboard(
+          node,
+          160, 
+          true
+        );
+      }
+    }, 150);
   };
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -821,10 +850,10 @@ export default function TambahScreen() {
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        automaticallyAdjustKeyboardInsets={true}
+        automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
         contentContainerStyle={{
           padding: SPACING.lg,
-          paddingBottom: Math.max(insets.bottom, 28) + 120,
+          paddingBottom: Math.max(insets.bottom, 28) + (keyboardHeight > 0 ? keyboardHeight + 80 : 120),
         }}
       >
         {currentStep === 1 && (
@@ -854,6 +883,7 @@ export default function TambahScreen() {
             isMovingForward={isMovingForward}
             currentStep={currentStep}
             handleInputFocus={handleInputFocus}
+            handleScrollToEnd={handleScrollToEnd}
             bedAnimatedStyle={bedAnimatedStyle}
             bathAnimatedStyle={bathAnimatedStyle}
           />
@@ -880,6 +910,7 @@ export default function TambahScreen() {
             setIsStateModalVisible={setIsStateModalVisible}
             handleAddressBlur={handleAddressBlur}
             handleInputFocus={handleInputFocus}
+            handleScrollToEnd={handleScrollToEnd}
             isMovingForward={isMovingForward}
             currentStep={currentStep}
           />

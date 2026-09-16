@@ -53,6 +53,7 @@ interface BasicInfoStepProps {
   isMovingForward: boolean;
   currentStep: number;
   handleInputFocus: (e: any) => void;
+  handleScrollToEnd?: () => void;
   bedAnimatedStyle: any;
   bathAnimatedStyle: any;
 }
@@ -83,6 +84,7 @@ export function BasicInfoStep({
   isMovingForward,
   currentStep,
   handleInputFocus,
+  handleScrollToEnd,
   bedAnimatedStyle,
   bathAnimatedStyle,
 }: BasicInfoStepProps) {
@@ -340,7 +342,10 @@ export function BasicInfoStep({
         multiline
         numberOfLines={4}
         textAlignVertical="top"
-        onFocus={handleInputFocus}
+        onFocus={(e) => {
+          handleInputFocus(e);
+          handleScrollToEnd?.();
+        }}
         style={[
           styles.input,
           {

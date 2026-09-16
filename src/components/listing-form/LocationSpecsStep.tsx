@@ -44,6 +44,7 @@ interface LocationSpecsStepProps {
   setIsStateModalVisible: (v: boolean) => void;
   handleAddressBlur: () => void;
   handleInputFocus: (e: any) => void;
+  handleScrollToEnd?: () => void;
   isMovingForward: boolean;
   currentStep: number;
 }
@@ -68,6 +69,7 @@ export function LocationSpecsStep({
   setIsStateModalVisible,
   handleAddressBlur,
   handleInputFocus,
+  handleScrollToEnd,
   isMovingForward,
   currentStep,
 }: LocationSpecsStepProps) {
@@ -353,7 +355,10 @@ export function LocationSpecsStep({
         value={telOwner}
         onChangeText={setTelOwner}
         keyboardType="phone-pad"
-        onFocus={handleInputFocus}
+        onFocus={(e) => {
+          handleInputFocus(e);
+          handleScrollToEnd?.();
+        }}
         style={[
           styles.input,
           {
