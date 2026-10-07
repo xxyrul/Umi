@@ -172,9 +172,8 @@ class ReleaseManifest {
       if (buildMatch != null) {
         buildCode = int.tryParse(buildMatch.group(1) ?? '') ?? 0;
       }
-      if (buildCode == 0) {
-        buildCode = ApkUpdaterService.versionStringToCode(cleanVersion);
-      }
+      // Note: do not fallback to versionStringToCode which generates 2000000
+      // Build code stays 0 if unspecified, relying on semver comparison.
 
       return ReleaseManifest(
         versionName: cleanVersion,
@@ -247,16 +246,23 @@ class ApkUpdaterService {
   }
 
   bool _isNewerRelease(ReleaseManifest manifest) {
-    final minRequired = manifest.minimumVersionCode > 0
-        ? manifest.minimumVersionCode
-        : currentBuildCode;
+    final currentSemver = versionStringToCode(currentVersionName);
+    final candidateSemver = versionStringToCode(manifest.versionName);
 
-    if (manifest.versionCode > currentBuildCode) return true;
-    if (manifest.minimumVersionCode > 0 && currentBuildCode < minRequired) return true;
+    // 1. Higher semver (e.g. 2.0.1 > 2.0.0) -> newer
+    if (candidateSemver > currentSemver) return true;
 
-    final currentVersionCode = versionStringToCode(currentVersionName);
-    final candidateVersionCode = versionStringToCode(manifest.versionName);
-    if (candidateVersionCode > currentVersionCode) return true;
+    // 2. Lower semver (e.g. 1.6.1 < 2.0.0) -> older
+    if (candidateSemver < currentSemver) return false;
+
+    // 3. Same semver (e.g. 2.0.0 == 2.0.0): only newer if valid build code > current
+    if (manifest.versionCode > 0 && manifest.versionCode < 1000000) {
+      if (manifest.versionCode > currentBuildCode) return true;
+    }
+
+    if (manifest.minimumVersionCode > 0 && currentBuildCode < manifest.minimumVersionCode) {
+      return true;
+    }
 
     return false;
   }
