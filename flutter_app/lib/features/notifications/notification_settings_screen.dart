@@ -41,6 +41,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
   Future<void> _loadPrefs() async {
     final prefs = await SharedPreferences.getInstance();
     final notificationSettings = await FirebaseMessaging.instance.getNotificationSettings();
+    if (!mounted) return;
     final notificationsAllowed = notificationSettings.authorizationStatus == AuthorizationStatus.authorized ||
         notificationSettings.authorizationStatus == AuthorizationStatus.provisional;
     setState(() {
@@ -75,6 +76,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
     if (!mounted) return;
     setState(() => _pushEnabled = granted);
     await _savePref('@artha_push_enabled', granted);
+    if (!mounted) return;
     if (!granted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(isBM ? 'Benarkan notifikasi dalam Tetapan telefon.' : 'Allow notifications in phone settings.')),
@@ -151,7 +153,7 @@ class _NotificationSettingsScreenState extends ConsumerState<NotificationSetting
                     style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.w600, fontSize: 14),
                   ),
                   subtitle: Text(
-                    isBM ? 'Pemberitahuan apabila milestone kes berubah' : 'Alerts when case milestones change',
+                    isBM ? 'Pemberitahuan apabila status atau peringkat kes berubah' : 'Alerts when case status or stage updates',
                     style: TextStyle(color: colors.textMuted, fontSize: 12),
                   ),
                   value: _caseAlertsEnabled,

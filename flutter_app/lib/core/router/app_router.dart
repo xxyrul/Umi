@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import '../../features/admin/admin_hub_screen.dart';
 import '../../features/auth/auth_service.dart';
@@ -41,6 +40,7 @@ CustomTransitionPage<void> _buildSmoothSlidePage({
   return CustomTransitionPage<void>(
     key: state.pageKey,
     child: child,
+    opaque: true,
     transitionDuration: const Duration(milliseconds: 260),
     reverseTransitionDuration: const Duration(milliseconds: 220),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -72,19 +72,58 @@ CustomTransitionPage<void> _buildSmoothSlidePage({
   );
 }
 
+class SplashScreen extends StatelessWidget {
+  const SplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppColors.canvas,
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.4,
+                color: AppColors.maroonPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RouterRefreshNotifier extends ChangeNotifier {
+  _RouterRefreshNotifier(Ref ref) {
+    ref.listen(authStateProvider, (_, __) => notifyListeners());
+    ref.listen(currentUserProfileProvider, (_, __) => notifyListeners());
+    ref.listen(onboardingCompletedProvider, (_, __) => notifyListeners());
+    ref.listen(googleAuthBusyProvider, (_, __) => notifyListeners());
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-  final userProfileAsync = ref.watch(currentUserProfileProvider);
-  final onboardingCompleted = ref.watch(onboardingCompletedProvider);
+  final refreshNotifier = _RouterRefreshNotifier(ref);
+  ref.onDispose(refreshNotifier.dispose);
 
   return GoRouter(
-    navigatorKey: rootNavigatorKey,
-    initialLocation: onboardingCompleted ? (FirebaseAuth.instance.currentUser != null ? '/' : '/login') : '/onboarding',
+    refreshListenable: refreshNotifier,
+    initialLocation: '/splash',
     redirect: (context, state) {
+      final authState = ref.read(authStateProvider);
+      final userProfileAsync = ref.read(currentUserProfileProvider);
+      final onboardingCompleted = ref.read(onboardingCompletedProvider);
+
       final authUser = authState.value;
       final userProfile = userProfileAsync.value;
       final loc = state.matchedLocation;
 
+      final isSplash = loc == '/splash';
       final isLoggingIn = loc == '/login';
       final isPendingRoute = loc == '/pending-approval';
       final isOnboarding = loc == '/onboarding';
@@ -92,38 +131,74 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!onboardingCompleted) return isOnboarding ? null : '/onboarding';
       if (isOnboarding) return '/login';
 
-      if (authState.isLoading) return null;
-      if (authUser == null) return isLoggingIn ? null : '/login';
-      if (userProfileAsync.isLoading) return null;
-      if (userProfile == null) return isLoggingIn ? null : '/login';
+      // Google sign-in / activation sheet is open: stay put on /login so we
+      // never swap the page underneath a bottom sheet.
+      if (ref.read(googleAuthBusyProvider)) {
+        return isLoggingIn ? null : '/login';
+      }
+
+      // Keep showing splash while checking auth or loading profile
+      if (authState.isLoading || userProfileAsync.isLoading) {
+        return isSplash ? null : '/splash';
+      }
+
+      // Not logged in → login
+      if (authUser == null) {
+        return isLoggingIn ? null : '/login';
+      }
+
+      // If user has pending or rejected status, go to pending-approval
+      if (userProfile?.isRejected == true) {
+        return isPendingRoute ? null : '/pending-approval';
+      }
+      if (userProfile?.isPending == true) {
+        return isPendingRoute ? null : '/pending-approval';
+      }
+
+      // No Firestore profile yet (e.g. newly signed-in Google user awaiting invite code / request):
+      // Stay on /login where activation modal is displayed.
+      if (userProfile == null) {
+        return isLoggingIn ? null : '/login';
+      }
+
+      // Suspended → sign out and go to login
       if (userProfile.isSuspended) {
         ref.read(authServiceProvider).signOut();
         return '/login';
       }
-      if (userProfile.isPending) return isPendingRoute ? null : '/pending-approval';
-      if (isLoggingIn || isPendingRoute) return '/';
+
+      // Guard /admin: Only genuine admins can enter
+      if (loc == '/admin' && !userProfile.isAdmin) {
+        return '/';
+      }
+
+      // Fully active → exit splash / login / pending to dashboard
+      if (isSplash || isLoggingIn || isPendingRoute) {
+        return '/';
+      }
 
       return null;
     },
     routes: [
       GoRoute(
+        path: '/splash',
+        builder: (context, state) => const SplashScreen(),
+      ),
+      GoRoute(
         path: '/login',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
         path: '/onboarding',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const OnboardingScreen(),
       ),
       GoRoute(
         path: '/pending-approval',
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) => const PendingApprovalScreen(),
       ),
       GoRoute(
         path: '/calculator',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const CalculatorScreen(),
@@ -131,7 +206,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/notifications',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const NotificationsScreen(),
@@ -139,7 +214,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/notification-settings',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const NotificationSettingsScreen(),
@@ -147,7 +222,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/security',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const SecurityScreen(),
@@ -155,7 +230,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/permissions-guide',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const PermissionsGuideScreen(),
@@ -163,7 +238,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/account',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const AccountScreen(),
@@ -171,7 +246,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/help',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const HelpScreen(),
@@ -179,7 +254,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/updates',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const UpdatesScreen(),
@@ -187,7 +262,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/admin',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const AdminHubScreen(),
@@ -196,7 +271,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Case routes
       GoRoute(
         path: '/case/form',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: CaseFormScreen(
@@ -206,7 +281,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/case/:id',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) {
           final id = state.pathParameters['id'];
           final caseExtra = state.extra as CaseModel?;
@@ -219,7 +294,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Listing routes
       GoRoute(
         path: '/listing/form',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: ListingFormScreen(
@@ -229,7 +304,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/tambah',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) => _buildSmoothSlidePage(
           state: state,
           child: const ListingFormScreen(),
@@ -237,7 +312,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/listing/:id',
-        parentNavigatorKey: rootNavigatorKey,
+
         pageBuilder: (context, state) {
           final id = state.pathParameters['id'];
           final listingExtra = state.extra as ListingModel?;
@@ -250,7 +325,6 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Main Navigation Shell with Custom Floating Pill Bar
       StatefulShellRoute.indexedStack(
-        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state, navigationShell) {
           return OfflineBannerWidget(
             child: _ScaffoldWithNavBar(navigationShell: navigationShell),

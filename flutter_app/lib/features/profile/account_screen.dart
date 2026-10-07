@@ -79,6 +79,7 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
       );
 
       if (picked == null) return;
+      if (!mounted) return;
 
       setState(() => _isUploadingPhoto = true);
 
@@ -278,6 +279,8 @@ class _AccountScreenState extends ConsumerState<AccountScreen> {
         ),
       ),
       body: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

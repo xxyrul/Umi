@@ -98,8 +98,8 @@ class PermissionRationaleSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Container(
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomPadding + bottomInset),

@@ -57,6 +57,24 @@ class AppTheme {
         ),
         margin: EdgeInsets.zero,
       ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.card,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        elevation: 8,
+        textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.transparent,
+        modalBackgroundColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        ),
+      ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),

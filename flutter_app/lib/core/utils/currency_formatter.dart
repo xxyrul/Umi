@@ -1,4 +1,4 @@
-﻿import 'package:intl/intl.dart';
+import 'package:intl/intl.dart';
 
 class CurrencyFormatter {
   static final _myrFormat = NumberFormat.currency(
@@ -7,8 +7,14 @@ class CurrencyFormatter {
     decimalDigits: 0,
   );
 
+  static final _noSymbolFormat = NumberFormat('#,##0', 'en_US');
+
   static String format(num amount) {
     return _myrFormat.format(amount);
+  }
+
+  static String formatNoSymbol(num amount) {
+    return _noSymbolFormat.format(amount);
   }
 
   static String formatCompact(num amount) {

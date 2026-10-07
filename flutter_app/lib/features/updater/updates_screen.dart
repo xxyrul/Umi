@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/l10n/language_provider.dart';
 import '../../core/theme/app_colors.dart';
 import 'updater_service.dart';
+import 'widgets/opt_out_beta_sheet.dart';
 
 class UpdatesScreen extends ConsumerStatefulWidget {
   const UpdatesScreen({super.key});
@@ -17,6 +18,13 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
   ReleaseManifest? _availableRelease;
   List<ReleaseManifest> _history = [];
   double _cacheSizeMb = 0.0;
+
+  ReleaseManifest? get _stableRelease {
+    for (final rel in _history) {
+      if (!rel.isBeta) return rel;
+    }
+    return null;
+  }
 
   bool _isDownloading = false;
   bool _isForceUpdate = false;
@@ -35,8 +43,9 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
   }
 
   Future<void> _loadData() async {
+    final channel = ref.read(updateChannelProvider);
     final updater = ref.read(updaterServiceProvider);
-    final history = await updater.fetchReleaseHistory();
+    final history = await updater.fetchReleaseHistory(channel: channel);
     final cacheMb = await updater.getCacheSizeMb();
     if (mounted) {
       setState(() {
@@ -48,6 +57,7 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
 
   Future<void> _checkUpdate({bool showToast = true}) async {
     final isBM = ref.read(languageProvider) == 'BM';
+    final channel = ref.read(updateChannelProvider);
     setState(() {
       _isChecking = true;
       _errorMessage = null;
@@ -55,7 +65,7 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
 
     final updater = ref.read(updaterServiceProvider);
     try {
-      final manifest = await updater.checkForUpdate();
+      final manifest = await updater.checkForUpdate(channel: channel);
       if (!mounted) return;
       setState(() {
         _availableRelease = manifest;
@@ -64,7 +74,7 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
       });
 
       if (showToast && manifest == null) {
-        final viewPadding = MediaQuery.of(context).viewPadding.bottom;
+        final viewPadding = MediaQuery.viewPaddingOf(context).bottom;
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -87,7 +97,9 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    isBM ? 'Aplikasi anda berada pada versi terkini (v2.0.0).' : 'App is up to date (v2.0.0).',
+                    isBM
+                        ? 'Aplikasi anda berada pada versi terkini (v${ApkUpdaterService.currentVersionName}).'
+                        : 'App is up to date (v${ApkUpdaterService.currentVersionName}).',
                     style: TextStyle(
                       color: colors.textPrimary,
                       fontSize: 13,
@@ -173,6 +185,7 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
   @override
   Widget build(BuildContext context) {
     final isBM = ref.watch(languageProvider) == 'BM';
+    final currentChannel = ref.watch(updateChannelProvider);
 
     return Scaffold(
       backgroundColor: colors.canvas,
@@ -193,13 +206,89 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
             tooltip: isBM ? 'Semak Kemas Kini' : 'Check for Updates',
             onPressed: () => _checkUpdate(showToast: true),
           ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert_rounded, color: colors.textPrimary),
+            color: colors.card,
+            surfaceTintColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: colors.border),
+            ),
+            onSelected: (val) {
+              if (val == 'join_beta') {
+                _confirmBetaOptIn(context, isBM);
+              } else if (val == 'leave_beta') {
+                _confirmBetaOptOut(context, isBM);
+              } else if (val == 'clear_cache') {
+                _clearCache();
+              }
+            },
+            itemBuilder: (ctx) => [
+              if (currentChannel == UpdateChannel.stable)
+                PopupMenuItem(
+                  value: 'join_beta',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.science_outlined, size: 18, color: Colors.amber),
+                      const SizedBox(width: 12),
+                      Text(
+                        isBM ? 'Sertai Saluran Beta 🧪' : 'Join Beta Channel 🧪',
+                        style: TextStyle(color: colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                PopupMenuItem(
+                  enabled: false,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline_rounded, size: 18, color: Colors.amber),
+                      const SizedBox(width: 12),
+                      Text(
+                        isBM ? 'Saluran Beta Aktif 🧪' : 'Beta Channel Active 🧪',
+                        style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'leave_beta',
+                  child: Row(
+                    children: [
+                      Icon(Icons.undo_rounded, size: 18, color: colors.textMuted),
+                      const SizedBox(width: 12),
+                      Text(
+                        isBM ? 'Kembali ke Saluran Stabil' : 'Return to Stable Channel',
+                        style: TextStyle(color: colors.textPrimary, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'clear_cache',
+                child: Row(
+                  children: [
+                    Icon(Icons.cleaning_services_outlined, size: 18, color: colors.textMuted),
+                    const SizedBox(width: 12),
+                    Text(
+                      isBM ? 'Kosongkan Cache Kemas Kini' : 'Clear Update Cache',
+                      style: TextStyle(color: colors.textPrimary, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // 1. Status Hero Card
-          _buildHeroCard(isBM),
+          // 1. Status Hero Card (Focused & clean)
+          _buildHeroCard(isBM, currentChannel),
           const SizedBox(height: 16),
 
           // 2. Android Permission Tip Card
@@ -294,13 +383,92 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
 
           // 5. Version History Cards
           ..._history.map((rel) => _buildHistoryCard(rel, isBM)),
-          const SizedBox(height: 40),
+          const SizedBox(height: 36),
         ],
       ),
     );
   }
 
-  Widget _buildHeroCard(bool isBM) {
+  Future<void> _confirmBetaOptIn(BuildContext context, bool isBM) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: colors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.science_outlined, color: Colors.amber, size: 22),
+            const SizedBox(width: 10),
+            Text(
+              isBM ? 'Sertai Saluran Beta?' : 'Opt into Beta Channel?',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.textPrimary),
+            ),
+          ],
+        ),
+        content: Text(
+          isBM
+              ? 'Saluran Beta memberikan akses awal kepada ciri baharu dan penambahbaikan prestasi sebelum diedarkan kepada umum.\n\nSesuai untuk tujuan ujian dalaman. Anda boleh kembali ke saluran Stabil pada bila-bila masa.'
+              : 'The Beta channel provides early access to new features and performance optimizations before public release.\n\nRecommended for internal testing. You can return to the Stable channel at any time.',
+          style: TextStyle(fontSize: 13, color: colors.textSecondary, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(isBM ? 'Batal' : 'Cancel', style: TextStyle(color: colors.textMuted)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colors.maroonPrimary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: Text(isBM ? 'Sertai Saluran Beta' : 'Join Beta Channel'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await ref.read(updateChannelProvider.notifier).setChannel(UpdateChannel.beta);
+      await _loadData();
+      _checkUpdate(showToast: true);
+    }
+  }
+
+  Future<void> _confirmBetaOptOut(BuildContext context, bool isBM) async {
+    final stableRelease = _stableRelease ??
+        ReleaseManifest(
+          versionName: ApkUpdaterService.currentVersionName,
+          versionCode: ApkUpdaterService.currentBuildCode,
+          downloadUrl: 'https://umiren-d6a66.web.app/releases/artha.apk',
+          fileSizeBytes: 62175951,
+          releaseNotes: const [],
+          channel: 'stable',
+        );
+
+    final updater = ref.read(updaterServiceProvider);
+    final initialPath = await updater.getDownloadedApkPath(stableRelease);
+
+    if (!context.mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (modalCtx) => OptOutBetaSheet(
+        stableRelease: stableRelease,
+        initialPath: initialPath,
+        onChannelSwitched: () async {
+          await _loadData();
+          _checkUpdate(showToast: true);
+        },
+      ),
+    );
+  }
+
+
+  Widget _buildHeroCard(bool isBM, UpdateChannel currentChannel) {
     if (_isChecking) {
       return Container(
         padding: const EdgeInsets.all(24),
@@ -326,9 +494,12 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
 
     // Update Available Card
     if (release != null) {
+      final isBetaRelease = release.isBeta || currentChannel == UpdateChannel.beta;
       final actionTitle = _isForceUpdate
           ? (isBM ? 'Kemas Kini Wajib Dijalankan' : 'Mandatory Update Required')
-          : (isBM ? 'Kemas Kini Tersedia! 🚀' : 'New Update Available! 🚀');
+          : (isBetaRelease
+              ? (isBM ? 'Kemas Kini Beta Tersedia! 🧪' : 'Beta Update Available! 🧪')
+              : (isBM ? 'Kemas Kini Tersedia! 🚀' : 'New Update Available! 🚀'));
 
       return Container(
         padding: const EdgeInsets.all(18),
@@ -513,10 +684,14 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                  color: (currentChannel == UpdateChannel.beta ? Colors.amber : const Color(0xFF10B981)).withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.verified, color: Color(0xFF10B981), size: 24),
+                child: Icon(
+                  currentChannel == UpdateChannel.beta ? Icons.science_outlined : Icons.verified,
+                  color: currentChannel == UpdateChannel.beta ? Colors.amber : const Color(0xFF10B981),
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -524,12 +699,14 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isBM ? 'Aplikasi Versi Terkini' : 'App is Up to Date',
+                      currentChannel == UpdateChannel.beta
+                          ? (isBM ? 'Saluran Beta Aktif 🧪' : 'Beta Channel Active 🧪')
+                          : (isBM ? 'Aplikasi Versi Terkini' : 'App is Up to Date'),
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.textPrimary),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Artha v${ApkUpdaterService.currentVersionName} (Build ${ApkUpdaterService.currentBuildCode})',
+                      'Artha v${ApkUpdaterService.currentVersionName} (Build ${ApkUpdaterService.currentBuildCode}) • ${currentChannel == UpdateChannel.beta ? (isBM ? "Saluran Beta 🧪" : "Beta Channel 🧪") : (isBM ? "Saluran Stabil" : "Stable Channel")}',
                       style: TextStyle(fontSize: 13, color: colors.textMuted),
                     ),
                   ],
@@ -538,6 +715,25 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
             ],
           ),
           const SizedBox(height: 14),
+          if (currentChannel == UpdateChannel.beta) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _confirmBetaOptOut(context, isBM),
+                icon: const Icon(Icons.swap_horizontal_circle_outlined, size: 16, color: Colors.white),
+                label: Text(
+                  isBM ? 'Pilihan Peralihan ke Saluran Stabil' : 'Switch to Stable Channel Options',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade800,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(

@@ -644,7 +644,7 @@ class AppTranslations {
     'statusUpdateTitle': 'Update Case Status',
     'statusHistoryLog': 'Status Change History',
     'reminderPromptTitle': 'Follow-Up Reminder',
-    'reminderPromptMsg': 'Would you like to set a reminder or schedule the next milestone date?',
+    'reminderPromptMsg': 'Would you like to set a reminder or schedule the next follow-up date?',
     'scheduleReminderTitle': 'Schedule Reminder',
     'reminderNoteLabel': 'Reminder Note',
     'reminderNotePlaceholder': 'e.g. Check bank loan approval status',

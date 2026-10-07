@@ -119,7 +119,7 @@ class _CoBrokeShareSheetState extends State<CoBrokeShareSheet> with SingleTicker
     final isBM = widget.isBM;
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.72,
+      height: MediaQuery.sizeOf(context).height * 0.72,
       decoration: BoxDecoration(
         color: colors.card,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -214,7 +214,7 @@ class _CoBrokeShareSheetState extends State<CoBrokeShareSheet> with SingleTicker
     final text = _generateText(index);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 4, 16, context.safeBottomPadding(14.0)),
       child: Column(
         children: [
           // Subtitle Explanation

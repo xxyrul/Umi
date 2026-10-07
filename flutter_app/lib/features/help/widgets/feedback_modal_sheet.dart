@@ -1,8 +1,7 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:dio/dio.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_toast.dart';
 
@@ -25,29 +24,28 @@ class FeedbackModalSheet extends StatefulWidget {
 }
 
 class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
-  String _category = 'Bug';
-  String _severity = 'Medium';
+  String _category = 'Masalah';
   final _titleController = TextEditingController();
   final _descController = TextEditingController();
-  final _stepsController = TextEditingController();
+  final _notesController = TextEditingController();
   bool _isSubmitting = false;
 
   @override
   void dispose() {
     _titleController.dispose();
     _descController.dispose();
-    _stepsController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
-  Future<void> _submitFeedback({bool dispatchWhatsApp = false}) async {
+  Future<void> _submitFeedback() async {
     final title = _titleController.text.trim();
     final desc = _descController.text.trim();
 
     if (title.isEmpty || desc.isEmpty) {
       AppToast.error(
         context,
-        widget.isBM ? 'Sila isi tajuk dan penerangan isu.' : 'Please enter a title and description.',
+        widget.isBM ? 'Sila isi tajuk dan penerangan maklum balas.' : 'Please enter a title and description.',
       );
       return;
     }
@@ -55,54 +53,62 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
     setState(() => _isSubmitting = true);
 
     final user = FirebaseAuth.instance.currentUser;
-    final deviceModel = Platform.isAndroid ? 'Android Device' : 'iOS Device';
 
     try {
       final docRef = FirebaseFirestore.instance.collection('feedback').doc();
+      final type = _category == 'Masalah'
+          ? 'BUG'
+          : (_category == 'Cadangan' ? 'FEATURE_REQUEST' : 'GENERAL');
       final feedbackData = {
         'id': docRef.id,
+        'type': type,
         'category': _category,
-        'severity': _severity,
         'title': title,
         'description': desc,
-        'steps': _stepsController.text.trim(),
-        'userId': user?.uid ?? 'anonymous',
+        'notes': _notesController.text.trim(),
+        'userId': user?.uid ?? '',
+        'userName': user?.displayName ?? 'Ejen',
         'userEmail': user?.email ?? '',
-        'device': deviceModel,
-        'osVersion': Platform.operatingSystemVersion,
-        'appVersion': '1.0.0+1',
+        'status': 'pending',
+        'adminResponse': '',
         'createdAt': FieldValue.serverTimestamp(),
       };
 
       await docRef.set(feedbackData);
 
-      if (dispatchWhatsApp) {
-        final waText = StringBuffer();
-        waText.writeln('🚨 *[ARTHA FEEDBACK / BUG REPORT]*');
-        waText.writeln('Kategori: $_category ($_severity)');
-        waText.writeln('Tajuk: $title');
-        waText.writeln('Penerangan: $desc');
-        if (_stepsController.text.trim().isNotEmpty) {
-          waText.writeln('Langkah: ${_stepsController.text.trim()}');
-        }
-        waText.writeln('Ejen: ${user?.email ?? "Unknown"}');
-        waText.writeln('Peranti: $deviceModel (${Platform.operatingSystemVersion})');
-
-        final encoded = Uri.encodeComponent(waText.toString());
-        final waUrl = Uri.parse('https://wa.me/60123456789?text=$encoded');
-        await launchUrl(waUrl, mode: LaunchMode.externalApplication);
-      }
+      // Dispatch alert to Admins via FCM topic admin_alerts
+      try {
+        final dio = Dio();
+        await dio.post(
+          'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
+          data: {
+            'topic': 'admin_alerts',
+            'kind': 'feedback-submitted',
+            'titleEN': 'New Feedback Ticket 💬',
+            'titleBM': 'Maklum Balas Baharu 💬',
+            'messageEN': '${user?.displayName ?? 'Agent'}: "$title"',
+            'messageBM': '${user?.displayName ?? 'Ejen'}: "$title"',
+            'type': 'FEEDBACK',
+          },
+          options: Options(headers: {'Content-Type': 'application/json'}),
+        );
+      } catch (_) {}
 
       if (mounted) {
         Navigator.pop(context);
         AppToast.success(
           context,
-          widget.isBM ? 'Maklum balas berjaya dihantar! Terima kasih.' : 'Feedback submitted successfully! Thank you.',
+          widget.isBM
+              ? 'Maklum balas berjaya dihantar ke Meja Bantuan pentadbir!'
+              : 'Feedback submitted successfully to the admin desk!',
         );
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Gagal menghantar maklum balas: $e');
+        AppToast.error(
+          context,
+          widget.isBM ? 'Gagal menghantar maklum balas: $e' : 'Failed to submit feedback: $e',
+        );
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
@@ -113,15 +119,20 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final isBM = widget.isBM;
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * 0.88,
+      ),
+      padding: EdgeInsets.only(bottom: bottomInset + context.safeBottomPadding(12.0)),
       decoration: BoxDecoration(
         color: colors.card,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: colors.border),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Drag handle
           Center(
@@ -130,7 +141,7 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: colors.textDim.withOpacity(0.4),
+                color: colors.textDim.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -141,13 +152,13 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             child: Row(
               children: [
-                Icon(Icons.bug_report_outlined, color: colors.maroonPrimary, size: 24),
+                Icon(Icons.rate_review_outlined, color: colors.maroonPrimary, size: 22),
                 const SizedBox(width: 10),
                 Text(
-                  isBM ? 'Laporan Isu & Maklum Balas' : 'Issue Report & Feedback',
+                  isBM ? 'Borang Maklum Balas Agensi' : 'Agency Feedback Form',
                   style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                     color: colors.textPrimary,
                   ),
                 ),
@@ -160,60 +171,45 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
             ),
           ),
 
-          Expanded(
+          Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              physics: const ClampingScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Category Segmented Chips
                   Text(
-                    isBM ? 'KATEGORI' : 'CATEGORY',
+                    isBM ? 'KATEGORI MAKLUM BALAS' : 'FEEDBACK CATEGORY',
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colors.textMuted, letterSpacing: 0.5),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      _buildCatChip('Bug', isBM ? '🐞 Ralat (Bug)' : '🐞 Bug', colors),
+                      _buildCatChip('Masalah', isBM ? '⚠️ Masalah' : '⚠️ Issue', colors),
                       const SizedBox(width: 8),
-                      _buildCatChip('Feature', isBM ? '💡 Cadangan' : '💡 Feature', colors),
+                      _buildCatChip('Cadangan', isBM ? '💡 Cadangan' : '💡 Suggestion', colors),
                       const SizedBox(width: 8),
-                      _buildCatChip('Data', isBM ? '⚠️ Isu Data' : '⚠️ Data Issue', colors),
+                      _buildCatChip('Pertanyaan', isBM ? '💬 Pertanyaan' : '💬 Inquiry', colors),
                     ],
                   ),
 
-                  const SizedBox(height: 16),
-
-                  // Severity
-                  if (_category == 'Bug') ...[
-                    Text(
-                      isBM ? 'TAHAP KRITIKAL' : 'SEVERITY',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: colors.textMuted, letterSpacing: 0.5),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _buildSevChip('Low', Colors.blue, colors),
-                        const SizedBox(width: 8),
-                        _buildSevChip('Medium', Colors.orange, colors),
-                        const SizedBox(width: 8),
-                        _buildSevChip('High', Colors.deepOrange, colors),
-                        const SizedBox(width: 8),
-                        _buildSevChip('Critical', Colors.red, colors),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                  const SizedBox(height: 18),
 
                   // Title Input
                   TextField(
                     controller: _titleController,
                     style: TextStyle(color: colors.textPrimary, fontSize: 14),
                     decoration: InputDecoration(
-                      labelText: isBM ? 'Ringkasan Isu / Tajuk' : 'Issue Summary / Title',
+                      labelText: isBM ? 'Tajuk / Perkara' : 'Subject',
+                      hintText: isBM ? 'Contoh: Masalah simpan gambar listing' : 'E.g.: Issue saving listing photos',
                       filled: true,
                       fillColor: colors.surface,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      labelStyle: TextStyle(color: colors.textMuted, fontSize: 13),
+                      hintStyle: TextStyle(color: colors.textDim, fontSize: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colors.border)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colors.border)),
                     ),
                   ),
 
@@ -222,72 +218,66 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
                   // Description Input
                   TextField(
                     controller: _descController,
-                    maxLines: 3,
+                    maxLines: 4,
                     style: TextStyle(color: colors.textPrimary, fontSize: 14),
                     decoration: InputDecoration(
-                      labelText: isBM ? 'Penerangan terperinci' : 'Detailed description',
+                      labelText: isBM ? 'Penerangan Terperinci' : 'Detailed Description',
+                      hintText: isBM
+                          ? 'Terangkan apa yang berlaku atau cadangan anda...'
+                          : 'Describe what happened or your suggestion...',
                       alignLabelWithHint: true,
                       filled: true,
                       fillColor: colors.surface,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      labelStyle: TextStyle(color: colors.textMuted, fontSize: 13),
+                      hintStyle: TextStyle(color: colors.textDim, fontSize: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colors.border)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colors.border)),
                     ),
                   ),
 
                   const SizedBox(height: 14),
 
-                  // Reproduction Steps
+                  // Additional Notes
                   TextField(
-                    controller: _stepsController,
+                    controller: _notesController,
                     maxLines: 2,
                     style: TextStyle(color: colors.textPrimary, fontSize: 14),
                     decoration: InputDecoration(
-                      labelText: isBM ? 'Langkah untuk menghasilkan isu (opsyenal)' : 'Steps to reproduce (optional)',
+                      labelText: isBM ? 'Maklumat Tambahan (Pilihan)' : 'Additional Notes (Optional)',
+                      hintText: isBM ? 'Sebarang butiran lain yang berkaitan...' : 'Any other relevant details...',
                       alignLabelWithHint: true,
                       filled: true,
                       fillColor: colors.surface,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      labelStyle: TextStyle(color: colors.textMuted, fontSize: 13),
+                      hintStyle: TextStyle(color: colors.textDim, fontSize: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colors.border)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: colors.border)),
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 22),
 
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : () => _submitFeedback(dispatchWhatsApp: true),
-                          icon: const Icon(Icons.chat_outlined, size: 18),
-                          label: Text(isBM ? 'Hantar ke WhatsApp' : 'WhatsApp Support'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: colors.textPrimary,
-                            side: BorderSide(color: colors.border),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  // Submit Button
+                  ElevatedButton(
+                    onPressed: _isSubmitting ? null : _submitFeedback,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colors.maroonPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : Text(
+                            isBM ? 'HANTAR MAKLUM BALAS' : 'SUBMIT FEEDBACK',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: _isSubmitting ? null : () => _submitFeedback(dispatchWhatsApp: false),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: colors.maroonPrimary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: _isSubmitting
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : Text(isBM ? 'Hantar Laporan' : 'Submit Report'),
-                        ),
-                      ),
-                    ],
                   ),
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -316,33 +306,6 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
                 color: isSelected ? Colors.white : colors.textSecondary,
                 fontSize: 11,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSevChip(String sev, Color color, AppThemeColors colors) {
-    final isSelected = _severity == sev;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _severity = sev),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? color.withOpacity(0.18) : colors.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: isSelected ? color : colors.border, width: isSelected ? 1.5 : 1),
-          ),
-          child: Center(
-            child: Text(
-              sev,
-              style: TextStyle(
-                color: isSelected ? color : colors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
               ),
             ),
           ),

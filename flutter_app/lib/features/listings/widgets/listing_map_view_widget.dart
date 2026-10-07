@@ -60,6 +60,12 @@ class _ListingMapViewWidgetState extends State<ListingMapViewWidget> {
   }
 
   @override
+  void dispose() {
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_initializedMarkers) {
@@ -399,29 +405,31 @@ class _ListingMapViewWidgetState extends State<ListingMapViewWidget> {
     return Stack(
       children: [
         // Official Google Maps View with Airbnb Price Badges
-        GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: initialTarget,
-            zoom: 12.5,
+        RepaintBoundary(
+          child: GoogleMap(
+            initialCameraPosition: CameraPosition(
+              target: initialTarget,
+              zoom: 12.5,
+            ),
+            mapType: _currentMapType,
+            style: colors.isDark ? _darkMapStyle : null,
+            markers: _markers,
+            myLocationEnabled: _hasLocationPermission,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            compassEnabled: true,
+            mapToolbarEnabled: false,
+            buildingsEnabled: true,
+            trafficEnabled: false,
+            onMapCreated: (controller) {
+              _mapController = controller;
+            },
+            onTap: (_) {
+              if (_selectedListing != null) {
+                _deselectListing();
+              }
+            },
           ),
-          mapType: _currentMapType,
-          style: colors.isDark ? _darkMapStyle : null,
-          markers: _markers,
-          myLocationEnabled: _hasLocationPermission,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          compassEnabled: true,
-          mapToolbarEnabled: false,
-          buildingsEnabled: true,
-          trafficEnabled: false,
-          onMapCreated: (controller) {
-            _mapController = controller;
-          },
-          onTap: (_) {
-            if (_selectedListing != null) {
-              _deselectListing();
-            }
-          },
         ),
 
         // Status Header: Shows all 44 listings mapped!

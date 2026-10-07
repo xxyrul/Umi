@@ -88,6 +88,7 @@ class _DocumentVaultSheetState extends State<DocumentVaultSheet> {
       );
 
       if (files.isEmpty || files.first.path == null) return;
+      if (!mounted) return;
 
       setState(() => _uploadingSlot = slotKey);
 
@@ -109,11 +110,13 @@ class _DocumentVaultSheetState extends State<DocumentVaultSheet> {
       final updatedDocs = Map<String, String>.from(_documents);
       updatedDocs[slotKey] = downloadUrl;
 
-      // Update Firestore document
-      await FirebaseFirestore.instance.collection('listings').doc(widget.listing.id).update({
+      // Update Firestore documents in both collections
+      final docPayload = {
         'documents': updatedDocs,
         'updatedAt': FieldValue.serverTimestamp(),
-      });
+      };
+      await FirebaseFirestore.instance.collection('listings').doc(widget.listing.id).update(docPayload).catchError((_) {});
+      await FirebaseFirestore.instance.collection('publicListings').doc(widget.listing.id).update(docPayload).catchError((_) {});
 
       if (mounted) {
         setState(() {
@@ -152,7 +155,7 @@ class _DocumentVaultSheetState extends State<DocumentVaultSheet> {
     final isBM = widget.isBM;
 
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.sizeOf(context).height * 0.75,
       decoration: BoxDecoration(
         color: colors.card,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -227,7 +230,7 @@ class _DocumentVaultSheetState extends State<DocumentVaultSheet> {
           // Slot List
           Expanded(
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, context.safeBottomPadding(16.0)),
               itemCount: docSlots.length,
               separatorBuilder: (_, __) => const SizedBox(height: 10),
               itemBuilder: (context, index) {

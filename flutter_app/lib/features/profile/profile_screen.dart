@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/constants/admin_emails.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/theme_mode_provider.dart';
 import '../../core/l10n/language_provider.dart';
@@ -14,6 +15,7 @@ import '../admin/admin_service.dart';
 import '../cases/case_repository.dart';
 import '../listings/listing_model.dart';
 import '../export/csv_export_service.dart';
+import '../updater/updater_service.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -124,9 +126,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final isBM = lang == 'BM';
     final userProfileAsync = ref.watch(currentUserProfileProvider);
     final user = ref.watch(authStateProvider).value;
-    final isAdmin = (userProfileAsync.value?.isAdmin == true) ||
+    final isAdmin = isMasterAdminEmail(user?.email ?? '') ||
+        isMasterAdminEmail(userProfileAsync.value?.email ?? '') ||
+        (userProfileAsync.value?.isAdmin == true) ||
         (userProfileAsync.value?.role.toUpperCase() == 'ADMIN');
-    final pendingCount = ref.watch(pendingAgentsStreamProvider).value?.length ?? 0;
+    final pendingCount = isAdmin ? (ref.watch(pendingAgentsStreamProvider).value?.length ?? 0) : 0;
+    final updateChannel = ref.watch(updateChannelProvider);
+    final isBeta = updateChannel == UpdateChannel.beta;
     final colors = context.colors;
 
     final displayName = userProfileAsync.value?.displayName ?? user?.displayName ?? 'Ejen Artha';
@@ -136,7 +142,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ? userProfileAsync.value!.photoUrl
         : (FirebaseAuth.instance.currentUser?.photoURL ?? '');
 
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     final floatingBarBottom = bottomInset > 0 ? bottomInset + 8.0 : 20.0;
     final scrollBottom = floatingBarBottom + 58.0 + 32.0;
 
@@ -505,7 +511,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   icon: Icons.info_outline_rounded,
                   iconColor: const Color(0xFF64748B),
                   title: isBM ? 'Versi Aplikasi' : 'App Version',
-                  subtitle: isBM ? 'v2.0.0 · Semak kemas kini & log' : 'v2.0.0 · Check updates & changelog',
+                  subtitle: isBeta
+                      ? (isBM ? 'v2.0.0 · Saluran Beta aktif 🧪' : 'v2.0.0 · Beta channel active 🧪')
+                      : (isBM ? 'v2.0.0 · Semak kemas kini & log' : 'v2.0.0 · Check updates & changelog'),
+                  badge: isBeta
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.amber.withOpacity(0.4)),
+                          ),
+                          child: const Text(
+                            'BETA',
+                            style: TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      : null,
                   onTap: () => context.push('/updates'),
                   colors: colors,
                 ),
@@ -514,7 +536,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   icon: Icons.help_outline_rounded,
                   iconColor: const Color(0xFF6366F1),
                   title: isBM ? 'Bantuan & Maklum Balas' : 'Help & Feedback',
-                  subtitle: isBM ? 'Hubungi sokongan & soalan lazim' : 'Support & FAQ',
+                  subtitle: isBM ? 'Meja maklum balas, rekod tiket & soalan lazim' : 'Feedback desk, ticket history & FAQ',
                   onTap: () => context.push('/help'),
                   colors: colors,
                 ),

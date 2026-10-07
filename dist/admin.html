@@ -1064,6 +1064,22 @@
                 <option value="COMMISSION">🏆 Commission / Incentive</option>
               </select>
             </div>
+
+            <div class="input-group">
+              <label class="input-label">Target Audience / Channel</label>
+              <select id="ann-target-channel" class="input-control" onchange="onBroadcastTargetChanged()">
+                <option value="ALL">🌐 All Registered Agents (Production)</option>
+                <option value="BETA">🧪 Beta Testers Only (Isolated Test)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Beta Isolation Alert Banner -->
+          <div id="beta-broadcast-banner" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #F59E0B; line-height: 1.5;">
+            <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 4px;">
+              <span>🧪 Beta Isolation Mode Active</span>
+            </div>
+            This broadcast and push notification will <strong>ONLY</strong> be dispatched to devices enrolled in the Beta testing channel (FCM topic: <code>beta_testers</code>). Production agents on the Stable channel will not be disturbed.
           </div>
 
           <div class="input-group">
@@ -1071,7 +1087,7 @@
             <textarea id="ann-message" class="input-control" rows="3" placeholder="Type your announcement message here for all agents..."></textarea>
           </div>
 
-          <button class="btn-primary" onclick="handleBroadcastAnnouncement()">
+          <button id="btn-broadcast-submit" class="btn-primary" onclick="handleBroadcastAnnouncement()">
             🚀 Broadcast Announcement to All Agents
           </button>
         </div>
@@ -1088,6 +1104,7 @@
                 <tr>
                   <th>Title</th>
                   <th>Category</th>
+                  <th>Audience</th>
                   <th>Message Preview</th>
                   <th>Date Broadcasted</th>
                   <th>Sent By</th>
@@ -1096,7 +1113,7 @@
               </thead>
               <tbody id="announcements-table-body">
                 <tr>
-                  <td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading announcements...</td>
+                  <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">Loading announcements...</td>
                 </tr>
               </tbody>
             </table>

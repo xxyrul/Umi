@@ -5,13 +5,13 @@ import 'translations.dart';
 const _kLangKey = 'umi_app_language';
 
 class LanguageNotifier extends StateNotifier<String> {
-  LanguageNotifier() : super('BM') {
+  LanguageNotifier() : super('EN') {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_kLangKey) ?? 'BM';
+    final saved = prefs.getString(_kLangKey) ?? 'EN';
     if (saved == 'BM' || saved == 'EN') {
       state = saved;
     }

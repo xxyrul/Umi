@@ -114,6 +114,7 @@ export default function AdminHubScreen() {
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastMessage, setBroadcastMessage] = useState("");
   const [broadcastCategory, setBroadcastCategory] = useState<"GENERAL" | "URGENT" | "LISTING" | "COMMISSION">("GENERAL");
+  const [broadcastTargetChannel, setBroadcastTargetChannel] = useState<"ALL" | "BETA">("ALL");
   const [isPinned, setIsPinned] = useState(false);
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
 
@@ -616,14 +617,19 @@ export default function AdminHubScreen() {
                 messageBM: broadcastMessage.trim(),
                 type: broadcastCategory,
                 pinned: isPinned,
+                targetChannel: broadcastTargetChannel,
               };
               await sendBroadcastAnnouncement(payload, "Pentadbir Agensi");
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
               Alert.alert(
                 language === "BM" ? "Siaran Berjaya Dihantar! 📢" : "Broadcast Sent! 📢",
                 language === "BM"
-                  ? `Pengumuman telah disimpan dan notifikasi tolak dihantar ke peranti ejen.`
-                  : `Announcement posted and delivered to active agent devices.`
+                  ? broadcastTargetChannel === "BETA"
+                    ? `Pengumuman telah disimpan dan dihantar KHUSUS ke peranti Penguji Beta (FCM: beta_testers).`
+                    : `Pengumuman telah disimpan dan notifikasi tolak dihantar ke semua peranti ejen.`
+                  : broadcastTargetChannel === "BETA"
+                    ? `Announcement saved and pushed EXCLUSIVELY to Beta Testers (FCM: beta_testers).`
+                    : `Announcement posted and delivered to active agent devices.`
               );
               setBroadcastTitle("");
               setBroadcastMessage("");
@@ -1292,6 +1298,11 @@ export default function AdminHubScreen() {
                             {isSuspended && (
                               <View style={{ backgroundColor: "rgba(239, 68, 68, 0.15)", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
                                 <Text style={{ fontSize: 10, fontWeight: "800", color: "#EF4444" }}>SUSPENDED</Text>
+                              </View>
+                            )}
+                            {agent.updateChannel?.toUpperCase() === "BETA" && (
+                              <View style={{ backgroundColor: "rgba(245, 158, 11, 0.15)", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "rgba(245, 158, 11, 0.4)" }}>
+                                <Text style={{ fontSize: 10, fontWeight: "800", color: "#F59E0B" }}>BETA 🧪</Text>
                               </View>
                             )}
                           </View>
@@ -2406,6 +2417,112 @@ export default function AdminHubScreen() {
                     {language === "BM" ? "Notifikasi terus ke telefon semua ejen" : "Instant push to all agent devices"}
                   </Text>
                 </View>
+              </View>
+
+              {/* Target Audience Selector */}
+              <View>
+                <Text style={{ fontSize: 12.5, fontWeight: "700", color: themeColors.textMuted, marginBottom: 8 }}>
+                  {language === "BM" ? "Sasaran Penerima" : "Target Audience"}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setBroadcastTargetChannel("ALL")}
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor:
+                        broadcastTargetChannel === "ALL"
+                          ? (isDark ? "#881337" : themeColors.maroonPrimary)
+                          : themeColors.surfaceContainer,
+                      borderWidth: 1,
+                      borderColor:
+                        broadcastTargetChannel === "ALL"
+                          ? (isDark ? "#BE123C" : themeColors.maroonPrimary)
+                          : themeColors.borderColor,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="earth"
+                      size={18}
+                      color={broadcastTargetChannel === "ALL" ? "#FFFFFF" : themeColors.textMuted}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: broadcastTargetChannel === "ALL" ? "#FFFFFF" : themeColors.textPrimary,
+                      }}
+                    >
+                      {language === "BM" ? "Semua Ejen 🌐" : "All Agents 🌐"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setBroadcastTargetChannel("BETA")}
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 12,
+                      backgroundColor:
+                        broadcastTargetChannel === "BETA"
+                          ? "rgba(245, 158, 11, 0.2)"
+                          : themeColors.surfaceContainer,
+                      borderWidth: 1,
+                      borderColor:
+                        broadcastTargetChannel === "BETA"
+                          ? "#F59E0B"
+                          : themeColors.borderColor,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="flask-outline"
+                      size={18}
+                      color={broadcastTargetChannel === "BETA" ? "#F59E0B" : themeColors.textMuted}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: broadcastTargetChannel === "BETA" ? "#F59E0B" : themeColors.textPrimary,
+                      }}
+                    >
+                      {language === "BM" ? "Penguji Beta Sahaja 🧪" : "Beta Testers Only 🧪"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {broadcastTargetChannel === "BETA" && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
+                      marginTop: 8,
+                      padding: 10,
+                      backgroundColor: "rgba(245, 158, 11, 0.12)",
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: "rgba(245, 158, 11, 0.25)",
+                    }}
+                  >
+                    <MaterialCommunityIcons name="information-outline" size={16} color="#F59E0B" />
+                    <Text style={{ fontSize: 11.5, color: "#F59E0B", flex: 1, lineHeight: 16 }}>
+                      {language === "BM"
+                        ? "Notis & push notification hanya akan dihantar ke peranti penguji saluran Beta (FCM: beta_testers). Ejen versi stabil tidak akan terkesan."
+                        : "Push notification will only be delivered to devices enrolled in Beta channel (FCM: beta_testers). Stable users will not be disturbed."}
+                    </Text>
+                  </View>
+                )}
               </View>
 
               {/* Category selector */}

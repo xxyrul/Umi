@@ -34,14 +34,20 @@ class DashboardScreen extends ConsumerWidget {
     final hour = DateTime.now().hour;
     String greeting;
     String greetingIcon;
-    if (hour < 12) {
+    if (hour < 5) {
+      greeting = isBM ? 'Selamat Malam' : 'Good Night';
+      greetingIcon = '🌙';
+    } else if (hour < 12) {
       greeting = isBM ? 'Selamat Pagi' : 'Good Morning';
       greetingIcon = '🌅';
     } else if (hour < 17) {
       greeting = isBM ? 'Selamat Tengah Hari' : 'Good Afternoon';
       greetingIcon = '☀️';
-    } else {
+    } else if (hour < 20) {
       greeting = isBM ? 'Selamat Petang' : 'Good Evening';
+      greetingIcon = '🌆';
+    } else {
+      greeting = isBM ? 'Selamat Malam' : 'Good Night';
       greetingIcon = '🌙';
     }
 
@@ -70,7 +76,7 @@ class DashboardScreen extends ConsumerWidget {
     // True unread announcements count
     final unreadAnnouncementsCount = ref.watch(unreadNotificationsCountProvider);
 
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
     final floatingBarBottom = bottomInset > 0 ? bottomInset + 8.0 : 20.0;
     final scrollBottom = floatingBarBottom + 58.0 + 32.0;
 
@@ -482,7 +488,7 @@ class DashboardScreen extends ConsumerWidget {
           Text(
             caseItem.reminderNote.isNotEmpty
                 ? caseItem.reminderNote
-                : (isBM ? 'Semak status milestone seterusnya' : 'Check next milestone status'),
+                : (isBM ? 'Semak status peringkat seterusnya' : 'Check next stage progress'),
             style: TextStyle(fontSize: 12, color: colors.textMuted),
           ),
           const SizedBox(height: 10),

@@ -508,7 +508,7 @@ class _SetPinBottomSheetState extends ConsumerState<_SetPinBottomSheet> {
       ),
       padding: EdgeInsets.only(
         top: 12,
-        bottom: MediaQuery.of(context).padding.bottom + 20,
+        bottom: MediaQuery.paddingOf(context).bottom + 20,
         left: 24,
         right: 24,
       ),

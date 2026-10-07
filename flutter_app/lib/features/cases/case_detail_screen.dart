@@ -74,11 +74,11 @@ class _CaseDetailScreenState extends ConsumerState<CaseDetailScreen> {
     final msg = isBM
         ? 'Hai $recipientName, berkenaan transaksi "${_case.caseName}".'
         : 'Hi $recipientName, regarding the transaction for "${_case.caseName}".';
-    PhoneIntentHelper.launchWhatsApp(context, phone: phone, message: msg, isBM: isBM);
+    PhoneIntentHelper.launchWhatsApp(context: context, phone: phone, message: msg, isBM: isBM);
   }
 
   void _launchDialer(String phone, bool isBM) {
-    PhoneIntentHelper.launchDialer(context, phone: phone, isBM: isBM);
+    PhoneIntentHelper.launchDialer(context: context, phone: phone, isBM: isBM);
   }
 
   Future<void> _updateMilestone(String newStatus, bool isBM) async {
@@ -118,103 +118,106 @@ class _CaseDetailScreenState extends ConsumerState<CaseDetailScreen> {
 
   Future<void> _scheduleReminder(bool isBM, AppThemeColors colors) async {
     final noteController = TextEditingController(text: _case.reminderNote);
-    DateTime selectedDate = DateTime.now().add(const Duration(days: 3));
+    try {
+      DateTime selectedDate = DateTime.now().add(const Duration(days: 3));
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: colors.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: colors.border)),
-              title: Text(
-                isBM ? 'Tetapkan Peringatan' : 'Set Reminder',
-                style: TextStyle(color: colors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    isBM ? 'Pilih Tarikh Tindakan Susulan:' : 'Select Follow-up Date:',
-                    style: TextStyle(color: colors.textMuted, fontSize: 12),
-                  ),
-                  const SizedBox(height: 6),
-                  InkWell(
-                    onTap: () async {
-                      final p = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365)),
-                      );
-                      if (p != null) setDialogState(() => selectedDate = p);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: colors.canvas,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: colors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.calendar_month, size: 16, color: colors.maroonPrimary),
-                          const SizedBox(width: 8),
-                          Text(DateFormat('d MMM yyyy').format(selectedDate), style: TextStyle(color: colors.textPrimary)),
-                        ],
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                backgroundColor: colors.surface,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: colors.border)),
+                title: Text(
+                  isBM ? 'Tetapkan Peringatan' : 'Set Reminder',
+                  style: TextStyle(color: colors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      isBM ? 'Pilih Tarikh Tindakan Susulan:' : 'Select Follow-up Date:',
+                      style: TextStyle(color: colors.textMuted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      onTap: () async {
+                        final p = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(const Duration(days: 365)),
+                        );
+                        if (p != null) setDialogState(() => selectedDate = p);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: colors.canvas,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: colors.border),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_month, size: 16, color: colors.maroonPrimary),
+                            const SizedBox(width: 8),
+                            Text(DateFormat('d MMM yyyy').format(selectedDate), style: TextStyle(color: colors.textPrimary)),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: noteController,
-                    style: TextStyle(color: colors.textPrimary),
-                    decoration: InputDecoration(
-                      labelText: isBM ? 'Nota Peringatan' : 'Reminder Note',
-                      hintText: isBM ? 'Contoh: Hubungi banker untuk semak offer letter' : 'E.g.: Call banker to check offer letter',
-                      filled: true,
-                      fillColor: colors.canvas,
-                      labelStyle: TextStyle(color: colors.textMuted, fontSize: 12),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: colors.border)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: noteController,
+                      style: TextStyle(color: colors.textPrimary),
+                      decoration: InputDecoration(
+                        labelText: isBM ? 'Nota Peringatan' : 'Reminder Note',
+                        hintText: isBM ? 'Contoh: Hubungi banker untuk semak offer letter' : 'E.g.: Call banker to check offer letter',
+                        filled: true,
+                        fillColor: colors.canvas,
+                        labelStyle: TextStyle(color: colors.textMuted, fontSize: 12),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: colors.border)),
+                      ),
                     ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: Text(isBM ? 'Batal' : 'Cancel', style: TextStyle(color: colors.textMuted)),
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.maroonPrimary, foregroundColor: Colors.white),
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: Text(isBM ? 'Simpan' : 'Save'),
                   ),
                 ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: Text(isBM ? 'Batal' : 'Cancel', style: TextStyle(color: colors.textMuted)),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.maroonPrimary, foregroundColor: Colors.white),
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(isBM ? 'Simpan' : 'Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
 
-    if (confirmed == true) {
-      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
-      final noteStr = noteController.text.trim();
-      setState(() {
-        _case = _case.copyWith(reminderDate: dateStr, reminderNote: noteStr);
-      });
-      await ref.read(caseRepositoryProvider).updateReminder(_case.id, dateStr, noteStr);
-      if (mounted) {
-        AppToast.success(context, isBM ? 'Peringatan susulan berjaya disimpan!' : 'Reminder saved successfully!');
-        // Sync to phone calendar directly
-        CalendarIntentService.addEventToCalendar(
-          title: 'Follow-up: ${_case.caseName}',
-          startTime: selectedDate,
-          description: noteStr.isNotEmpty ? noteStr : 'Tindakan susulan kes hartanah Artha',
-        );
+      if (confirmed == true) {
+        final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+        final noteStr = noteController.text.trim();
+        setState(() {
+          _case = _case.copyWith(reminderDate: dateStr, reminderNote: noteStr);
+        });
+        await ref.read(caseRepositoryProvider).updateReminder(_case.id, dateStr, noteStr);
+        if (mounted) {
+          AppToast.success(context, isBM ? 'Peringatan susulan berjaya disimpan!' : 'Reminder saved successfully!');
+          CalendarIntentService.addEventToCalendar(
+            title: 'Follow-up: ${_case.caseName}',
+            startTime: selectedDate,
+            description: noteStr.isNotEmpty ? noteStr : 'Tindakan susulan kes hartanah Artha',
+          );
+        }
       }
+    } finally {
+      noteController.dispose();
     }
   }
 
@@ -375,6 +378,7 @@ class _CaseDetailScreenState extends ConsumerState<CaseDetailScreen> {
             tooltip: isBM ? 'Kemaskini Kes' : 'Edit Case',
             onPressed: () async {
               await context.push('/case/form?id=${_case.id}');
+              if (!mounted) return;
               final refreshed = await ref.read(caseRepositoryProvider).getCaseById(_case.id);
               if (refreshed != null && mounted) {
                 setState(() => _caseData = refreshed);
@@ -389,6 +393,8 @@ class _CaseDetailScreenState extends ConsumerState<CaseDetailScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        physics: const ClampingScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -444,7 +450,7 @@ class _CaseDetailScreenState extends ConsumerState<CaseDetailScreen> {
             const SizedBox(height: 16),
 
             // Milestone Stepper
-            _buildSectionTitle(isBM ? 'KEMAJUAN TRANSAKSI (MILESTONES)' : 'TRANSACTION MILESTONES', colors),
+            _buildSectionTitle(isBM ? 'PERINGKAT PROSES TRANSAKSI' : 'TRANSACTION STAGES', colors),
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -629,7 +635,7 @@ class _CaseDetailScreenState extends ConsumerState<CaseDetailScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _buildSectionTitle(
-                    '${isBM ? "REKOD PERUBAHAN MILESTONE" : "MILESTONE AUDIT LOG"} (${_case.statusHistory.length})',
+                    '${isBM ? "SEJARAH PERUBAHAN STATUS" : "STATUS HISTORY LOG"} (${_case.statusHistory.length})',
                     colors,
                   ),
                   if (_case.statusHistory.length > 3)

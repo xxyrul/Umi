@@ -15,6 +15,7 @@ import 'listing_repository.dart';
 import 'widgets/co_broke_share_sheet.dart';
 import 'widgets/document_vault_sheet.dart';
 import 'widgets/fullscreen_gallery_screen.dart';
+import 'widgets/quick_mortgage_sheet.dart';
 
 class ListingDetailScreen extends ConsumerStatefulWidget {
   final ListingModel? listing;
@@ -152,106 +153,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
     final l = _listing;
     if (l == null) return;
     final isBM = ref.read(languageProvider) == 'BM';
-
-    int tenure = 30;
-    double interest = 4.2;
-    int downpayment = (l.price * 0.1).round();
-
-    showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      backgroundColor: const Color(0xFF181A1C),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            final loanAmount = l.price - downpayment;
-            final monthly = LoanCalculator.calculateMonthlyInstallment(
-              loanAmount: loanAmount,
-              interestRate: interest,
-              tenureYears: tenure,
-            );
-            final colors = context.colors;
-
-            return Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isBM ? 'Kalkulator Pinjaman Bank' : 'Bank Loan Calculator',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: colors.textPrimary),
-                      ),
-                      IconButton(icon: Icon(Icons.close, color: colors.textMuted), onPressed: () => Navigator.pop(ctx)),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: colors.canvas,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: colors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          isBM ? 'Anggaran Ansuran Bulanan' : 'Estimated Monthly Installment',
-                          style: TextStyle(color: colors.textMuted, fontSize: 12),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${CurrencyFormatter.format(monthly)} ${isBM ? '/ bulan' : '/ month'}',
-                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colors.maroonPrimary),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isBM ? 'Deposit (10%):' : 'Downpayment (10%):',
-                        style: TextStyle(color: colors.textMuted, fontSize: 13),
-                      ),
-                      Text(CurrencyFormatter.format(downpayment), style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isBM ? 'Kadar Faedah (%):' : 'Interest Rate (%):',
-                        style: TextStyle(color: colors.textMuted, fontSize: 13),
-                      ),
-                      Text('${interest.toStringAsFixed(1)}%', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isBM ? 'Tempoh Pinjaman (Tahun):' : 'Loan Tenure (Years):',
-                        style: TextStyle(color: colors.textMuted, fontSize: 13),
-                      ),
-                      Text('$tenure ${isBM ? "Tahun" : "Years"}', style: TextStyle(color: colors.textPrimary, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
+    QuickMortgageSheet.show(context, propertyPrice: l.price.toDouble(), isBM: isBM);
   }
 
   Widget _buildSpecRow(IconData icon, String label, String value, AppThemeColors colors) {
@@ -332,6 +234,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                     tooltip: isBM ? 'Kemaskini Listing' : 'Edit Listing',
                     onPressed: () async {
                       await context.push('/listing/form?id=${listing.id}');
+                      if (!mounted) return;
                       final refreshed = await ref.read(listingRepositoryProvider).getListingById(listing.id);
                       if (refreshed != null && mounted) {
                         setState(() => _listing = refreshed);
@@ -361,9 +264,10 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: photos.isNotEmpty
-                  ? Stack(
-                      children: [
-                        PageView.builder(
+                  ? RepaintBoundary(
+                      child: Stack(
+                        children: [
+                          PageView.builder(
                           itemCount: photos.length,
                           onPageChanged: (idx) => setState(() => _currentPhotoIndex = idx),
                           itemBuilder: (context, index) {
@@ -433,7 +337,8 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                             ),
                           ),
                       ],
-                    )
+                    ),
+                  )
                   : Container(
                       color: colors.card,
                       child: Center(child: Icon(Icons.home_work_outlined, size: 64, color: colors.textDim)),
@@ -867,7 +772,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
           16,
           10,
           16,
-          10 + MediaQuery.of(context).padding.bottom,
+          10 + context.systemNavBottom,
         ),
         decoration: BoxDecoration(
           color: colors.surface,

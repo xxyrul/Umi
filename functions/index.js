@@ -251,26 +251,105 @@ exports.sendInstantUpdatePush = onRequest(
 exports.sendBroadcastPush = onRequest(
   { cors: true, invoker: "public", secrets: [SESSION_SECRET] },
   async (req, res) => {
-    const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
-    if (!isAuthorized) {
-      res.status(403).json({ error: "Unauthorized. Admin credentials required." });
-      return;
+    try {
+      let body = req.body;
+    if (Buffer.isBuffer(body)) {
+      try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+    } else if (typeof body === "string") {
+      try { body = JSON.parse(body); } catch (e) {}
+    }
+    const { titleEN, titleBM, messageEN, messageBM, type, targetChannel, targetUid, topic, kind } = body || {};
+
+    // Inbound alerts targeting admin_alerts (e.g. agent access request or bug feedback) are allowed
+    const isAdminAlert = topic === "admin_alerts";
+    if (!isAdminAlert) {
+      const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
+      if (!isAuthorized) {
+        res.status(403).json({ error: "Unauthorized. Admin credentials required." });
+        return;
+      }
     }
 
     const db = admin.firestore();
     const messaging = admin.messaging();
 
-    try {
-      let body = req.body;
-      if (Buffer.isBuffer(body)) {
-        try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
-      } else if (typeof body === "string") {
-        try { body = JSON.parse(body); } catch (e) {}
-      }
-      const { titleEN, titleBM, messageEN, messageBM, type } = body || {};
-
-      if (!titleEN && !titleBM && !messageEN && !messageBM) {
+    if (!titleEN && !titleBM && !messageEN && !messageBM) {
         res.status(400).json({ error: "Title and message are required." });
+        return;
+      }
+
+      // If targeted to a specific FCM topic (e.g. 'admin_alerts' or 'beta_testers')
+      const targetTopic = topic || (targetChannel === "BETA" ? "beta_testers" : null);
+      if (targetTopic) {
+        const title = titleBM || titleEN || "Pengumuman Sistem 📢";
+        const bodyText = messageBM || messageEN || "";
+        const message = {
+          topic: targetTopic,
+          notification: { title, body: bodyText },
+          data: {
+            kind: kind || (targetTopic === "beta_testers" ? "broadcast-announcement" : "system-alert"),
+            type: type || "GENERAL",
+            channel: targetTopic === "beta_testers" ? "beta" : "all",
+          },
+          android: {
+            priority: "high",
+            notification: {
+              channel_id: "announcements",
+              icon: "ic_notification",
+            },
+          },
+        };
+        try {
+          await messaging.send(message);
+          res.json({ success: true, sentCount: 1, topic: targetTopic });
+        } catch (topicErr) {
+          logger.error(`Failed sending ${targetTopic} topic message:`, topicErr);
+          res.status(500).json({ error: topicErr.message });
+        }
+        return;
+      }
+
+      // If targeted to a specific user (e.g. account approval or feedback reply)
+      if (targetUid) {
+        const userDevicesSnap = await db.collection("users").doc(targetUid).collection("devices").get();
+        const tokens = [];
+        userDevicesSnap.forEach(d => {
+          const dt = d.data();
+          if (dt.enabled !== false && dt.token) tokens.push(dt.token);
+        });
+        const userDoc = await db.collection("users").doc(targetUid).get();
+        if (userDoc.exists && userDoc.data().fcmToken) {
+          tokens.push(userDoc.data().fcmToken);
+        }
+        const uniqueTokens = Array.from(new Set(tokens));
+        let sentCount = 0;
+        for (const token of uniqueTokens) {
+          try {
+            await messaging.send({
+              token,
+              notification: {
+                title: titleBM || titleEN || "Artha",
+                body: messageBM || messageEN || "",
+              },
+              data: {
+                kind: kind || "direct-notification",
+                type: type || "GENERAL",
+                uid: targetUid,
+              },
+              android: {
+                priority: "high",
+                notification: {
+                  channel_id: "announcements",
+                  icon: "ic_notification",
+                },
+              },
+            });
+            sentCount++;
+          } catch (tokErr) {
+            logger.warn(`Failed sending to token of user ${targetUid}:`, tokErr.message);
+          }
+        }
+        res.json({ success: true, sentCount, targetUid });
         return;
       }
 
@@ -515,6 +594,44 @@ exports.adminManageUser = onRequest(
           { status: "ACTIVE", approved: true, approvedAt: now, updatedAt: now },
           { merge: true }
         );
+
+        try {
+          const userDevicesSnap = await userRef.collection("devices").get();
+          const tokens = [];
+          userDevicesSnap.forEach(d => {
+            const dt = d.data();
+            if (dt.enabled !== false && dt.token) tokens.push(dt.token);
+          });
+          const userDoc = await userRef.get();
+          if (userDoc.exists && userDoc.data().fcmToken) {
+            tokens.push(userDoc.data().fcmToken);
+          }
+          const uniqueTokens = Array.from(new Set(tokens));
+          const messaging = admin.messaging();
+          for (const token of uniqueTokens) {
+            await messaging.send({
+              token,
+              notification: {
+                title: "Akaun Anda Telah Diluluskan! 🎉",
+                body: "Tahniah! Akaun Umi anda kini aktif. Buka aplikasi untuk mula menguruskan kes.",
+              },
+              data: {
+                kind: "account-approved",
+                uid: uid,
+              },
+              android: {
+                priority: "high",
+                notification: {
+                  channel_id: "announcements",
+                  icon: "ic_notification",
+                },
+              },
+            }).catch(() => {});
+          }
+        } catch (pushErr) {
+          logger.warn("Failed sending approval push from adminManageUser:", pushErr);
+        }
+
         res.json({ success: true, action, uid });
         return;
       }
@@ -526,6 +643,19 @@ exports.adminManageUser = onRequest(
             approved: false,
             rejectedAt: now,
             rejectionReason: reason || "Permohonan ditolak oleh pentadbir.",
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+        res.json({ success: true, action, uid });
+        return;
+      }
+
+      if (action === "resetPending") {
+        await userRef.set(
+          {
+            status: "PENDING_APPROVAL",
+            approved: false,
             updatedAt: now,
           },
           { merge: true }

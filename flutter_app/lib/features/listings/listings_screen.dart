@@ -204,6 +204,8 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
                   // Scrollable Body
                   Flexible(
                     child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,9 +659,8 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
     final filtered = _filterListings(all, user?.uid ?? '');
     final isBM = ref.watch(languageProvider) == 'BM';
 
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = context.systemNavBottom;
     final floatingBarBottom = bottomInset > 0 ? bottomInset + 8.0 : 20.0;
-    final fabBottom = floatingBarBottom + 58.0 + 12.0;
     final scrollBottom = floatingBarBottom + 58.0 + 44.0;
 
     return Scaffold(
@@ -895,14 +896,11 @@ class _ListingsScreenState extends ConsumerState<ListingsScreen> {
       floatingActionButton: _viewMode == 'map'
           ? null
           : Padding(
-              padding: EdgeInsets.only(bottom: fabBottom),
-                child: Transform.translate(
-                  offset: const Offset(0, 64),
-                  child: InteractiveBounceFab(
-                    onPressed: () => context.push('/listing/form'),
-                    backgroundColor: colors.maroonPrimary,
-                    icon: const Icon(Icons.add, size: 28),
-                  ),
+              padding: const EdgeInsets.only(bottom: 68.0),
+              child: InteractiveBounceFab(
+                onPressed: () => context.push('/listing/form'),
+                backgroundColor: colors.maroonPrimary,
+                icon: const Icon(Icons.add, size: 28),
               ),
             ),
     );

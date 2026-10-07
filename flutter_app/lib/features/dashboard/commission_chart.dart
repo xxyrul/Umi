@@ -77,15 +77,25 @@ class _CommissionChartWidgetState extends ConsumerState<CommissionChartWidget> {
                   ),
                 ],
               ),
-              DropdownButton<int>(
-                value: _selectedYear,
-                dropdownColor: colors.card,
-                underline: const SizedBox(),
-                style: TextStyle(color: colors.maroonSecondary, fontWeight: FontWeight.bold, fontSize: 13),
-                items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _selectedYear = val);
-                },
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.surface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: colors.border),
+                ),
+                child: DropdownButton<int>(
+                  value: _selectedYear,
+                  dropdownColor: colors.card,
+                  borderRadius: BorderRadius.circular(12),
+                  underline: const SizedBox(),
+                  icon: Icon(Icons.arrow_drop_down, color: colors.maroonSecondary, size: 18),
+                  style: TextStyle(color: colors.maroonSecondary, fontWeight: FontWeight.bold, fontSize: 13),
+                  items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedYear = val);
+                  },
+                ),
               ),
             ],
           ),

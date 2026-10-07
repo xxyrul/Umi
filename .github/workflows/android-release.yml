@@ -23,15 +23,6 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install Node dependencies
-        run: npm install --no-fund --no-audit
-
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -39,53 +30,58 @@ jobs:
           java-version: '17'
           cache: gradle
 
-      - name: Generate google-services.json
-        run: node scripts/generate-google-services.js
-        env:
-          EXPO_PUBLIC_FIREBASE_API_KEY: ${{ secrets.EXPO_PUBLIC_FIREBASE_API_KEY }}
-          EXPO_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_PROJECT_ID }}
-          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: ${{ secrets.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-          EXPO_PUBLIC_FIREBASE_APP_ID: ${{ secrets.EXPO_PUBLIC_FIREBASE_APP_ID }}
-          EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: ${{ secrets.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID }}
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
 
-      - name: Generate Android project
-        run: npx expo prebuild --platform android --clean
-
-      - name: Make Gradle executable
-        run: chmod +x android/gradlew
+      - name: Install Flutter dependencies
+        run: |
+          cd flutter_app
+          flutter pub get
 
       - name: Read app version info
         id: version
         run: |
-          APP_VERSION=$(node -p "require('./package.json').version")
-          ANDROID_VERSION_CODE=$(node -p "require('./app.json').expo.android.versionCode")
+          FULL_VER=$(grep '^version:' flutter_app/pubspec.yaml | sed 's/version: //' | tr -d ' ')
+          APP_VERSION=$(echo "$FULL_VER" | cut -d'+' -f1)
+          ANDROID_VERSION_CODE=$(echo "$FULL_VER" | cut -d'+' -f2)
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
           echo "ANDROID_VERSION_CODE=$ANDROID_VERSION_CODE" >> "$GITHUB_ENV"
+          echo "Resolved Version: $APP_VERSION (Build $ANDROID_VERSION_CODE)"
 
       - name: Build Android release APK
-        run: cd android && ./gradlew assembleRelease
+        run: |
+          cd flutter_app
+          flutter build apk --release
 
       - name: Authenticate to Google Cloud
+        id: gcloud_auth
+        continue-on-error: true
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
       - name: Set up gcloud
+        if: steps.gcloud_auth.outcome == 'success'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Upload APK to Firebase Storage
+        if: steps.gcloud_auth.outcome == 'success'
         run: |
-          gcloud storage cp android/app/build/outputs/apk/release/app-release.apk \
+          gcloud storage cp flutter_app/build/app/outputs/flutter-apk/app-release.apk \
             gs://$STORAGE_BUCKET/$STORAGE_PATH
 
       - name: Generate signed download URL
+        if: steps.gcloud_auth.outcome == 'success'
         id: signed_url
         run: |
           URL=$(gcloud storage sign-url --duration=7d gs://$STORAGE_BUCKET/$STORAGE_PATH | tail -n 1)
           echo "APK_URL=$URL" >> "$GITHUB_ENV"
 
       - name: Update Firestore latest version document
+        if: steps.gcloud_auth.outcome == 'success'
         run: |
           npm install firebase-admin --no-save
           node <<'NODE'
@@ -97,7 +93,7 @@ jobs:
           const versionName = process.env.APP_VERSION;
           const versionCode = Number(process.env.ANDROID_VERSION_CODE);
           const apkUrl = process.env.APK_URL;
-          const releaseNotes = 'Automated release from GitHub Actions';
+          const releaseNotes = 'Automated release from GitHub Actions (Flutter)';
 
           if (!projectId || !apkUrl) {
             throw new Error('Missing project or APK URL');
@@ -138,4 +134,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: umi-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk

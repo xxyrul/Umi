@@ -2,100 +2,113 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/app_toast.dart';
 
-/// Centralized utility for handling Malaysian phone numbers (+60)
-/// and safely launching WhatsApp and phone dialers with fallback toasts.
 class PhoneIntentHelper {
-  /// Normalizes any raw phone input string to a valid Malaysian phone number format (`601XXXXXXXX`).
-  /// Returns null if the phone is empty or invalid.
-  static String? formatMalaysianWhatsAppNumber(String rawPhone) {
+  /// Cleans and normalizes a phone number to Malaysian international format (e.g. "60123456789")
+  static String? normalizeMalaysianPhone(String rawPhone) {
+    if (rawPhone.trim().isEmpty) return null;
+
     var clean = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
     if (clean.isEmpty) return null;
 
-    if (clean.startsWith('60')) {
-      // Valid length for Malaysian mobile numbers: 601XXXXXXXX (11-12 digits)
-      return clean.length >= 10 ? clean : null;
-    }
     if (clean.startsWith('0')) {
-      final normalized = '60${clean.substring(1)}';
-      return normalized.length >= 10 ? normalized : null;
+      clean = '60${clean.substring(1)}';
+    } else if (!clean.startsWith('60')) {
+      clean = '60$clean';
     }
-    if (clean.startsWith('1')) {
-      final normalized = '60$clean';
-      return normalized.length >= 10 ? normalized : null;
+
+    // Basic validity check: Malaysian numbers are typically between 10 and 13 digits with country code 60
+    if (clean.length < 10 || clean.length > 14) {
+      return null;
     }
-    return null;
+
+    return clean;
   }
 
-  /// Safely opens WhatsApp with prefilled message.
-  static Future<void> launchWhatsApp(
-    BuildContext context, {
+  /// Launches WhatsApp with optional pre-filled message
+  static Future<bool> launchWhatsApp({
+    required BuildContext context,
     required String phone,
-    required String message,
-    required bool isBM,
+    String? message,
+    bool isBM = false,
   }) async {
-    final formatted = formatMalaysianWhatsAppNumber(phone);
-    if (formatted == null) {
+    final cleanPhone = normalizeMalaysianPhone(phone);
+    if (cleanPhone == null) {
       if (context.mounted) {
         AppToast.error(
           context,
-          isBM ? 'Nombor telefon tidak sah atau belum diisi.' : 'Invalid or missing phone number.',
+          isBM
+              ? 'Nombor telefon tidak sah untuk WhatsApp.'
+              : 'Invalid phone number for WhatsApp.',
         );
       }
-      return;
+      return false;
     }
 
-    final uri = Uri.parse('https://wa.me/$formatted?text=${Uri.encodeComponent(message)}');
+    final query = (message != null && message.trim().isNotEmpty)
+        ? '?text=${Uri.encodeComponent(message.trim())}'
+        : '';
+    final url = Uri.parse('https://wa.me/$cleanPhone$query');
+
     try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!launched && context.mounted) {
         AppToast.error(
           context,
-          isBM ? 'Gagal membuka WhatsApp.' : 'Could not open WhatsApp.',
+          isBM
+              ? 'Gagal membuka aplikasi WhatsApp.'
+              : 'Unable to open WhatsApp application.',
         );
       }
+      return launched;
     } catch (e) {
       if (context.mounted) {
         AppToast.error(
           context,
-          isBM ? 'Aplikasi WhatsApp tidak dijumpai pada peranti.' : 'WhatsApp app not found on device.',
+          isBM ? 'Ralat membuka WhatsApp: $e' : 'Error opening WhatsApp: $e',
         );
       }
+      return false;
     }
   }
 
-  /// Safely opens the device phone dialer.
-  static Future<void> launchDialer(
-    BuildContext context, {
+  /// Launches native phone dialer
+  static Future<bool> launchDialer({
+    required BuildContext context,
     required String phone,
-    required bool isBM,
+    bool isBM = false,
   }) async {
-    final clean = phone.replaceAll(RegExp(r'[^0-9+]'), '');
-    if (clean.isEmpty) {
+    if (phone.trim().isEmpty) {
       if (context.mounted) {
         AppToast.error(
           context,
-          isBM ? 'Nombor telefon tidak sah atau belum diisi.' : 'Invalid or missing phone number.',
+          isBM
+              ? 'Nombor telefon tidak tersedia.'
+              : 'Phone number is not available.',
         );
       }
-      return;
+      return false;
     }
 
-    final uri = Uri.parse('tel:$clean');
+    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    final url = Uri.parse('tel:$cleanPhone');
+
     try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!launched && context.mounted) {
         AppToast.error(
           context,
-          isBM ? 'Gagal membuka aplikasi panggilan.' : 'Could not launch phone dialer.',
+          isBM ? 'Gagal membuka pendail telefon.' : 'Unable to open phone dialer.',
         );
       }
+      return launched;
     } catch (e) {
       if (context.mounted) {
         AppToast.error(
           context,
-          isBM ? 'Fungsi panggilan telefon tidak disokong.' : 'Phone calling is not supported.',
+          isBM ? 'Ralat membuka panggilan: $e' : 'Error opening call: $e',
         );
       }
+      return false;
     }
   }
 }

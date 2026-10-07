@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/l10n/language_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/app_select_field.dart';
 import '../../core/widgets/interactive_back_button.dart';
 import '../auth/auth_service.dart';
 import 'case_model.dart';
@@ -290,13 +291,15 @@ class _CaseFormScreenState extends ConsumerState<CaseFormScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
+        physics: const ClampingScrollPhysics(),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        child: RepaintBoundary(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               // Case & Property Details
               _buildSectionTitle(isBM ? 'MAKLUMAT KES & HARTANAH' : 'CASE & PROPERTY DETAILS', Icons.apartment_rounded, colors),
               TextFormField(
@@ -447,31 +450,65 @@ class _CaseFormScreenState extends ConsumerState<CaseFormScreen> {
 
               // Financing & Case Stage
               _buildSectionTitle(isBM ? 'KAEDAH PEMBIAYAAN & PERINGKAT KES' : 'FINANCING & CASE STAGE', Icons.account_balance_outlined, colors),
-              DropdownButtonFormField<String>(
+              AppSelectField<String>(
+                label: isBM ? 'Jenis Pembiayaan' : 'Financing Type',
                 value: _financeType,
-                dropdownColor: colors.surface,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: _inputDecor(label: isBM ? 'Jenis Pembiayaan' : 'Financing Type', colors: colors),
-                items: _financeOptions.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                colors: colors,
+                prefixIcon: Icon(Icons.account_balance_outlined, size: 20, color: colors.maroonPrimary),
+                items: _financeOptions.map((f) => AppSelectItem<String>(value: f, label: f)).toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _financeType = val);
+                  setState(() => _financeType = val);
                 },
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
+              AppSelectField<String>(
+                label: isBM ? 'Peringkat Kes (Status)' : 'Case Stage (Status)',
                 value: _status,
-                dropdownColor: colors.surface,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: _inputDecor(label: isBM ? 'Peringkat Kes (Status)' : 'Case Stage (Status)', colors: colors),
+                colors: colors,
                 items: _statusStages.map((s) {
                   final title = isBM ? s['titleBM']! : s['titleEN']!;
-                  return DropdownMenuItem(
-                    value: s['status'],
-                    child: Text('${s['status']} ($title)'),
+                  final desc = isBM ? s['descBM'] : s['descEN'];
+                  IconData icon;
+                  Color iconColor;
+                  switch (s['status']) {
+                    case 'Viewing':
+                      icon = Icons.visibility_outlined;
+                      iconColor = colors.info;
+                      break;
+                    case 'Booking Paid':
+                      icon = Icons.receipt_long_outlined;
+                      iconColor = colors.warning;
+                      break;
+                    case 'Loan Approved':
+                      icon = Icons.verified_outlined;
+                      iconColor = colors.success;
+                      break;
+                    case 'SPA Signed':
+                      icon = Icons.draw_outlined;
+                      iconColor = colors.maroonPrimary;
+                      break;
+                    case 'Completed':
+                      icon = Icons.check_circle_outline;
+                      iconColor = colors.success;
+                      break;
+                    case 'Cancelled':
+                      icon = Icons.cancel_outlined;
+                      iconColor = colors.error;
+                      break;
+                    default:
+                      icon = Icons.pending_outlined;
+                      iconColor = colors.textMuted;
+                  }
+                  return AppSelectItem<String>(
+                    value: s['status']!,
+                    label: '${s['status']} ($title)',
+                    subtitle: desc,
+                    icon: icon,
+                    iconColor: iconColor,
                   );
                 }).toList(),
                 onChanged: (val) {
-                  if (val != null) setState(() => _status = val);
+                  setState(() => _status = val);
                 },
               ),
               const SizedBox(height: 12),
@@ -542,11 +579,12 @@ class _CaseFormScreenState extends ConsumerState<CaseFormScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 0.5),
                       ),
               ),
-              SizedBox(height: 36 + MediaQuery.of(context).padding.bottom),
+              SizedBox(height: 36 + MediaQuery.paddingOf(context).bottom),
             ],
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

@@ -30,4 +30,11 @@ functions/.env
 functions/.env.local
 functions/.env.*
 
+# Temporary screenshots & local tooling
+screen_*.png
+flutter_app/*.png
+screenshots/*.png
+dist/_expo/
+.vscode/
+
 # @end expo-cli

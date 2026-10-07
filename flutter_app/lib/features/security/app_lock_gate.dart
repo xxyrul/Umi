@@ -67,10 +67,11 @@ class _AppLockGateState extends ConsumerState<AppLockGate> with WidgetsBindingOb
   Future<void> _checkLockOnResume(int elapsedMs) async {
     final security = ref.read(securityServiceProvider);
     final isPinEnabled = await security.isPinLockEnabled();
-    if (!isPinEnabled) return;
+    if (!isPinEnabled || !mounted) return;
 
     final timeoutMs = await security.getLockTimeoutMs();
-    if (elapsedMs >= timeoutMs && !_isLocked && mounted) {
+    if (!mounted) return;
+    if (elapsedMs >= timeoutMs && !_isLocked) {
       setState(() {
         _isLocked = true;
         _enteredPin = '';
@@ -117,6 +118,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate> with WidgetsBindingOb
       final security = ref.read(securityServiceProvider);
       final isBM = ref.read(languageProvider) == 'BM';
       final remainingLockout = await security.getRemainingLockoutSeconds();
+      if (!mounted) return;
       if (remainingLockout > 0) {
         HapticFeedback.heavyImpact();
         setState(() {
@@ -139,6 +141,7 @@ class _AppLockGateState extends ConsumerState<AppLockGate> with WidgetsBindingOb
       } else if (mounted) {
         HapticFeedback.heavyImpact();
         final lockoutAfter = await security.getRemainingLockoutSeconds();
+        if (!mounted) return;
         setState(() {
           _enteredPin = '';
           _errorMessage = lockoutAfter > 0

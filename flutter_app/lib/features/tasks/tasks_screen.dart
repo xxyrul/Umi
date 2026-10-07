@@ -51,7 +51,7 @@ class _TasksScreenState extends ConsumerState<TasksScreen> {
   Widget build(BuildContext context) {
     final isBM = ref.watch(languageProvider) == 'BM';
     final colors = context.colors;
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.paddingOf(context).bottom;
 
     return Scaffold(
       backgroundColor: colors.canvas,

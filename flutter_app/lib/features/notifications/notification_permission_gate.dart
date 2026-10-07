@@ -19,7 +19,7 @@ class NotificationPermissionGate extends ConsumerStatefulWidget {
 
 class _NotificationPermissionGateState extends ConsumerState<NotificationPermissionGate>
     with WidgetsBindingObserver {
-  bool _dialogVisible = false;
+  final bool _dialogVisible = false;
   bool _checkingPermission = false;
   bool _needsPermission = false;
   StreamSubscription<User?>? _authSubscription;

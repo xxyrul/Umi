@@ -150,7 +150,7 @@ class _TopToastWidgetState extends State<_TopToastWidget> with SingleTickerProvi
 
   @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
+    final topPadding = MediaQuery.paddingOf(context).top;
 
     return Positioned(
       top: topPadding > 0 ? topPadding + 8.0 : 20.0,

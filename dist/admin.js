@@ -711,10 +711,25 @@ function downloadBatchCSV() {
   showToast("📥 CSV downloaded!");
 }
 
+function onBroadcastTargetChanged() {
+  const sel = document.getElementById('ann-target-channel')?.value;
+  const banner = document.getElementById('beta-broadcast-banner');
+  const btn = document.getElementById('btn-broadcast-submit');
+  if (sel === 'BETA') {
+    if (banner) banner.style.display = 'block';
+    if (btn) btn.innerHTML = '🧪 Dispatch Test Push to Beta Testers Only';
+  } else {
+    if (banner) banner.style.display = 'none';
+    if (btn) btn.innerHTML = '🚀 Broadcast Announcement to All Agents';
+  }
+}
+
 // Broadcast Announcement
 async function handleBroadcastAnnouncement() {
   const title = (document.getElementById('ann-title')?.value || '').trim();
   const type = document.getElementById('ann-type')?.value || 'GENERAL';
+  const targetChannel = document.getElementById('ann-target-channel')?.value || 'ALL';
+  const isBeta = (targetChannel === 'BETA');
   const message = (document.getElementById('ann-message')?.value || '').trim();
 
   const titleEN = (document.getElementById('ann-title-en')?.value || title).trim();
@@ -722,21 +737,30 @@ async function handleBroadcastAnnouncement() {
   const messageEN = (document.getElementById('ann-message-en')?.value || message).trim();
   const messageBM = (document.getElementById('ann-message-bm')?.value || message).trim();
 
-  const finalTitle = titleEN || titleBM;
+  let finalTitle = titleEN || titleBM;
   const finalMsg = messageEN || messageBM;
 
   if (!finalTitle || !finalMsg) {
     return alert("Please enter announcement title and message details.");
   }
 
+  if (isBeta && !finalTitle.includes('[BETA 🧪]')) {
+    finalTitle = '[BETA 🧪] ' + finalTitle;
+  }
+
   try {
     const annId = "ann_" + Date.now();
+    const effectiveTitleEN = isBeta && titleEN && !titleEN.includes('[BETA 🧪]') ? '[BETA 🧪] ' + titleEN : (titleEN || finalTitle);
+    const effectiveTitleBM = isBeta && titleBM && !titleBM.includes('[BETA 🧪]') ? '[BETA 🧪] ' + titleBM : (titleBM || finalTitle);
+
     const newAnn = {
       id: annId,
       title: finalTitle,
-      titleEN: titleEN || finalTitle,
-      titleBM: titleBM || finalTitle,
+      titleEN: effectiveTitleEN,
+      titleBM: effectiveTitleBM,
       type: type,
+      targetChannel: targetChannel,
+      targetAudience: targetChannel,
       message: finalMsg,
       messageEN: messageEN || finalMsg,
       messageBM: messageBM || finalMsg,
@@ -762,6 +786,7 @@ async function handleBroadcastAnnouncement() {
             messageEN: newAnn.messageEN,
             messageBM: newAnn.messageBM,
             type: type,
+            targetChannel: targetChannel,
             sessionToken: token
           }),
         });
@@ -776,8 +801,12 @@ async function handleBroadcastAnnouncement() {
     if (document.getElementById('ann-title-bm')) document.getElementById('ann-title-bm').value = '';
     if (document.getElementById('ann-message-en')) document.getElementById('ann-message-en').value = '';
     if (document.getElementById('ann-message-bm')) document.getElementById('ann-message-bm').value = '';
+    if (document.getElementById('ann-target-channel')) {
+      document.getElementById('ann-target-channel').value = 'ALL';
+      onBroadcastTargetChanged();
+    }
 
-    showToast("🚀 Announcement broadcasted!");
+    showToast(isBeta ? "🧪 Beta test push dispatched!" : "🚀 Announcement broadcasted!");
   } catch (err) {
     alert("Failed to broadcast: " + err.message);
   }
@@ -787,7 +816,7 @@ function renderAnnouncementsTable() {
   const tbody = document.getElementById('announcements-table-body');
   if (!tbody) return;
   if (allAnnouncements.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-dim); padding: 24px;">No announcements logged yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 24px;">No announcements logged yet.</td></tr>';
     return;
   }
 
@@ -800,12 +829,17 @@ function renderAnnouncementsTable() {
       ? '<span class="badge badge-admin">🏆 Incentive</span>'
       : '<span class="badge badge-active">📢 General</span>';
 
+    const audienceBadge = (ann.targetChannel === 'BETA' || ann.targetAudience === 'BETA')
+      ? '<span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3);">🧪 Beta Only</span>'
+      : '<span class="badge" style="background: rgba(59, 130, 246, 0.15); color: #60A5FA;">🌐 All Agents</span>';
+
     const sentDate = ann.createdAt ? new Date(ann.createdAt).toLocaleString() : '-';
     const docKey = ann.docId || ann.id || '';
 
     return '<tr>' +
       '<td><strong>' + (ann.title || ann.titleEN || 'Untitled') + '</strong></td>' +
       '<td>' + typeBadge + '</td>' +
+      '<td>' + audienceBadge + '</td>' +
       '<td style="color: var(--text-muted); max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">' + (ann.message || ann.messageEN || '') + '</td>' +
       '<td style="color: var(--text-muted);">' + sentDate + '</td>' +
       '<td style="color: var(--text-muted);">' + (ann.sentBy || 'Admin') + '</td>' +
@@ -971,6 +1005,11 @@ function renderAgentsTable() {
       ? '<span class="badge badge-admin">👑 Admin</span>'
       : '<span class="badge badge-used">Agent</span>';
 
+    const isBeta = (a.updateChannel === 'BETA' || a.channel === 'BETA' || a.isBetaTester === true);
+    const betaBadge = isBeta
+      ? ' <span class="badge" style="background: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 700; margin-left: 4px;">🧪 BETA</span>'
+      : '';
+
     const isPending = a.role !== 'admin' && a.status === 'PENDING_APPROVAL';
     const isRejected = a.status === 'REJECTED';
     const isSuspended = a.status === 'SUSPENDED';
@@ -989,7 +1028,7 @@ function renderAgentsTable() {
       '<td style="color: var(--text-muted);">' + (a.email || '-') + '</td>' +
       '<td style="color: var(--text-muted);">' + joinDate + '</td>' +
       '<td>' + codeUsed + '</td>' +
-      '<td>' + roleBadge + '</td>' +
+      '<td>' + roleBadge + betaBadge + '</td>' +
       '<td>' + statusBadge + '</td>' +
       '<td style="text-align: right;">' +
         '<div class="action-btn-group">' +

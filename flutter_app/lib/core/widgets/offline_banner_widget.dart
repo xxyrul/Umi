@@ -42,7 +42,6 @@ class OfflineBannerWidget extends ConsumerStatefulWidget {
 }
 
 class _OfflineBannerWidgetState extends ConsumerState<OfflineBannerWidget> {
-  bool _wasOffline = false;
   bool _showRestored = false;
   Timer? _restoredDismissTimer;
 
@@ -54,23 +53,29 @@ class _OfflineBannerWidgetState extends ConsumerState<OfflineBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<bool>>(connectivityStatusProvider, (previous, next) {
+      final prevVal = previous?.value ?? true;
+      final nextVal = next.value ?? true;
+
+      if (!nextVal && prevVal) {
+        setState(() {
+          _showRestored = false;
+        });
+      } else if (nextVal && !prevVal) {
+        setState(() {
+          _showRestored = true;
+        });
+        _restoredDismissTimer?.cancel();
+        _restoredDismissTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _showRestored = false);
+        });
+      }
+    });
+
     final connAsync = ref.watch(connectivityStatusProvider);
     final isBM = ref.watch(languageProvider) == 'BM';
 
     final isOnline = connAsync.value ?? true;
-
-    if (!isOnline && !_wasOffline) {
-      _wasOffline = true;
-      _showRestored = false;
-    } else if (isOnline && _wasOffline) {
-      _wasOffline = false;
-      _showRestored = true;
-      _restoredDismissTimer?.cancel();
-      _restoredDismissTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _showRestored = false);
-      });
-    }
-
     final isOffline = !isOnline;
     final showBanner = isOffline || _showRestored;
 
@@ -82,7 +87,7 @@ class _OfflineBannerWidgetState extends ConsumerState<OfflineBannerWidget> {
         AnimatedPositioned(
           duration: const Duration(milliseconds: 350),
           curve: Curves.easeOutCubic,
-          top: showBanner ? MediaQuery.of(context).padding.top + 4 : -60,
+          top: showBanner ? MediaQuery.paddingOf(context).top + 4 : -60,
           left: 16,
           right: 16,
           child: IgnorePointer(

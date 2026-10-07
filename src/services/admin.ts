@@ -44,6 +44,7 @@ export interface AdminAgent {
   createdAt?: string;
   updatedAt?: string;
   photoURL?: string;
+  updateChannel?: string;
 }
 
 export interface BroadcastPayload {
@@ -53,6 +54,7 @@ export interface BroadcastPayload {
   messageBM: string;
   type?: "GENERAL" | "URGENT" | "LISTING" | "COMMISSION";
   pinned?: boolean;
+  targetChannel?: "ALL" | "BETA";
 }
 
 /**
@@ -103,7 +105,9 @@ export function subscribeToAllAgents(callback: (agents: AdminAgent[]) => void): 
         }
         const agents: AdminAgent[] = [];
         snapshot.forEach((doc) => {
-          const data = doc.data() as AdminAgent;
+          const raw = doc.data() || {};
+          const updateChannel = (raw.updateChannel || raw.channel || "STABLE").toString().toUpperCase();
+          const data = { ...raw, uid: doc.id, updateChannel } as AdminAgent;
           // Only include verified/registered team members (ACTIVE or SUSPENDED or ADMIN)
           if (
             doc.id !== "super_admin_web_portal" &&
@@ -111,7 +115,7 @@ export function subscribeToAllAgents(callback: (agents: AdminAgent[]) => void): 
             data.status !== "REJECTED" &&
             (data.email || data.displayName)
           ) {
-            agents.push({ ...data, uid: doc.id });
+            agents.push(data);
           }
         });
         agents.sort((a, b) => (a.displayName || a.email || "").localeCompare(b.displayName || b.email || ""));
@@ -322,35 +326,41 @@ export async function sendBroadcastAnnouncement(
 ): Promise<{ success: boolean; sentCount?: number }> {
   const now = new Date().toISOString();
   const annId = "ann_" + Date.now();
+  const isBetaOnly = payload.targetChannel === "BETA";
+  const effectiveTitleBM = isBetaOnly ? `[BETA 🧪] ${payload.titleBM}` : payload.titleBM;
+  const effectiveTitleEN = isBetaOnly ? `[BETA 🧪] ${payload.titleEN}` : payload.titleEN;
 
   // 1. Save announcement document in Firestore for noticeboard
   await firebaseDB.collection("announcements").doc(annId).set({
     id: annId,
-    title: payload.titleBM || payload.titleEN,
-    titleEN: payload.titleEN,
-    titleBM: payload.titleBM,
+    title: effectiveTitleBM || effectiveTitleEN,
+    titleEN: effectiveTitleEN,
+    titleBM: effectiveTitleBM,
     content: payload.messageBM || payload.messageEN,
     contentEN: payload.messageEN,
     contentBM: payload.messageBM,
     type: payload.type || "GENERAL",
+    targetChannel: payload.targetChannel || "ALL",
+    targetAudience: payload.targetChannel || "ALL",
     pinned: !!payload.pinned,
     author: adminName,
     createdAt: now,
     timestamp: Date.now(),
   });
 
-  // 2. Trigger high-priority push notifications to all agent devices via Cloud Function
+  // 2. Trigger high-priority push notifications via Cloud Function
   let pushResult = { success: true, sentCount: 0 };
   try {
     const response = await fetch("https://sendbroadcastpush-4511887297806416.asia-southeast1.run.app", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        titleEN: payload.titleEN,
-        titleBM: payload.titleBM,
+        titleEN: effectiveTitleEN,
+        titleBM: effectiveTitleBM,
         messageEN: payload.messageEN,
         messageBM: payload.messageBM,
         type: payload.type || "GENERAL",
+        targetChannel: payload.targetChannel || "ALL",
       }),
     });
     if (response.ok) {

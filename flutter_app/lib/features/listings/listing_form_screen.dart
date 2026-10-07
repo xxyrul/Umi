@@ -11,6 +11,7 @@ import '../../core/l10n/language_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/malaysian_location_detector.dart';
 import '../../core/widgets/app_toast.dart';
+import '../../core/widgets/app_select_field.dart';
 import '../../core/widgets/interactive_back_button.dart';
 import '../../core/widgets/permission_rationale_sheet.dart';
 import 'package:geolocator/geolocator.dart';
@@ -58,12 +59,14 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   Future<void> _captureCurrentGpsLocation(bool isBM) async {
     final hasPerm = await PermissionRationaleSheet.requestLocationPermission(context, isBM);
     if (!hasPerm) return;
+    if (!mounted) return;
 
     setState(() => _isLocatingGps = true);
     try {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 10)),
       );
+      if (!mounted) return;
       setState(() {
         _latitude = pos.latitude;
         _longitude = pos.longitude;
@@ -214,6 +217,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
   Future<void> _pickPhotos() async {
     final picker = ImagePicker();
     final picked = await picker.pickMultiImage(imageQuality: 80);
+    if (!mounted) return;
     if (picked.isNotEmpty) {
       setState(() {
         _newPhotoFiles.addAll(picked);
@@ -385,75 +389,80 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
           ),
         ),
         const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
+        AppSelectField<String>(
+          label: isBM ? 'Jenis Hartanah' : 'Property Type',
           value: propertyTypesMap.any((m) => m['val'] == _propertyType) ? _propertyType : propertyTypesMap.first['val'],
-          dropdownColor: colors.surface,
-          style: TextStyle(color: colors.textPrimary),
-          decoration: _inputDecor(label: isBM ? 'Jenis Hartanah' : 'Property Type', colors: colors),
-          items: propertyTypesMap.map((t) => DropdownMenuItem(
-            value: t['val'],
-            child: Text(isBM ? t['bm']! : t['en']!),
+          colors: colors,
+          items: propertyTypesMap.map((t) => AppSelectItem<String>(
+            value: t['val']!,
+            label: isBM ? t['bm']! : t['en']!,
           )).toList(),
           onChanged: (val) {
-            if (val != null) setState(() => _propertyType = val);
+            setState(() => _propertyType = val);
           },
         ),
         const SizedBox(height: 14),
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
+              child: AppSelectField<String>(
+                label: isBM ? 'Pegangan' : 'Tenure',
                 value: _tenure,
-                dropdownColor: colors.surface,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: _inputDecor(label: isBM ? 'Pegangan' : 'Tenure', colors: colors),
-                items: ['Freehold', 'Leasehold'].map((t) => DropdownMenuItem(
-                  value: t,
-                  child: Text(t),
-                )).toList(),
+                colors: colors,
+                items: const [
+                  AppSelectItem(value: 'Freehold', label: 'Freehold'),
+                  AppSelectItem(value: 'Leasehold', label: 'Leasehold'),
+                ],
                 onChanged: (val) {
-                  if (val != null) setState(() => _tenure = val);
+                  setState(() => _tenure = val);
                 },
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: DropdownButtonFormField<String>(
+              child: AppSelectField<String>(
+                label: isBM ? 'Status Lot' : 'Lot Status',
                 value: _lotStatus,
-                dropdownColor: colors.surface,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: _inputDecor(label: isBM ? 'Status Lot' : 'Lot Status', colors: colors),
+                colors: colors,
                 items: [
-                  {'val': 'Bumi Lot', 'label': 'Bumi Lot'},
-                  {'val': 'Non-Bumi Lot', 'label': 'Non-Bumi Lot'},
-                  {'val': 'Malay Reserved', 'label': isBM ? 'Rizab Melayu' : 'Malay Reserved'},
-                ].map((l) => DropdownMenuItem(
-                  value: l['val'],
-                  child: Text(l['label']!),
-                )).toList(),
+                  const AppSelectItem(value: 'Bumi Lot', label: 'Bumi Lot'),
+                  const AppSelectItem(value: 'Non-Bumi Lot', label: 'Non-Bumi Lot'),
+                  AppSelectItem(value: 'Malay Reserved', label: isBM ? 'Rizab Melayu' : 'Malay Reserved'),
+                ],
                 onChanged: (val) {
-                  if (val != null) setState(() => _lotStatus = val);
+                  setState(() => _lotStatus = val);
                 },
               ),
             ),
           ],
         ),
         const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
+        AppSelectField<String>(
+          label: isBM ? 'Status Listing' : 'Listing Status',
           value: _status,
-          dropdownColor: colors.surface,
-          style: TextStyle(color: colors.textPrimary),
-          decoration: _inputDecor(label: isBM ? 'Status Listing' : 'Listing Status', colors: colors),
+          colors: colors,
           items: [
-            {'val': 'Aktif', 'label': isBM ? 'Aktif' : 'Active'},
-            {'val': 'Booking', 'label': 'Booking'},
-            {'val': 'Draft', 'label': 'Draft'},
-          ].map((s) => DropdownMenuItem(
-            value: s['val'],
-            child: Text(s['label']!),
-          )).toList(),
+            AppSelectItem(
+              value: 'Aktif',
+              label: isBM ? 'Aktif' : 'Active',
+              icon: Icons.check_circle_outline,
+              iconColor: colors.success,
+            ),
+            AppSelectItem(
+              value: 'Booking',
+              label: 'Booking',
+              icon: Icons.bookmark_border,
+              iconColor: colors.info,
+            ),
+            AppSelectItem(
+              value: 'Draft',
+              label: 'Draft',
+              icon: Icons.edit_note_outlined,
+              iconColor: colors.warning,
+            ),
+          ],
           onChanged: (val) {
-            if (val != null) setState(() => _status = val);
+            setState(() => _status = val);
           },
         ),
       ],
@@ -464,14 +473,18 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<String>(
+        AppSelectField<String>(
+          label: isBM ? 'Negeri / Wilayah *' : 'State / Territory *',
           value: _state,
-          dropdownColor: colors.surface,
-          style: TextStyle(color: colors.textPrimary),
-          decoration: _inputDecor(label: isBM ? 'Negeri / Wilayah *' : 'State / Territory *', colors: colors),
-          items: malaysianStates.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+          colors: colors,
+          showSearch: true,
+          searchHint: isBM ? 'Cari negeri / wilayah...' : 'Search state / territory...',
+          items: malaysianStates.map((s) => AppSelectItem<String>(
+            value: s,
+            label: s,
+          )).toList(),
           onChanged: (val) {
-            if (val != null) setState(() => _state = val);
+            setState(() => _state = val);
           },
         ),
         const SizedBox(height: 14),
@@ -781,7 +794,6 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
     final isEdit = widget.editListingId != null;
     final isBM = ref.watch(languageProvider) == 'BM';
     final colors = context.colors;
-    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 80;
 
     if (_isInitLoading) {
       return Scaffold(
@@ -809,46 +821,50 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       body: Column(
         children: [
           // 3-Step Wizard Indicator
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            color: colors.card,
-            child: Row(
-              children: [
-                _buildStepHeader(0, isBM ? '1. Asas' : '1. Basic', colors),
-                _buildStepDivider(0),
-                _buildStepHeader(1, isBM ? '2. Spesifikasi' : '2. Specs', colors),
-                _buildStepDivider(1),
-                _buildStepHeader(2, isBM ? '3. Media & Nota' : '3. Media', colors),
-              ],
+          RepaintBoundary(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              color: colors.card,
+              child: Row(
+                children: [
+                  _buildStepHeader(0, isBM ? '1. Asas' : '1. Basic', colors),
+                  _buildStepDivider(0),
+                  _buildStepHeader(1, isBM ? '2. Spesifikasi' : '2. Specs', colors),
+                  _buildStepDivider(1),
+                  _buildStepHeader(2, isBM ? '3. Media & Nota' : '3. Media', colors),
+                ],
+              ),
             ),
           ),
 
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
-              physics: const BouncingScrollPhysics(),
-              child: _currentStep == 0
-                  ? _buildStep1BasicInfo(isBM, colors)
-                  : _currentStep == 1
-                      ? _buildStep2LocationSpecs(isBM, colors)
-                      : _buildStep3MediaDesc(isBM, colors),
+              physics: const ClampingScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: RepaintBoundary(
+                child: _currentStep == 0
+                    ? _buildStep1BasicInfo(isBM, colors)
+                    : _currentStep == 1
+                        ? _buildStep2LocationSpecs(isBM, colors)
+                        : _buildStep3MediaDesc(isBM, colors),
+              ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: isKeyboardOpen
-          ? null
-          : Container(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                12,
-                16,
-                12 + MediaQuery.of(context).padding.bottom,
-              ),
-              decoration: BoxDecoration(
-                color: colors.card,
-                border: Border(top: BorderSide(color: colors.border)),
-              ),
+      bottomNavigationBar: RepaintBoundary(
+        child: Container(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            10,
+            16,
+            10 + context.systemNavBottom,
+          ),
+          decoration: BoxDecoration(
+            color: colors.card,
+            border: Border(top: BorderSide(color: colors.border)),
+          ),
               child: Row(
                 children: [
                   if (_currentStep > 0)
@@ -898,6 +914,7 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
                 ],
               ),
             ),
+          ),
     );
   }
 

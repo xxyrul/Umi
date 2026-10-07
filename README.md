@@ -1,7 +1,6 @@
 # 🏢 Artha (Umi) — Real Estate CaseFlow & Master Listing CRM
 
-[![Version](https://img.shields.io/badge/version-1.6.1%20(Build%2059)-E11D48.svg)](https://artharen.web.app)
-[![Vibecoded](https://img.shields.io/badge/built%20with-vibecoding%20⚡-8B5CF6.svg)](#)
+[![Version](https://img.shields.io/badge/version-2.0.0%20(Build%2060)-E11D48.svg)](https://artharen.web.app)
 [![Android](https://img.shields.io/badge/Platform-Android%208.0+-3DDC84.svg)](https://artharen.web.app/releases/artha-latest.apk)
 [![Hosting](https://img.shields.io/badge/Firebase%20Hosting-artharen.web.app-FFCA28.svg)](https://artharen.web.app)
 [![React Native](https://img.shields.io/badge/React%20Native-0.76-61DAFB.svg)](https://reactnative.dev/)
@@ -80,9 +79,3 @@ npm run deploy:release
 # Dispatch high-priority push notifications to outdated devices
 npm run notify:release -- --force
 ```
-
----
-
-## 💖 Credits
-
-Vibecoded with love by **Arul** ✨

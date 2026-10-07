@@ -1,9 +1,73 @@
 import 'dart:io';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+enum UpdateChannel {
+  stable,
+  beta,
+}
+
+const String _kUpdateChannelKey = '@update_channel_preference';
+
+class UpdateChannelNotifier extends StateNotifier<UpdateChannel> {
+  UpdateChannelNotifier() : super(UpdateChannel.stable) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_kUpdateChannelKey);
+      if (saved == 'beta') {
+        state = UpdateChannel.beta;
+        FirebaseMessaging.instance.subscribeToTopic('beta_testers').catchError((_) {});
+      } else {
+        state = UpdateChannel.stable;
+        FirebaseMessaging.instance.unsubscribeFromTopic('beta_testers').catchError((_) {});
+      }
+    } catch (_) {}
+  }
+
+  Future<void> setChannel(UpdateChannel channel) async {
+    state = channel;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kUpdateChannelKey, channel == UpdateChannel.beta ? 'beta' : 'stable');
+
+      // Sync FCM topic subscription for beta-exclusive notifications
+      if (channel == UpdateChannel.beta) {
+        await FirebaseMessaging.instance.subscribeToTopic('beta_testers');
+      } else {
+        await FirebaseMessaging.instance.unsubscribeFromTopic('beta_testers');
+      }
+
+      // Sync user profile in Firestore for Admin Hub & Web Admin visibility
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null) {
+        await FirebaseFirestore.instance.collection('users').doc(currentUser.uid).set({
+          'updateChannel': channel == UpdateChannel.beta ? 'BETA' : 'STABLE',
+          'channel': channel == UpdateChannel.beta ? 'BETA' : 'STABLE',
+          'channelUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)).catchError((_) {});
+      }
+    } catch (_) {}
+  }
+}
+
+final updateChannelProvider =
+    StateNotifierProvider<UpdateChannelNotifier, UpdateChannel>((ref) {
+  return UpdateChannelNotifier();
+});
 
 class ReleaseManifest {
   final String versionName;
@@ -15,6 +79,7 @@ class ReleaseManifest {
   final bool forceUpdate;
   final int minimumVersionCode;
   final String minimumVersionName;
+  final String channel; // 'stable' or 'beta'
 
   ReleaseManifest({
     required this.versionName,
@@ -26,12 +91,16 @@ class ReleaseManifest {
     this.forceUpdate = false,
     this.minimumVersionCode = 0,
     this.minimumVersionName = '',
+    this.channel = 'stable',
   });
 
   factory ReleaseManifest.fromJson(Map<String, dynamic> json) {
     final List<String> notes = (json['releaseNotes'] is List)
         ? (json['releaseNotes'] as List).map((e) => e.toString()).toList()
         : (json['releaseNotes'] != null ? [json['releaseNotes'].toString()] : const <String>[]);
+
+    final rawChannel = json['channel']?.toString().toLowerCase() ??
+        (json['versionName']?.toString().toLowerCase().contains('beta') == true ? 'beta' : 'stable');
 
     return ReleaseManifest(
       versionName: json['versionName'] ?? '1.0.0',
@@ -45,8 +114,11 @@ class ReleaseManifest {
           ? json['minimumVersionCode'] as int
           : 0,
       minimumVersionName: json['minimumVersionName']?.toString() ?? '',
+      channel: rawChannel,
     );
   }
+
+  bool get isBeta => channel.toLowerCase() == 'beta' || versionName.toLowerCase().contains('beta');
 
   bool get hasDownloadUrl => downloadUrl.trim().isNotEmpty;
 
@@ -61,7 +133,8 @@ class ReleaseManifest {
 }
 
 class ApkUpdaterService {
-  static const String manifestUrl = 'https://artharen.web.app/releases/latest.json';
+  static const String stableManifestUrl = 'https://artharen.web.app/releases/latest.json';
+  static const String betaManifestUrl = 'https://artharen.web.app/releases/beta.json';
   static const String historyUrl = 'https://artharen.web.app/releases/history.json';
   static const List<String> trustedHosts = ['artharen.web.app', 'umiren-d6a66.web.app'];
   static const int currentBuildCode = 60; // Flutter v2.0.0 build code
@@ -73,6 +146,10 @@ class ApkUpdaterService {
     headers: {'Cache-Control': 'no-cache'},
   ));
   CancelToken? _cancelToken;
+
+  String getManifestUrl(UpdateChannel channel) {
+    return channel == UpdateChannel.beta ? betaManifestUrl : stableManifestUrl;
+  }
 
   int _versionStringToCode(String version) {
     final cleaned = version.replaceAll(RegExp(r'[^0-9.]'), '');
@@ -101,17 +178,18 @@ class ApkUpdaterService {
     return false;
   }
 
-  Future<ReleaseManifest?> checkForUpdate() async {
+  Future<ReleaseManifest?> checkForUpdate({UpdateChannel channel = UpdateChannel.stable}) async {
     if (kIsWeb || !Platform.isAndroid) return null;
 
     try {
-      final response = await _dio.get(manifestUrl);
+      final targetUrl = getManifestUrl(channel);
+      final response = await _dio.get(targetUrl);
 
       if (response.statusCode == 200 && response.data is Map<String, dynamic>) {
         final manifest = ReleaseManifest.fromJson(response.data);
 
         if (!manifest.isInstallable) {
-          debugPrint('[ApkUpdater] Invalid manifest payload or unsafe download URL');
+          debugPrint('[ApkUpdater] Invalid manifest payload or unsafe download URL: $targetUrl');
           return null;
         }
 
@@ -120,21 +198,25 @@ class ApkUpdaterService {
         }
       }
     } catch (e) {
-      debugPrint('[ApkUpdater] Check update error: $e');
+      debugPrint('[ApkUpdater] Check update error for channel $channel: $e');
     }
     return null;
   }
 
-  Future<List<ReleaseManifest>> fetchReleaseHistory() async {
+  Future<List<ReleaseManifest>> fetchReleaseHistory({UpdateChannel channel = UpdateChannel.stable}) async {
     try {
       final response = await _dio.get(
         historyUrl,
         options: Options(headers: {'Cache-Control': 'no-cache'}),
       );
       if (response.statusCode == 200 && response.data is List) {
-        return (response.data as List)
+        final all = (response.data as List)
             .map((item) => ReleaseManifest.fromJson(item as Map<String, dynamic>))
             .toList();
+        if (channel == UpdateChannel.stable) {
+          return all.where((r) => !r.isBeta).toList();
+        }
+        return all;
       }
     } catch (e) {
       debugPrint('[ApkUpdater] Fetch history error: $e');
@@ -146,12 +228,13 @@ class ApkUpdaterService {
         versionCode: 60,
         downloadUrl: '',
         fileSizeBytes: 0,
-        releaseDate: 'Sep 2026',
+        releaseDate: 'Okt 2026',
+        channel: 'stable',
         releaseNotes: [
-          'Migrasi penuh ke Flutter dengan prestasi ultra pantas',
+          'Migrasi penuh ke Flutter dengan prestasi ultra pantas 120Hz',
           'Enjin tema dwi-mod Cerah & Gelap dengan kontras lembut',
-          'Penyegerakan gambar profil Google Account',
-          'Pusat Admin 5-tab penuh & pengurusan ejen',
+          'Suite Kalkulator Hartanah & DSR dipertingkatkan',
+          'Sistem Meja Maklum Balas pemaju & Pusat Admin',
         ],
       ),
       ReleaseManifest(
@@ -159,7 +242,8 @@ class ApkUpdaterService {
         versionCode: 58,
         downloadUrl: '',
         fileSizeBytes: 0,
-        releaseDate: 'Aug 2026',
+        releaseDate: 'Sep 2026',
+        channel: 'stable',
         releaseNotes: [
           'Sistem tapisan status kes diperkemaskan',
           'Bilik kebal dokumen muat naik pantas',
@@ -203,7 +287,30 @@ class ApkUpdaterService {
     _cancelToken = null;
   }
 
-  Future<void> downloadAndInstall({
+  Future<String?> getDownloadedApkPath(ReleaseManifest release) async {
+    try {
+      final safeVersion = release.versionName.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
+      final fileName = 'artha_${safeVersion}_${release.channel}_${release.versionCode}.apk';
+
+      final candidates = <String>[
+        '/storage/emulated/0/Download/$fileName',
+        '${(await getTemporaryDirectory()).path}/$fileName',
+      ];
+
+      for (final p in candidates) {
+        final f = File(p);
+        if (await f.exists() && (await f.length()) > 1000000) {
+          final headerBytes = await f.openRead(0, 4).first;
+          if (headerBytes.length >= 2 && headerBytes[0] == 0x50 && headerBytes[1] == 0x4B) {
+            return p;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<String> downloadApkFile({
     required ReleaseManifest release,
     required void Function(double progress, int received, int total) onProgress,
   }) async {
@@ -211,36 +318,133 @@ class ApkUpdaterService {
       throw StateError('This release is not installable. Invalid or unsafe APK URL.');
     }
 
-    final tempDir = await getTemporaryDirectory();
+    String saveDir = (await getTemporaryDirectory()).path;
+    try {
+      final pubDownloads = Directory('/storage/emulated/0/Download');
+      if (pubDownloads.existsSync()) {
+        saveDir = pubDownloads.path;
+      }
+    } catch (_) {}
+
     final safeVersion = release.versionName.replaceAll(RegExp(r'[^a-zA-Z0-9_.-]'), '_');
-    final savePath = '${tempDir.path}/artha_${safeVersion}_${release.versionCode}.apk';
+    final savePath = '$saveDir/artha_${safeVersion}_${release.channel}_${release.versionCode}.apk';
     final outputFile = File(savePath);
 
-    if (await outputFile.exists()) {
-      await outputFile.delete();
-    }
+    try {
+      if (await outputFile.exists()) {
+        await outputFile.delete();
+      }
+    } catch (_) {}
 
-    _cancelToken = CancelToken();
-
-    await _dio.download(
+    final candidateUrls = <String>[
       release.downloadUrl,
-      savePath,
-      cancelToken: _cancelToken,
-      onReceiveProgress: (received, total) {
-        if (total > 0) {
-          final progress = received / total;
-          if (progress < 0.0 || progress > 1.0) return;
-          onProgress(progress, received, total);
-        }
-      },
-    );
+      if (release.downloadUrl.contains('artharen.web.app'))
+        release.downloadUrl.replaceAll('artharen.web.app', 'umiren-d6a66.web.app'),
+      'https://umiren-d6a66.web.app/releases/artha.apk',
+      'https://umiren-d6a66.web.app/releases/artha-latest.apk',
+    ];
 
-    final downloadedFile = File(savePath);
-    if (!await downloadedFile.exists() || (await downloadedFile.length()) <= 0) {
-      throw StateError('APK download did not complete successfully.');
+    String? lastError;
+    for (final url in candidateUrls) {
+      try {
+        _cancelToken = CancelToken();
+        await _dio.download(
+          url,
+          savePath,
+          cancelToken: _cancelToken,
+          onReceiveProgress: (received, total) {
+            if (total > 0) {
+              final progress = received / total;
+              if (progress < 0.0 || progress > 1.0) return;
+              onProgress(progress, received, total);
+            }
+          },
+        );
+
+        final downloadedFile = File(savePath);
+        if (await downloadedFile.exists() && (await downloadedFile.length()) > 1000000) {
+          // Verify zip magic bytes: PK (0x50, 0x4B)
+          final headerBytes = await downloadedFile.openRead(0, 4).first;
+          if (headerBytes.length >= 2 && headerBytes[0] == 0x50 && headerBytes[1] == 0x4B) {
+            return savePath; // Valid APK binary found!
+          }
+        }
+        // If not a valid APK binary, delete and try next candidate
+        try {
+          if (await downloadedFile.exists()) await downloadedFile.delete();
+        } catch (_) {}
+      } catch (e) {
+        lastError = e.toString();
+        try {
+          final f = File(savePath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
     }
 
+    throw StateError(
+      lastError ?? 'The server returned an invalid file. Please use the Web Download Portal to download directly.',
+    );
+  }
+
+  Future<void> downloadAndInstall({
+    required ReleaseManifest release,
+    required void Function(double progress, int received, int total) onProgress,
+  }) async {
+    final savePath = await downloadApkFile(release: release, onProgress: onProgress);
     await OpenFilex.open(savePath, type: 'application/vnd.android.package-archive');
+  }
+
+  Future<void> openWebPortal() async {
+    final uri = Uri.parse('https://artharen.web.app/');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> openAppSettings() async {
+    try {
+      final intent = AndroidIntent(
+        action: 'android.settings.APPLICATION_DETAILS_SETTINGS',
+        data: 'package:com.umi.caseflow',
+        flags: const [Flag.FLAG_ACTIVITY_NEW_TASK],
+      );
+      await intent.launch();
+    } catch (_) {
+      try {
+        final fallback = AndroidIntent(
+          action: 'android.intent.action.DELETE',
+          data: 'package:com.umi.caseflow',
+          flags: const [Flag.FLAG_ACTIVITY_NEW_TASK],
+        );
+        await fallback.launch();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> openDownloadsFolder({String? fallbackFilePath}) async {
+    try {
+      final intent = const AndroidIntent(
+        action: 'android.intent.action.VIEW_DOWNLOADS',
+        flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+      );
+      await intent.launch();
+    } catch (_) {
+      try {
+        final fallback = const AndroidIntent(
+          action: 'android.intent.action.VIEW',
+          data: 'content://downloads/my_downloads',
+          flags: [Flag.FLAG_ACTIVITY_NEW_TASK],
+        );
+        await fallback.launch();
+      } catch (_) {
+        if (fallbackFilePath != null) {
+          try {
+            await OpenFilex.open(fallbackFilePath);
+          } catch (_) {}
+        }
+      }
+    }
   }
 }
 

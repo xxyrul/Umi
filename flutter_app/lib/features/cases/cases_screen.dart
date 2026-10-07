@@ -168,9 +168,8 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
     final isBM = ref.watch(languageProvider) == 'BM';
     final colors = context.colors;
 
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = context.systemNavBottom;
     final floatingBarBottom = bottomInset > 0 ? bottomInset + 8.0 : 20.0;
-    final fabBottom = floatingBarBottom + 58.0 + 12.0;
     final scrollBottom = floatingBarBottom + 58.0 + 44.0;
 
     return Scaffold(
@@ -380,14 +379,11 @@ class _CasesScreenState extends ConsumerState<CasesScreen> {
         ),
       ),
       floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: fabBottom),
-        child: Transform.translate(
-          offset: const Offset(0, 64),
-          child: InteractiveBounceFab(
-            onPressed: () => context.push('/case/form'),
-            backgroundColor: colors.maroonPrimary,
-            icon: const Icon(Icons.add, size: 28),
-          ),
+        padding: const EdgeInsets.only(bottom: 68.0),
+        child: InteractiveBounceFab(
+          onPressed: () => context.push('/case/form'),
+          backgroundColor: colors.maroonPrimary,
+          icon: const Icon(Icons.add, size: 28),
         ),
       ),
     );

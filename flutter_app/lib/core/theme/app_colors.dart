@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 class AppColors {
@@ -174,3 +175,19 @@ class AppThemeColors {
 extension ThemeContextExtension on BuildContext {
   AppThemeColors get colors => AppThemeColors.of(this);
 }
+
+extension SystemNavInsets on BuildContext {
+  /// Returns the true physical height of the Android/iOS system navigation bar
+  /// (3-button bar: 48-56dp, gesture bar: ~20-24dp, desktop/web: 0dp).
+  /// Combines viewPaddingOf and paddingOf to remain bulletproof against edge-to-edge.
+  double get systemNavBottom => math.max(
+    MediaQuery.viewPaddingOf(this).bottom,
+    MediaQuery.paddingOf(this).bottom,
+  );
+
+  /// Safe bottom padding for modal sheets, dialogs, and bottom bars.
+  /// Guarantees a minimum clearance plus the system navigation bar height.
+  double safeBottomPadding([double extra = 16.0]) =>
+    math.max(systemNavBottom, 16.0) + extra;
+}
+

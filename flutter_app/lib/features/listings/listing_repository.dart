@@ -5,6 +5,9 @@ import '../auth/auth_service.dart';
 import 'listing_model.dart';
 
 final listingsStreamProvider = StreamProvider<List<ListingModel>>((ref) {
+  final user = ref.watch(authStateProvider).value;
+  if (user == null) return Stream.value([]);
+
   final firestore = ref.watch(firestoreProvider);
   return firestore
       .collection('publicListings')

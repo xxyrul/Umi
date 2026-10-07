@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/constants/admin_emails.dart';
 import '../auth/auth_service.dart';
 
 class AdminAgentModel {
@@ -11,7 +12,12 @@ class AdminAgentModel {
   final String phoneNumber;
   final String role;
   final String status; // 'ACTIVE', 'PENDING_APPROVAL', 'SUSPENDED', 'REJECTED'
+  final String rejectionReason;
+  final DateTime? rejectedAt;
   final DateTime? createdAt;
+
+  final String deviceLabel;
+  final String updateChannel;
 
   AdminAgentModel({
     required this.uid,
@@ -20,29 +26,51 @@ class AdminAgentModel {
     this.phoneNumber = '',
     this.role = 'AGENT',
     this.status = 'ACTIVE',
+    this.rejectionReason = '',
+    this.rejectedAt,
     this.createdAt,
+    this.deviceLabel = '',
+    this.updateChannel = 'STABLE',
   });
 
   bool get isAdmin => role.toUpperCase() == 'ADMIN';
   bool get isSuspended => status.toUpperCase() == 'SUSPENDED';
-  bool get isPending => status.toUpperCase() == 'PENDING_APPROVAL';
-  bool get isActive => status.toUpperCase() == 'ACTIVE';
+  bool get isPending => status.toUpperCase() == 'PENDING_APPROVAL' && !isRejected;
+  bool get isRejected => status.toUpperCase() == 'REJECTED' || rejectionReason.isNotEmpty;
+  bool get isActive => status.toUpperCase() == 'ACTIVE' && !isRejected && !isSuspended;
+  bool get isBetaTester => updateChannel.toUpperCase() == 'BETA';
 
   factory AdminAgentModel.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? {};
     final rawApproved = data['approved'];
     final bool isApproved = rawApproved == true;
     final rawStatus = data['status']?.toString().toUpperCase();
+    final reason = data['rejectionReason']?.toString() ?? '';
 
     String status = 'ACTIVE';
-    if (rawStatus == 'PENDING_APPROVAL' || rawStatus == 'PENDING') {
+    if (rawStatus == 'REJECTED' || reason.isNotEmpty) {
+      status = 'REJECTED';
+    } else if (rawStatus == 'PENDING_APPROVAL' || rawStatus == 'PENDING') {
       status = isApproved ? 'ACTIVE' : 'PENDING_APPROVAL';
-    } else if (rawStatus == 'SUSPENDED' || rawStatus == 'REJECTED') {
-      status = rawStatus!;
+    } else if (rawStatus == 'SUSPENDED') {
+      status = 'SUSPENDED';
     } else if (rawStatus == 'ACTIVE' || isApproved) {
       status = 'ACTIVE';
     } else if (rawApproved == false) {
       status = 'PENDING_APPROVAL';
+    }
+
+    DateTime? rejDt;
+    if (data['rejectedAt'] is Timestamp) {
+      rejDt = (data['rejectedAt'] as Timestamp).toDate();
+    } else if (data['rejectedAt'] is String) {
+      rejDt = DateTime.tryParse(data['rejectedAt']);
+    }
+
+    String devLabel = '';
+    if (data['lastDevice'] is Map) {
+      final dev = data['lastDevice'] as Map;
+      devLabel = (dev['deviceLabel'] ?? dev['deviceModel'] ?? '').toString();
     }
 
     return AdminAgentModel(
@@ -52,9 +80,13 @@ class AdminAgentModel {
       phoneNumber: data['phoneNumber'] ?? data['phone'] ?? '',
       role: (data['role'] ?? 'AGENT').toString().toUpperCase(),
       status: status,
+      rejectionReason: data['rejectionReason'] ?? '',
+      rejectedAt: rejDt,
       createdAt: (data['createdAt'] is Timestamp)
           ? (data['createdAt'] as Timestamp).toDate()
-          : null,
+          : (data['createdAt'] is String ? DateTime.tryParse(data['createdAt']) : null),
+      deviceLabel: devLabel,
+      updateChannel: (data['updateChannel'] ?? data['channel'] ?? 'STABLE').toString().toUpperCase(),
     );
   }
 }
@@ -171,27 +203,51 @@ class AdminFeedbackModel {
 }
 
 // ---------------- STREAMS ----------------
+// IMPORTANT: All admin stream providers MUST watch authStateProvider.
+// This ensures streams are rebuilt with fresh credentials on every account switch,
+// preventing PERMISSION_DENIED from stale auth tokens.
 
 final pendingAgentsStreamProvider = StreamProvider<List<AdminAgentModel>>((ref) {
+  // Watching authStateProvider forces rebuild when user signs in/out
+  final authUser = ref.watch(authStateProvider).value;
+  if (authUser == null) return const Stream.empty();
+
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('users').snapshots().map((snap) {
     return snap.docs
         .map((d) => AdminAgentModel.fromFirestore(d))
         .where((a) =>
-            a.role != 'ADMIN' &&
-            a.status == 'PENDING_APPROVAL' &&
-            (a.email.isNotEmpty || (a.displayName.isNotEmpty && a.displayName != 'Agent')))
+            (a.status == 'PENDING_APPROVAL' || a.status == 'PENDING') &&
+            !isMasterAdminEmail(a.email) &&
+            (a.email.isNotEmpty || a.displayName.isNotEmpty))
+        .toList();
+  });
+});
+
+final rejectedAgentsStreamProvider = StreamProvider<List<AdminAgentModel>>((ref) {
+  final authUser = ref.watch(authStateProvider).value;
+  if (authUser == null) return const Stream.empty();
+
+  final firestore = ref.watch(firestoreProvider);
+  return firestore.collection('users').snapshots().map((snap) {
+    return snap.docs
+        .map((d) => AdminAgentModel.fromFirestore(d))
+        .where((a) => a.isRejected && !isMasterAdminEmail(a.email))
         .toList();
   });
 });
 
 final allAgentsStreamProvider = StreamProvider<List<AdminAgentModel>>((ref) {
+  final authUser = ref.watch(authStateProvider).value;
+  if (authUser == null) return const Stream.empty();
+
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('users').snapshots().map((snap) {
     final agents = snap.docs
         .map((d) => AdminAgentModel.fromFirestore(d))
         .where((a) =>
             a.status != 'PENDING_APPROVAL' &&
+            a.status != 'PENDING' &&
             a.status != 'REJECTED' &&
             (a.email.isNotEmpty || (a.displayName.isNotEmpty && a.displayName != 'Agent')))
         .toList();
@@ -201,6 +257,9 @@ final allAgentsStreamProvider = StreamProvider<List<AdminAgentModel>>((ref) {
 });
 
 final inviteCodesStreamProvider = StreamProvider<List<InviteCodeModel>>((ref) {
+  final authUser = ref.watch(authStateProvider).value;
+  if (authUser == null) return const Stream.empty();
+
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('invite_codes').snapshots().map((snap) {
     final list = snap.docs.map((d) => InviteCodeModel.fromFirestore(d)).toList();
@@ -211,6 +270,9 @@ final inviteCodesStreamProvider = StreamProvider<List<InviteCodeModel>>((ref) {
 });
 
 final adminFeedbackStreamProvider = StreamProvider<List<AdminFeedbackModel>>((ref) {
+  final authUser = ref.watch(authStateProvider).value;
+  if (authUser == null) return const Stream.empty();
+
   final firestore = ref.watch(firestoreProvider);
   return firestore.collection('feedback').snapshots().map((snap) {
     final list = snap.docs.map((d) => AdminFeedbackModel.fromFirestore(d)).toList();
@@ -227,36 +289,121 @@ class AdminService {
 
   // Agent Approvals & Management
   Future<void> approveAgent(String uid) async {
-    await _firestore.collection('users').doc(uid).update({
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final email = doc.data()?['email']?.toString().trim().toLowerCase() ?? '';
+    final displayName = doc.data()?['displayName']?.toString() ?? 'Ejen';
+    final updateData = {
       'status': 'ACTIVE',
       'role': 'agent',
       'approved': true,
       'approvedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    await _firestore.collection('users').doc(uid).update(updateData);
+    if (email.isNotEmpty) {
+      final duplicates = await _firestore.collection('users').where('email', isEqualTo: email).get();
+      for (final d in duplicates.docs) {
+        if (d.id != uid) {
+          await d.reference.update(updateData).catchError((_) {});
+        }
+      }
+    }
+
+    // Dispatch instant approval push notification to the approved agent's device
+    try {
+      final dio = Dio();
+      await dio.post(
+        'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
+        data: {
+          'targetUid': uid,
+          'kind': 'account-approved',
+          'titleEN': 'Account Approved! 🎉',
+          'titleBM': 'Akaun Anda Telah Diluluskan! 🎉',
+          'messageEN': 'Congratulations $displayName! Your Umi account is now active. Open the app to start managing your cases.',
+          'messageBM': 'Tahniah $displayName! Akaun Umi anda kini aktif. Buka aplikasi untuk mula menguruskan kes anda.',
+          'type': 'APPROVAL',
+        },
+        options: Options(headers: {'Content-Type': 'application/json'}),
+      );
+    } catch (_) {}
   }
 
   Future<void> rejectAgent(String uid, {String reason = ''}) async {
-    await _firestore.collection('users').doc(uid).update({
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final email = doc.data()?['email']?.toString().trim().toLowerCase() ?? '';
+    final updateData = {
       'status': 'REJECTED',
-      'rejectionReason': reason,
+      'approved': false,
+      'rejectionReason': reason.isEmpty ? 'Permohonan ditolak oleh pentadbir.' : reason,
       'rejectedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    await _firestore.collection('users').doc(uid).update(updateData);
+    if (email.isNotEmpty) {
+      final duplicates = await _firestore.collection('users').where('email', isEqualTo: email).get();
+      for (final d in duplicates.docs) {
+        if (d.id != uid) {
+          await d.reference.update(updateData).catchError((_) {});
+        }
+      }
+    }
+  }
+
+  Future<void> resetAgentPending(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final email = doc.data()?['email']?.toString().trim().toLowerCase() ?? '';
+    final updateData = {
+      'status': 'PENDING_APPROVAL',
+      'approved': false,
+      'rejectionReason': FieldValue.delete(),
+      'rejectedAt': FieldValue.delete(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    await _firestore.collection('users').doc(uid).update(updateData);
+    if (email.isNotEmpty) {
+      final duplicates = await _firestore.collection('users').where('email', isEqualTo: email).get();
+      for (final d in duplicates.docs) {
+        if (d.id != uid) {
+          await d.reference.update(updateData).catchError((_) {});
+        }
+      }
+    }
   }
 
   Future<void> suspendAgent(String uid, {String reason = ''}) async {
-    await _firestore.collection('users').doc(uid).update({
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final email = doc.data()?['email']?.toString().trim().toLowerCase() ?? '';
+    final updateData = {
       'status': 'SUSPENDED',
       'suspendedReason': reason,
       'suspendedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    await _firestore.collection('users').doc(uid).update(updateData);
+    if (email.isNotEmpty) {
+      final duplicates = await _firestore.collection('users').where('email', isEqualTo: email).get();
+      for (final d in duplicates.docs) {
+        if (d.id != uid) {
+          await d.reference.update(updateData).catchError((_) {});
+        }
+      }
+    }
   }
 
   Future<void> activateAgent(String uid) async {
-    await _firestore.collection('users').doc(uid).update({
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final email = doc.data()?['email']?.toString().trim().toLowerCase() ?? '';
+    final updateData = {
       'status': 'ACTIVE',
       'approved': true,
       'activatedAt': FieldValue.serverTimestamp(),
-    });
+    };
+    await _firestore.collection('users').doc(uid).update(updateData);
+    if (email.isNotEmpty) {
+      final duplicates = await _firestore.collection('users').where('email', isEqualTo: email).get();
+      for (final d in duplicates.docs) {
+        if (d.id != uid) {
+          await d.reference.update(updateData).catchError((_) {});
+        }
+      }
+    }
   }
 
   Future<void> updateAgentRole(String uid, String role) async {
@@ -267,7 +414,17 @@ class AdminService {
   }
 
   Future<void> deleteAgent(String uid) async {
+    final doc = await _firestore.collection('users').doc(uid).get();
+    final email = doc.data()?['email']?.toString().trim().toLowerCase() ?? '';
     await _firestore.collection('users').doc(uid).delete();
+    if (email.isNotEmpty) {
+      final duplicates = await _firestore.collection('users').where('email', isEqualTo: email).get();
+      for (final d in duplicates.docs) {
+        if (d.id != uid) {
+          await d.reference.delete().catchError((_) {});
+        }
+      }
+    }
   }
 
   // Invite Codes Management
@@ -359,15 +516,19 @@ class AdminService {
     String type = 'GENERAL',
     bool pinned = false,
     String sentBy = 'Pentadbir Agensi',
+    String targetChannel = 'ALL', // 'ALL' or 'BETA'
   }) async {
     final nowIso = DateTime.now().toIso8601String();
     final annId = 'ann_${DateTime.now().millisecondsSinceEpoch}';
 
+    final effectiveTitleBM = targetChannel == 'BETA' ? '[BETA 🧪] $titleBM' : titleBM;
+    final effectiveTitleEN = targetChannel == 'BETA' ? '[BETA 🧪] $titleEN' : titleEN;
+
     final data = {
       'id': annId,
-      'title': titleBM.isNotEmpty ? titleBM : titleEN,
-      'titleEN': titleEN,
-      'titleBM': titleBM,
+      'title': effectiveTitleBM.isNotEmpty ? effectiveTitleBM : effectiveTitleEN,
+      'titleEN': effectiveTitleEN,
+      'titleBM': effectiveTitleBM,
       'content': messageBM.isNotEmpty ? messageBM : messageEN,
       'contentEN': messageEN,
       'contentBM': messageBM,
@@ -375,6 +536,8 @@ class AdminService {
       'messageEN': messageEN,
       'messageBM': messageBM,
       'type': type,
+      'targetChannel': targetChannel,
+      'targetAudience': targetChannel,
       'pinned': pinned,
       'author': sentBy,
       'sentBy': sentBy,
@@ -388,13 +551,14 @@ class AdminService {
     try {
       final dio = Dio();
       await dio.post(
-        'https://sendbroadcastpush-4511887297806416.asia-southeast1.run.app',
+        'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
         data: {
-          'titleEN': titleEN,
-          'titleBM': titleBM,
+          'titleEN': effectiveTitleEN,
+          'titleBM': effectiveTitleBM,
           'messageEN': messageEN,
           'messageBM': messageBM,
           'type': type,
+          'targetChannel': targetChannel,
         },
         options: Options(headers: {'Content-Type': 'application/json'}),
       );
@@ -429,6 +593,31 @@ class AdminService {
       data['adminResponse'] = adminResponse.trim();
     }
     await _firestore.collection('feedback').doc(feedbackId).set(data, SetOptions(merge: true));
+
+    // If an admin response was provided, notify the agent immediately
+    if (adminResponse != null && adminResponse.trim().isNotEmpty) {
+      try {
+        final feedbackDoc = await _firestore.collection('feedback').doc(feedbackId).get();
+        final userId = feedbackDoc.data()?['userId']?.toString();
+        final feedbackTitle = feedbackDoc.data()?['title']?.toString() ?? 'Maklum Balas';
+        if (userId != null && userId.isNotEmpty) {
+          final dio = Dio();
+          await dio.post(
+            'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
+            data: {
+              'targetUid': userId,
+              'kind': 'feedback-reply',
+              'titleEN': 'Admin Replied to Your Feedback 📝',
+              'titleBM': 'Maklum Balas Anda Dibalas 📝',
+              'messageEN': 'Admin response on "$feedbackTitle": "${adminResponse.trim()}"',
+              'messageBM': 'Pentadbir membalas "$feedbackTitle": "${adminResponse.trim()}"',
+              'type': 'FEEDBACK',
+            },
+            options: Options(headers: {'Content-Type': 'application/json'}),
+          );
+        }
+      } catch (_) {}
+    }
   }
 
   Future<void> deleteFeedback(String feedbackId) async {

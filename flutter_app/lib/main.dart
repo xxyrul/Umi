@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,6 +35,13 @@ void main() async {
 
   try {
     await Firebase.initializeApp();
+
+    // Activate App Check — DebugProvider in debug builds, Play Integrity in release.
+    // This stops PERMISSION_DENIED caused by missing App Check tokens.
+    await FirebaseAppCheck.instance.activate(
+      androidProvider: kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+    );
+
     await FirebaseAuth.instance.authStateChanges().first;
   } catch (e) {
     debugPrint('[ArthaApp] Firebase initialize error: $e');

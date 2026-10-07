@@ -8,13 +8,14 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthed() && (
-        request.auth.token.role == 'admin' ||
-        request.auth.token.admin == true ||
-        request.auth.token.isSuperAdmin == true ||
+        request.auth.token.get('role', '') == 'admin' ||
+        request.auth.token.get('admin', false) == true ||
+        request.auth.token.get('isSuperAdmin', false) == true ||
         request.auth.uid == 'super_admin_web_portal' ||
+        request.auth.token.get('email', '').lower() in ['norazrul7@gmail.com', 'shazaima17@gmail.com'] ||
         (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['admin', 'ADMIN']
         )
       );
     }
@@ -40,25 +41,15 @@ service cloud.firestore {
       // Any authenticated agent can read profiles (needed for listings, co-broke, directory)
       allow read: if isAuthed();
 
-      // Registration: user creates their own doc; cannot self-assign admin role
-      // Registration: authenticated user creates their own profile
-      // Constraint: cannot self-assign admin role (use .get() with default to handle missing field)
-      allow create: if isAuthed()
-                    && request.auth.uid == userId
-                    && request.resource.data.get('role', 'agent') != 'admin';
-
-      // Admins can create docs for any user (e.g. agent onboarding from web portal)
-      allow create: if isAdmin();
-
-      // Profile updates: own-account changes are always allowed except self-promotion to admin.
-      // Admin role is also allowed to update anything.
-      allow update: if isAuthed() && (
-        isAdmin()
-        || (request.auth.uid == userId && request.resource.data.get('role', resource.data.get('role', 'agent')) != 'admin')
+      // Registration & Profile Updates: authenticated users manage their own doc (cannot self-assign admin role).
+      // Admins have full access.
+      allow create, update: if isAuthed() && (
+        isAdmin() ||
+        (request.auth.uid == userId && request.resource.data.get('role', 'agent') != 'admin')
       );
 
-      // Delete: admin only
-      allow delete: if isAdmin();
+      // Delete: admin, or own-account delete (for re-application or account removal)
+      allow delete: if isAdmin() || (isAuthed() && request.auth.uid == userId);
 
       // Push notification device tokens
       match /devices/{deviceId} {
@@ -70,18 +61,30 @@ service cloud.firestore {
     // 🔑 Invite Codes (Registration Gate)
     // ─────────────────────────────────────────────
     match /invite_codes/{code} {
-      // Public read: registration validates invite code BEFORE Firebase Auth account exists
-      allow read: if true;
-      // Update: agents claim codes (status → USED) during registration; admins manage all
-      allow update: if true;
-      // Create/delete: require authentication (web admin portal signs in via custom token)
-      allow create, delete: if isAuthed();
+      // Allow single code lookup by exact code; admins can list
+      allow get: if true;
+      allow list: if isAdmin();
+
+      // Allow claiming an UNUSED code during registration, or admin full management
+      allow update: if isAdmin() || (
+        resource.data.get('status', 'UNUSED') == 'UNUSED' &&
+        request.resource.data.get('status', '') == 'USED' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedBy', 'usedAt', 'claimedByEmail', 'updatedAt'])
+      );
+
+      // Only admins can generate or revoke codes
+      allow create, delete: if isAdmin();
     }
 
     match /inviteCodes/{code} {
-      allow read: if true;
-      allow update: if true;
-      allow create, delete: if isAuthed();
+      allow get: if true;
+      allow list: if isAdmin();
+      allow update: if isAdmin() || (
+        resource.data.get('status', 'UNUSED') == 'UNUSED' &&
+        request.resource.data.get('status', '') == 'USED' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedBy', 'usedAt', 'claimedByEmail', 'updatedAt'])
+      );
+      allow create, delete: if isAdmin();
     }
 
     // ─────────────────────────────────────────────
@@ -161,16 +164,10 @@ service cloud.firestore {
       allow read: if isAuthed();
       allow create: if isAuthed() &&
         (request.resource.data.agentId == request.auth.uid || isAdmin());
-      allow update: if (
-        isAuthed() && (
-          (resource.data.agentId == request.auth.uid &&
-           request.resource.data.agentId == request.auth.uid) ||
-          isAdmin()
-        )
-      ) || (
-        // Allow status-only updates (e.g. admin endpoint via Admin SDK bypasses rules anyway)
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) &&
-        hasValidListingStatus()
+      allow update: if isAuthed() && (
+        (resource.data.agentId == request.auth.uid &&
+         request.resource.data.agentId == request.auth.uid) ||
+        isAdmin()
       );
       allow delete: if isAuthed() && (resource.data.agentId == request.auth.uid || isAdmin());
     }
