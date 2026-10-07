@@ -1,1 +1,10 @@
 attached_assets/Umi-source_1786606593261.zip filter=lfs diff=lfs merge=lfs -text
+
+# Exclude legacy React Native & Expo codebase from GitHub language stats
+app/** linguist-vendored linguist-detectable=false
+src/** linguist-vendored linguist-detectable=false
+
+# Exclude static web distribution bundles and test scripts from language stats
+dist/** linguist-vendored linguist-generated=true linguist-detectable=false
+dist-umiren/** linguist-vendored linguist-generated=true linguist-detectable=false
+scripts/** linguist-vendored linguist-detectable=false
