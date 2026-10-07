@@ -1,28 +1,27 @@
 # 🏢 Artha (Umi) — Real Estate CaseFlow & Master Listing CRM
 
 [![Version](https://img.shields.io/badge/version-2.0.0%20(Build%2060)-E11D48.svg)](https://artharen.web.app)
-[![Android](https://img.shields.io/badge/Platform-Android%208.0+-3DDC84.svg)](https://artharen.web.app/releases/artha-latest.apk)
-[![Hosting](https://img.shields.io/badge/Firebase%20Hosting-artharen.web.app-FFCA28.svg)](https://artharen.web.app)
-[![React Native](https://img.shields.io/badge/React%20Native-0.76-61DAFB.svg)](https://reactnative.dev/)
-[![Expo](https://img.shields.io/badge/Expo%20SDK-52-000000.svg)](https://expo.dev/)
-[![Firebase](https://img.shields.io/badge/Firebase-Backend-FFCA28.svg)](https://firebase.google.com/)
+[![Platform](https://img.shields.io/badge/Platform-Android%208.0+-3DDC84.svg)](https://artharen.web.app/releases/artha-latest.apk)
+[![Flutter](https://img.shields.io/badge/Flutter-3.41+-02569B.svg)](https://flutter.dev/)
+[![Dart](https://img.shields.io/badge/Dart-3.11+-0175C2.svg)](https://dart.dev/)
+[![State](https://img.shields.io/badge/State-Riverpod-00599C.svg)](https://riverpod.dev/)
+[![Firebase Hosting](https://img.shields.io/badge/Firebase%20Hosting-artharen.web.app-FFCA28.svg)](https://artharen.web.app)
 
 **Artha** is the all-in-one Master Listing CRM and Case Transaction Management Suite engineered specifically for Malaysian Real Estate Negotiators (RENs).
 
 🔗 **Official Web Portal & Landing Page**: [https://artharen.web.app](https://artharen.web.app)  
-📲 **Direct APK Download**: [artha-1.6.1.apk](https://artharen.web.app/releases/artha-latest.apk)
+📲 **Direct APK Download**: [artha-latest.apk](https://artharen.web.app/releases/artha-latest.apk)
 
 ---
 
-## 🌟 What's New in v1.6.1 (Build 59)
+## 🌟 What's New in v2.0.0 (Build 60)
 
-- 📱 Fixed Android Keyboard Overlay: Add Listing description, notes, and Next button now dynamically lift cleanly above the keyboard on all Android devices.
-- 🏛️ LPPSA Government Loan Calculator: Dedicated civil servant financing suite with automatic 60%/50% salary deduction limits, 4.0% fixed rate, and WhatsApp summary dispatch.
-- 🤝 Co-Broke Broadcast Share Kit: 1-tap REN-to-REN WhatsApp broadcast formatting in listing share sheets.
-- ⚡ Consolidated Quick Utilities: Streamlined 3-button action hub on homescreen (New Case, New Listing, Calculator).
-- 📢 Integrated Notices & Action Items: System announcements now live seamlessly inside Today's Action Items.
-- ✨ Fluid Card Physics & Shimmer Skeletons: Interactive spring touch feedback and smooth shimmer skeleton placeholders on case lists.
-- 🛡️ Comprehensive Security Hardening: Locked down Firestore rules against privilege escalation, secured Storage document vaults, and protected Cloud Function endpoints.
+- 🚀 **Full Native Flutter Architecture**: High-performance Flutter 3.x engine with Riverpod state management and 120fps AMOLED pitch-black dark mode.
+- 🔄 **Smart In-App Updater**: Dual-channel release pipeline (Stable & Beta), background APK downloads, and seamless local package installation.
+- 🏛️ **LPPSA & Banking DSR Suite**: Civil servant financing suite with automatic 60%/50% deduction ceilings, 4.0% rate, tiered legal fees/MOT stamp duty, and WhatsApp summary dispatch.
+- 🛡️ **Hardened Security & Device Lock**: Biometric fingerprint / PIN app lock, anti-screenshot protection, and locked-down Firestore security rules.
+- 📢 **Admin Broadcast Hub**: Real-time push announcements targeted to All Agents or isolated Beta Testers via Firebase Cloud Messaging.
+- 🤝 **Co-Broke Broadcast Share Kit**: 1-tap REN-to-REN WhatsApp broadcast formatting in listing share sheets.
 
 ---
 
@@ -53,29 +52,34 @@
 
 ## 🛠️ Tech Stack & Architecture
 
-- **Frontend**: React Native, Expo SDK 52, Expo Router v4 (File-based routing)
-- **Styling & Physics**: Tailwind CSS (NativeWind) + React Native Reanimated
-- **Backend**: Firebase Firestore (Offline-First Cache), Firebase Storage, Firebase Auth, Cloud Functions v2
-- **Push & Crons**: Firebase Cloud Messaging (FCM) + Google Cloud Scheduler
+- **Mobile Application**: Flutter 3.41+ (Dart 3.11+), Flutter Riverpod State Management, GoRouter
+- **Design & Theme**: Material 3, Pure AMOLED Dark Mode (`#000000`), Haptic Feedback
+- **Cloud Backend**: Firebase Firestore (Offline-First Cache), Firebase Storage, Firebase Auth, Cloud Functions v2
+- **Push & Crons**: Firebase Cloud Messaging (FCM) + Google Cloud Scheduler (9:00 AM Daily Briefing & Update Nudge)
+- **Web Admin Portal**: Single-Page Admin Hub on Firebase Hosting (`artharen.web.app/admin`)
 - **Distribution**: Dual-Site Firebase Hosting (`artharen.web.app` & `umiren-d6a66.web.app`)
 
 ---
 
 ## 💻 Developer & Release Commands
 
-### 1. Run Development Server
+### 1. Run Flutter Development App
 ```bash
-npx expo start -c
+cd flutter_app
+flutter run
 ```
 
-### 2. Pre-Flight Verification & Release Deploy
+### 2. Build Android Release APK
 ```bash
-# Verify release manifests, dual-domain endpoints, and APK integrity
-npm run verify:release
+cd flutter_app
+flutter build apk --release
+```
 
-# Automatically verify, build, and deploy to Firebase Hosting
-npm run deploy:release
+### 3. Deploy Cloud Functions & Web Admin
+```bash
+# Deploy Firebase Cloud Functions
+firebase deploy --only functions
 
-# Dispatch high-priority push notifications to outdated devices
-npm run notify:release -- --force
+# Deploy Firebase Hosting Web Portal
+firebase deploy --only hosting
 ```
