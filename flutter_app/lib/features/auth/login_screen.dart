@@ -139,6 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Future<void> _showGoogleActivationModal(User user, {String initialCode = '', String? initialError}) async {
     final authService = ref.read(authServiceProvider);
+    bool switching = false;
 
     final completed = await GoogleActivationSheet.show(
       context: context,
@@ -146,10 +147,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       initialCode: initialCode,
       initialError: initialError,
       onSwitchAccount: () {
-        if (mounted) _handleGoogleSignIn();
+        switching = true;
+        () async {
+          await authService.signOut();
+          if (mounted) _handleGoogleSignIn();
+        }();
       },
     );
 
+    // User tapped "Switch": a fresh sign-in is already running, don't touch auth.
+    if (switching) return;
     if (completed == true) return;
 
     final existingProfile = ref.read(currentUserProfileProvider).value;

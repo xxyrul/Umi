@@ -192,9 +192,10 @@ class _GoogleActivationSheetState extends ConsumerState<GoogleActivationSheet> {
                   onPressed: _isSubmitting
                       ? null
                       : () async {
-                          Navigator.pop(context, false);
-                          await authService.signOut();
+                          // Notify the caller BEFORE popping so it can flag the
+                          // dismissal as a deliberate account switch (not a cancel).
                           widget.onSwitchAccount();
+                          Navigator.pop(context, false);
                         },
                   child: Text(
                     isBM ? 'Tukar' : 'Switch',
