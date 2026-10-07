@@ -110,13 +110,13 @@ class _DocumentVaultSheetState extends State<DocumentVaultSheet> {
       final updatedDocs = Map<String, String>.from(_documents);
       updatedDocs[slotKey] = downloadUrl;
 
-      // Update Firestore documents in both collections
+      // Update Firestore document strictly in the private listings collection only.
+      // Private vault documents (IC, Land Title, SPA) must NEVER leak into publicListings.
       final docPayload = {
         'documents': updatedDocs,
         'updatedAt': FieldValue.serverTimestamp(),
       };
       await FirebaseFirestore.instance.collection('listings').doc(widget.listing.id).update(docPayload).catchError((_) {});
-      await FirebaseFirestore.instance.collection('publicListings').doc(widget.listing.id).update(docPayload).catchError((_) {});
 
       if (mounted) {
         setState(() {
@@ -297,24 +297,47 @@ class _DocumentVaultSheetState extends State<DocumentVaultSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2.5),
                         )
                       else if (hasDoc)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.open_in_new, size: 20),
-                              color: colors.maroonPrimary,
-                              tooltip: 'Buka Dokumen',
-                              onPressed: () => _openDocument(_documents[slotKey]!),
-                            ),
-                            if (widget.isOwner)
+                        if (widget.isOwner)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.open_in_new, size: 20),
+                                color: colors.maroonPrimary,
+                                tooltip: isBM ? 'Buka Dokumen' : 'Open Document',
+                                onPressed: () => _openDocument(_documents[slotKey]!),
+                              ),
                               IconButton(
                                 icon: const Icon(Icons.refresh, size: 20),
                                 color: colors.textMuted,
-                                tooltip: 'Ganti Dokumen',
+                                tooltip: isBM ? 'Ganti Dokumen' : 'Replace Document',
                                 onPressed: () => _pickAndUpload(slotKey),
                               ),
-                          ],
-                        )
+                            ],
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: colors.card,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock, size: 14, color: colors.maroonPrimary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  isBM ? 'Peti Sulit' : 'Confidential',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: colors.maroonPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
                       else if (widget.isOwner)
                         ElevatedButton.icon(
                           onPressed: () => _pickAndUpload(slotKey),

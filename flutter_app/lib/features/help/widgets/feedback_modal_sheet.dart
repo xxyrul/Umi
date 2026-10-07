@@ -79,6 +79,7 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
       // Dispatch alert to Admins via FCM topic admin_alerts
       try {
         final dio = Dio();
+        final idToken = await user?.getIdToken();
         await dio.post(
           'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
           data: {
@@ -90,7 +91,10 @@ class _FeedbackModalSheetState extends State<FeedbackModalSheet> {
             'messageBM': '${user?.displayName ?? 'Ejen'}: "$title"',
             'type': 'FEEDBACK',
           },
-          options: Options(headers: {'Content-Type': 'application/json'}),
+          options: Options(headers: {
+            'Content-Type': 'application/json',
+            if (idToken != null) 'Authorization': 'Bearer $idToken',
+          }),
         );
       } catch (_) {}
 

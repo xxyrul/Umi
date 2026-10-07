@@ -447,6 +447,7 @@ class AuthService {
   }) async {
     try {
       final dio = Dio();
+      final idToken = await _auth.currentUser?.getIdToken();
       await dio.post(
         'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
         data: {
@@ -458,7 +459,10 @@ class AuthService {
           'messageBM': '${displayName.trim()} ($email) memohon akses dan sedang menunggu kelulusan.',
           'type': 'APPROVAL',
         },
-        options: Options(headers: {'Content-Type': 'application/json'}),
+        options: Options(headers: {
+          'Content-Type': 'application/json',
+          if (idToken != null) 'Authorization': 'Bearer $idToken',
+        }),
       );
     } catch (e) {
       debugPrint('[AuthService] Admin alert push failed: $e');

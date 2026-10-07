@@ -10,7 +10,7 @@ google-services.json
 .uploaded-umi-build/android/app/google-services.json
 node_modules/
 .expo/
-android/
+/android/
 .android-sdk/
 # Build & Binaries
 *.apk

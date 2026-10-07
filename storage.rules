@@ -5,41 +5,57 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthed() && (
+        request.auth.token.get('role', '') == 'admin' ||
+        request.auth.token.get('admin', false) == true ||
+        request.auth.token.get('isSuperAdmin', false) == true ||
+        (
+          request.auth.token.get('email_verified', false) == true &&
+          request.auth.token.get('email', '').lower() in ['norazrul7@gmail.com', 'shazaima17@gmail.com']
+        )
+      );
+    }
+
     function isListingOwner(listingId) {
       return isAuthed() && (
-        firestore.get(/databases/(default)/documents/listings/$(listingId)).data.userId == request.auth.uid ||
-        firestore.get(/databases/(default)/documents/listings/$(listingId)).data.agentId == request.auth.uid
+        isAdmin() ||
+        (
+          firestore.exists(/databases/(default)/documents/listings/$(listingId)) &&
+          (
+            firestore.get(/databases/(default)/documents/listings/$(listingId)).data.get('userId', '') == request.auth.uid ||
+            firestore.get(/databases/(default)/documents/listings/$(listingId)).data.get('agentId', '') == request.auth.uid
+          )
+        )
       );
     }
 
     // Property listing files
     // 1. Photos (gambar_*) are readable by all authenticated agents.
-    // 2. Private documents (geran, IC, SPA, etc) can ONLY be read by the owner.
-    // 3. Writes (uploads/deletes) can ONLY be performed by the listing owner.
+    // 2. Private documents (geran, IC, SPA, etc) can ONLY be read by the owner or admin.
+    // 3. Writes (uploads/deletes) can ONLY be performed by the listing owner or admin.
     match /listings/{listingId}/{fileName} {
       allow read: if isAuthed() && (fileName.matches('gambar_.*') || isListingOwner(listingId));
-      allow write: if isAuthed() && isListingOwner(listingId) && request.resource.size < 200 * 1024 * 1024;
+      allow write: if isListingOwner(listingId) && request.resource.size < 25 * 1024 * 1024;
     }
 
-    // Catch-all for any nested sub-paths (just in case)
+    // Catch-all for any nested sub-paths (docs subfolders)
     match /listings/{listingId}/{subPath=**} {
-      allow read: if isAuthed() && isListingOwner(listingId);
-      allow write: if isAuthed() && isListingOwner(listingId) && request.resource.size < 200 * 1024 * 1024;
+      allow read, write: if isListingOwner(listingId) && request.resource.size < 25 * 1024 * 1024;
     }
 
-    // Feedback screenshots & attachments (feedback/{feedbackId}/{fileName})
+    // Feedback screenshots & attachments
     match /feedback/{feedbackId}/{allPaths=**} {
       allow read: if isAuthed();
-      allow write: if isAuthed()
-        && request.resource.size < 50 * 1024 * 1024;
+      allow write: if isAuthed() && request.resource.size < 15 * 1024 * 1024;
     }
 
     // User profile pictures (users/{userId}/{fileName})
     match /users/{userId}/{allPaths=**} {
       allow read: if isAuthed();
       allow write: if isAuthed()
-        && request.auth.uid == userId
-        && request.resource.size < 20 * 1024 * 1024;
+        && (request.auth.uid == userId || isAdmin())
+        && request.resource.size < 10 * 1024 * 1024;
     }
 
     // Fallback: deny all other paths

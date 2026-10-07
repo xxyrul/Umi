@@ -1,6 +1,7 @@
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/admin_emails.dart';
 import '../auth/auth_service.dart';
@@ -311,6 +312,7 @@ class AdminService {
     // Dispatch instant approval push notification to the approved agent's device
     try {
       final dio = Dio();
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
       await dio.post(
         'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
         data: {
@@ -322,7 +324,10 @@ class AdminService {
           'messageBM': 'Tahniah $displayName! Akaun Umi anda kini aktif. Buka aplikasi untuk mula menguruskan kes anda.',
           'type': 'APPROVAL',
         },
-        options: Options(headers: {'Content-Type': 'application/json'}),
+        options: Options(headers: {
+          'Content-Type': 'application/json',
+          if (idToken != null) 'Authorization': 'Bearer $idToken',
+        }),
       );
     } catch (_) {}
   }
@@ -550,6 +555,7 @@ class AdminService {
     // Trigger instant push notification via Cloud Run backend
     try {
       final dio = Dio();
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
       await dio.post(
         'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
         data: {
@@ -560,7 +566,10 @@ class AdminService {
           'type': type,
           'targetChannel': targetChannel,
         },
-        options: Options(headers: {'Content-Type': 'application/json'}),
+        options: Options(headers: {
+          'Content-Type': 'application/json',
+          if (idToken != null) 'Authorization': 'Bearer $idToken',
+        }),
       );
     } catch (_) {}
   }
@@ -602,6 +611,7 @@ class AdminService {
         final feedbackTitle = feedbackDoc.data()?['title']?.toString() ?? 'Maklum Balas';
         if (userId != null && userId.isNotEmpty) {
           final dio = Dio();
+          final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
           await dio.post(
             'https://sendbroadcastpush-qmzvmlyqza-uc.a.run.app',
             data: {
@@ -613,7 +623,10 @@ class AdminService {
               'messageBM': 'Pentadbir membalas "$feedbackTitle": "${adminResponse.trim()}"',
               'type': 'FEEDBACK',
             },
-            options: Options(headers: {'Content-Type': 'application/json'}),
+            options: Options(headers: {
+              'Content-Type': 'application/json',
+              if (idToken != null) 'Authorization': 'Bearer $idToken',
+            }),
           );
         }
       } catch (_) {}

@@ -673,7 +673,7 @@ class _ListingDetailScreenState extends ConsumerState<ListingDetailScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       Text(
-                                        isBM ? 'WhatsApp Pemilik' : 'WhatsApp Owner',
+                                        isBM ? 'WhatsApp Ejen Listing' : 'WhatsApp Listing REN',
                                         style: const TextStyle(fontSize: 10, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
                                       ),
                                     ],

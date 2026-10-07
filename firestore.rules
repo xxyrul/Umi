@@ -12,10 +12,13 @@ service cloud.firestore {
         request.auth.token.get('admin', false) == true ||
         request.auth.token.get('isSuperAdmin', false) == true ||
         request.auth.uid == 'super_admin_web_portal' ||
-        request.auth.token.get('email', '').lower() in ['norazrul7@gmail.com', 'shazaima17@gmail.com'] ||
+        (
+          request.auth.token.get('email_verified', false) == true &&
+          request.auth.token.get('email', '').lower() in ['norazrul7@gmail.com', 'shazaima17@gmail.com']
+        ) ||
         (
           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') in ['admin', 'ADMIN']
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '').lower() == 'admin'
         )
       );
     }
@@ -38,17 +41,31 @@ service cloud.firestore {
     // 👤 User Profiles & Agent Directory
     // ─────────────────────────────────────────────
     match /users/{userId} {
-      // Any authenticated agent can read profiles (needed for listings, co-broke, directory)
+      // Authenticated agents can read directory profiles
       allow read: if isAuthed();
 
-      // Registration & Profile Updates: authenticated users manage their own doc (cannot self-assign admin role).
-      // Admins have full access.
-      allow create, update: if isAuthed() && (
+      // Registration: User must create their own profile with role 'agent' and pending approval status
+      allow create: if isAuthed() && (
         isAdmin() ||
-        (request.auth.uid == userId && request.resource.data.get('role', 'agent') != 'admin')
+        (
+          request.auth.uid == userId &&
+          request.resource.data.get('role', 'agent').lower() == 'agent' &&
+          request.resource.data.get('approved', false) == false
+        )
       );
 
-      // Delete: admin, or own-account delete (for re-application or account removal)
+      // Profile Updates: Users CANNOT change their role, approved status, or status. Admins can update anything.
+      allow update: if isAuthed() && (
+        isAdmin() ||
+        (
+          request.auth.uid == userId &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role', 'approved', 'status', 'registeredWithCode', 'inviteCodeUsed'
+          ])
+        )
+      );
+
+      // Delete: Admin or user deleting own account
       allow delete: if isAdmin() || (isAuthed() && request.auth.uid == userId);
 
       // Push notification device tokens
@@ -62,11 +79,12 @@ service cloud.firestore {
     // ─────────────────────────────────────────────
     match /invite_codes/{code} {
       // Allow single code lookup by exact code; admins can list
-      allow get: if true;
+      allow get: if isAuthed();
       allow list: if isAdmin();
 
-      // Allow claiming an UNUSED code during registration, or admin full management
+      // Allow claiming an UNUSED code during registration (must be authenticated)
       allow update: if isAdmin() || (
+        isAuthed() &&
         resource.data.get('status', 'UNUSED') == 'UNUSED' &&
         request.resource.data.get('status', '') == 'USED' &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedBy', 'usedAt', 'claimedByEmail', 'updatedAt'])
@@ -77,9 +95,10 @@ service cloud.firestore {
     }
 
     match /inviteCodes/{code} {
-      allow get: if true;
+      allow get: if isAuthed();
       allow list: if isAdmin();
       allow update: if isAdmin() || (
+        isAuthed() &&
         resource.data.get('status', 'UNUSED') == 'UNUSED' &&
         request.resource.data.get('status', '') == 'USED' &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedBy', 'usedAt', 'claimedByEmail', 'updatedAt'])
@@ -91,9 +110,7 @@ service cloud.firestore {
     // 📢 Announcements & Bulletins
     // ─────────────────────────────────────────────
     match /announcements/{annId} {
-      // Authenticated agents can read the feed
       allow read: if isAuthed();
-      // Only admins (incl. web portal custom-token user) can broadcast
       allow write: if isAdmin();
     }
 
@@ -101,18 +118,15 @@ service cloud.firestore {
     // 🐛 Feedback & Bug Reports
     // ─────────────────────────────────────────────
     match /feedback/{docId} {
-      // Agents submit their own reports
       allow create: if isAuthed() &&
         (!('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid);
 
-      // Agents read/delete only their own tickets; admins see all
       allow read, delete: if isAuthed() && (
         resource.data.userId == request.auth.uid ||
         resource.data.userEmail == request.auth.token.email ||
         isAdmin()
       );
 
-      // Only admins update status / adminResponse
       allow update: if isAdmin();
     }
 
@@ -162,11 +176,14 @@ service cloud.firestore {
     match /publicListings/{listingId} {
       // Authenticated agents only — not fully public
       allow read: if isAuthed();
+      // Block sensitive document vault attachments from ever being written to publicListings
       allow create: if isAuthed() &&
-        (request.resource.data.agentId == request.auth.uid || isAdmin());
+        (request.resource.data.agentId == request.auth.uid || isAdmin()) &&
+        !('documents' in request.resource.data);
       allow update: if isAuthed() && (
         (resource.data.agentId == request.auth.uid &&
-         request.resource.data.agentId == request.auth.uid) ||
+         request.resource.data.agentId == request.auth.uid &&
+         !('documents' in request.resource.data)) ||
         isAdmin()
       );
       allow delete: if isAuthed() && (resource.data.agentId == request.auth.uid || isAdmin());

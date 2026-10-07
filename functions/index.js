@@ -93,6 +93,33 @@ exports.dailyUpdateNudge = onSchedule(
 
 
 /**
+ * Helper to verify that a request is made by an authenticated Firebase user.
+ */
+async function verifyUserAuthentication(req) {
+  let token = null;
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (authHeader && typeof authHeader === "string") {
+    const parts = authHeader.split(" ");
+    token = (parts.length === 2 && parts[0].toLowerCase() === "bearer") ? parts[1].trim() : authHeader.trim();
+  }
+  if (!token && req.body) {
+    let body = req.body;
+    if (Buffer.isBuffer(body)) {
+      try { body = JSON.parse(body.toString("utf8")); } catch (e) {}
+    } else if (typeof body === "string") {
+      try { body = JSON.parse(body); } catch (e) {}
+    }
+    token = body?.sessionToken || body?.token;
+  }
+  if (!token) return null;
+  try {
+    return await admin.auth().verifyIdToken(token);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
  * Helper to verify Admin authorization via HMAC session token or Firebase Auth Admin token.
  * NO hardcoded fallback passcodes — credentials must come from Firebase Secret Manager.
  */
@@ -260,9 +287,15 @@ exports.sendBroadcastPush = onRequest(
     }
     const { titleEN, titleBM, messageEN, messageBM, type, targetChannel, targetUid, topic, kind } = body || {};
 
-    // Inbound alerts targeting admin_alerts (e.g. agent access request or bug feedback) are allowed
+    // Inbound alerts targeting admin_alerts require a valid authenticated Firebase user
     const isAdminAlert = topic === "admin_alerts";
-    if (!isAdminAlert) {
+    if (isAdminAlert) {
+      const authedUser = await verifyUserAuthentication(req);
+      if (!authedUser) {
+        res.status(401).json({ error: "Unauthorized. Authentication required to dispatch alerts." });
+        return;
+      }
+    } else {
       const isAuthorized = await verifyAdminAuthorization(req, null, SESSION_SECRET.value());
       if (!isAuthorized) {
         res.status(403).json({ error: "Unauthorized. Admin credentials required." });
