@@ -87,3 +87,46 @@ final userFeedbackStreamProvider = StreamProvider.autoDispose<List<UserFeedbackM
         return items;
       });
 });
+
+class FeedbackService {
+  final FirebaseFirestore _firestore;
+
+  FeedbackService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  Future<void> submitFeedback({
+    required String title,
+    required String description,
+    required String notes,
+    required String type,
+    required String userId,
+    required String userName,
+    required String userEmail,
+  }) async {
+    final docRef = _firestore.collection('feedback').doc();
+    await docRef.set({
+      'id': docRef.id,
+      'title': title,
+      'description': description,
+      'notes': notes,
+      'type': type,
+      'category': type == 'BUG'
+          ? 'Masalah'
+          : (type == 'FEATURE_REQUEST' ? 'Cadangan' : 'Pertanyaan'),
+      'userId': userId,
+      'userName': userName,
+      'userEmail': userEmail,
+      'status': 'pending',
+      'adminResponse': '',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> deleteFeedback(String feedbackId) async {
+    await _firestore.collection('feedback').doc(feedbackId).delete();
+  }
+}
+
+final feedbackServiceProvider = Provider<FeedbackService>((ref) {
+  return FeedbackService();
+});

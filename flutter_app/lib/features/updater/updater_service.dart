@@ -118,6 +118,69 @@ class ReleaseManifest {
     );
   }
 
+  static ReleaseManifest? fromGithubRelease(Map<String, dynamic> releaseJson) {
+    try {
+      final tagName = (releaseJson['tag_name'] ?? '').toString();
+      final cleanVersion = tagName.replaceFirst(RegExp(r'^[vV]'), '').trim();
+      if (cleanVersion.isEmpty) return null;
+
+      final isPreRelease = releaseJson['prerelease'] == true ||
+          tagName.toLowerCase().contains('beta');
+      final channel = isPreRelease ? 'beta' : 'stable';
+
+      final assets = releaseJson['assets'];
+      Map<String, dynamic>? apkAsset;
+      if (assets is List) {
+        for (final a in assets) {
+          if (a is Map<String, dynamic>) {
+            final name = (a['name'] ?? '').toString().toLowerCase();
+            if (name.endsWith('.apk')) {
+              apkAsset = a;
+              break;
+            }
+          }
+        }
+      }
+
+      if (apkAsset == null) return null;
+
+      final downloadUrl = (apkAsset['browser_download_url'] ?? '').toString();
+      final sizeBytes = (apkAsset['size'] is int) ? apkAsset['size'] as int : 0;
+
+      final body = (releaseJson['body'] ?? '').toString();
+      final List<String> notes = [];
+      if (body.isNotEmpty) {
+        for (final line in body.split('\n')) {
+          final trimmed = line.trim();
+          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+            notes.add(trimmed.substring(2).trim());
+          } else if (trimmed.isNotEmpty && !trimmed.startsWith('#')) {
+            notes.add(trimmed);
+          }
+        }
+      }
+      if (notes.isEmpty) {
+        notes.add('Keluaran $cleanVersion di GitHub');
+      }
+
+      final publishedAt =
+          (releaseJson['published_at'] ?? releaseJson['created_at'] ?? '').toString();
+
+      return ReleaseManifest(
+        versionName: cleanVersion,
+        versionCode: ApkUpdaterService.versionStringToCode(cleanVersion),
+        downloadUrl: downloadUrl,
+        fileSizeBytes: sizeBytes,
+        releaseNotes: notes,
+        releaseDate: publishedAt.length >= 10 ? publishedAt.substring(0, 10) : publishedAt,
+        channel: channel,
+      );
+    } catch (e) {
+      debugPrint('[ApkUpdater] Failed to parse GitHub release: $e');
+      return null;
+    }
+  }
+
   bool get isBeta => channel.toLowerCase() == 'beta' || versionName.toLowerCase().contains('beta');
 
   bool get hasDownloadUrl => downloadUrl.trim().isNotEmpty;
@@ -133,10 +196,20 @@ class ReleaseManifest {
 }
 
 class ApkUpdaterService {
+  static const String githubRepo = 'xxyrul/Umi';
+  static const String githubReleasesUrl = 'https://api.github.com/repos/xxyrul/Umi/releases';
+  static const String githubLatestReleaseUrl = 'https://api.github.com/repos/xxyrul/Umi/releases/latest';
+
   static const String stableManifestUrl = 'https://artharen.web.app/releases/latest.json';
   static const String betaManifestUrl = 'https://artharen.web.app/releases/beta.json';
   static const String historyUrl = 'https://artharen.web.app/releases/history.json';
-  static const List<String> trustedHosts = ['artharen.web.app', 'umiren-d6a66.web.app'];
+  static const List<String> trustedHosts = [
+    'artharen.web.app',
+    'umiren-d6a66.web.app',
+    'github.com',
+    'objects.githubusercontent.com',
+    'api.github.com',
+  ];
   static const int currentBuildCode = 60; // Flutter v2.0.0 build code
   static const String currentVersionName = '2.0.0';
 
@@ -151,7 +224,7 @@ class ApkUpdaterService {
     return channel == UpdateChannel.beta ? betaManifestUrl : stableManifestUrl;
   }
 
-  int _versionStringToCode(String version) {
+  static int versionStringToCode(String version) {
     final cleaned = version.replaceAll(RegExp(r'[^0-9.]'), '');
     final parts = cleaned.split('.').where((p) => p.isNotEmpty).map(int.parse).toList();
     if (parts.isEmpty) return 0;
@@ -171,8 +244,8 @@ class ApkUpdaterService {
     if (manifest.versionCode > currentBuildCode) return true;
     if (manifest.minimumVersionCode > 0 && currentBuildCode < minRequired) return true;
 
-    final currentVersionCode = _versionStringToCode(currentVersionName);
-    final candidateVersionCode = _versionStringToCode(manifest.versionName);
+    final currentVersionCode = versionStringToCode(currentVersionName);
+    final candidateVersionCode = versionStringToCode(manifest.versionName);
     if (candidateVersionCode > currentVersionCode) return true;
 
     return false;
@@ -181,6 +254,49 @@ class ApkUpdaterService {
   Future<ReleaseManifest?> checkForUpdate({UpdateChannel channel = UpdateChannel.stable}) async {
     if (kIsWeb || !Platform.isAndroid) return null;
 
+    // 1. Check GitHub Releases first (LoanCalc architecture)
+    try {
+      final response = await _dio.get(
+        githubReleasesUrl,
+        options: Options(
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Umi-App',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is List) {
+        final releases = (response.data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(ReleaseManifest.fromGithubRelease)
+            .whereType<ReleaseManifest>()
+            .toList();
+
+        if (releases.isNotEmpty) {
+          ReleaseManifest? targetRelease;
+          if (channel == UpdateChannel.stable) {
+            targetRelease = releases.firstWhere(
+              (r) => !r.isBeta,
+              orElse: () => releases.first,
+            );
+          } else {
+            targetRelease = releases.firstWhere(
+              (r) => r.isBeta,
+              orElse: () => releases.first,
+            );
+          }
+
+          if (targetRelease.isInstallable && _isNewerRelease(targetRelease)) {
+            return targetRelease;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ApkUpdater] GitHub check error: $e. Falling back to Firebase manifest.');
+    }
+
+    // 2. Fallback to Firebase Hosting manifest
     try {
       final targetUrl = getManifestUrl(channel);
       final response = await _dio.get(targetUrl);
@@ -204,6 +320,37 @@ class ApkUpdaterService {
   }
 
   Future<List<ReleaseManifest>> fetchReleaseHistory({UpdateChannel channel = UpdateChannel.stable}) async {
+    // 1. Try GitHub Releases history first
+    try {
+      final response = await _dio.get(
+        githubReleasesUrl,
+        options: Options(
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'Umi-App',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data is List) {
+        final gitReleases = (response.data as List)
+            .whereType<Map<String, dynamic>>()
+            .map(ReleaseManifest.fromGithubRelease)
+            .whereType<ReleaseManifest>()
+            .toList();
+
+        if (gitReleases.isNotEmpty) {
+          if (channel == UpdateChannel.stable) {
+            return gitReleases.where((r) => !r.isBeta).toList();
+          }
+          return gitReleases;
+        }
+      }
+    } catch (e) {
+      debugPrint('[ApkUpdater] GitHub history error: $e');
+    }
+
+    // 2. Fallback to Firebase Hosting history
     try {
       final response = await _dio.get(
         historyUrl,
@@ -396,9 +543,14 @@ class ApkUpdaterService {
   }
 
   Future<void> openWebPortal() async {
-    final uri = Uri.parse('https://artharen.web.app/');
+    final uri = Uri.parse('https://github.com/xxyrul/Umi/releases');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      final fallbackUri = Uri.parse('https://artharen.web.app/');
+      if (await canLaunchUrl(fallbackUri)) {
+        await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
+      }
     }
   }
 

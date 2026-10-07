@@ -4,8 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../core/l10n/language_provider.dart';
 import '../../core/theme/app_colors.dart';
@@ -251,29 +249,14 @@ class _ListingFormScreenState extends ConsumerState<ListingFormScreen> {
       final rawPrice = _priceController.text.replaceAll(RegExp(r'[^0-9]'), '');
       final price = int.tryParse(rawPrice) ?? 0;
 
-      final listingId = widget.editListingId ?? FirebaseFirestore.instance.collection('listings').doc().id;
+      final listingRepo = ref.read(listingRepositoryProvider);
+      final listingId = widget.editListingId ?? listingRepo.createNewListingId();
 
-      await FirebaseFirestore.instance.collection('listings').doc(listingId).set({
-        'userId': user.uid,
-        'agentId': user.uid,
-        'status': _status,
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-
-      final uploadedUrls = <String>[..._existingPhotoUrls];
-      for (int i = 0; i < _newPhotoFiles.length; i++) {
-        final file = _newPhotoFiles[i];
-        try {
-          final ext = file.path.split('.').last.toLowerCase();
-          final fileName = 'gambar_${i}_${DateTime.now().millisecondsSinceEpoch}.$ext';
-          final refStorage = FirebaseStorage.instance.ref().child('listings').child(listingId).child(fileName);
-          final uploadTask = await refStorage.putFile(File(file.path));
-          final url = await uploadTask.ref.getDownloadURL();
-          uploadedUrls.add(url);
-        } catch (e) {
-          debugPrint('Upload photo error: $e');
-        }
-      }
+      final newUrls = await listingRepo.uploadPhotos(
+        listingId,
+        _newPhotoFiles.map((x) => File(x.path)).toList(),
+      );
+      final uploadedUrls = <String>[..._existingPhotoUrls, ...newUrls];
 
       final listingData = ListingModel(
         id: listingId,

@@ -1,5 +1,8 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/auth_service.dart';
 import 'listing_model.dart';
@@ -66,6 +69,28 @@ class ListingRepository {
     final publicData = Map<String, dynamic>.from(data)..remove('documents');
     await _firestore.collection('publicListings').doc(id).set(publicData, SetOptions(merge: true));
     await _firestore.collection('listings').doc(id).set(data, SetOptions(merge: true));
+  }
+
+  String createNewListingId() {
+    return _firestore.collection('listings').doc().id;
+  }
+
+  Future<List<String>> uploadPhotos(String listingId, List<File> files) async {
+    final urls = <String>[];
+    for (int i = 0; i < files.length; i++) {
+      final file = files[i];
+      try {
+        final ext = file.path.split('.').last.toLowerCase();
+        final fileName = 'gambar_${i}_${DateTime.now().millisecondsSinceEpoch}.$ext';
+        final refStorage = FirebaseStorage.instance.ref().child('listings').child(listingId).child(fileName);
+        final uploadTask = await refStorage.putFile(file);
+        final url = await uploadTask.ref.getDownloadURL();
+        urls.add(url);
+      } catch (e) {
+        debugPrint('Upload photo error: $e');
+      }
+    }
+    return urls;
   }
 
   Future<void> deleteListing(String id) async {
