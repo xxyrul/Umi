@@ -1,5 +1,7 @@
 package com.umi.caseflow
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -15,6 +17,42 @@ class MainActivity : FlutterFragmentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableHighRefreshRate()
+        createNotificationChannels()
+    }
+
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val notificationManager = getSystemService(NotificationManager::class.java) ?: return
+
+            val appUpdatesChannel = NotificationChannel(
+                "app-updates",
+                "App Updates",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications about new versions and critical updates"
+                enableVibration(true)
+            }
+
+            val updatesChannel = NotificationChannel(
+                "updates",
+                "Update Reminders",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Reminders for pending updates"
+                enableVibration(true)
+            }
+
+            val generalChannel = NotificationChannel(
+                "general",
+                "General Announcements",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Case progress alerts and agency announcements"
+                enableVibration(true)
+            }
+
+            notificationManager.createNotificationChannels(listOf(appUpdatesChannel, updatesChannel, generalChannel))
+        }
     }
 
     override fun onResume() {

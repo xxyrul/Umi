@@ -14,6 +14,7 @@ import 'core/theme/theme_mode_provider.dart';
 import 'features/security/app_lock_gate.dart';
 import 'features/security/security_service.dart';
 import 'features/notifications/notification_permission_gate.dart';
+import 'features/notifications/push_notification_service.dart';
 
 void main() async {
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +44,10 @@ void main() async {
     );
 
     await FirebaseAuth.instance.authStateChanges().first;
+    await PushNotificationService.instance.initialize();
+    if (FirebaseAuth.instance.currentUser != null) {
+      PushNotificationService.instance.syncDeviceToken().catchError((_) {});
+    }
   } catch (e) {
     debugPrint('[ArthaApp] Firebase initialize error: $e');
   }

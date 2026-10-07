@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/admin_emails.dart';
+import '../notifications/push_notification_service.dart';
 
 class UserModel {
   final String uid;
@@ -101,6 +102,7 @@ final currentUserProfileProvider = StreamProvider<UserModel?>((ref) {
     } else {
       FirebaseMessaging.instance.unsubscribeFromTopic('admin_alerts').catchError((_) {});
     }
+    PushNotificationService.instance.syncDeviceToken(uid: authUser.uid).catchError((_) {});
     return model;
   });
 });
@@ -516,6 +518,7 @@ class AuthService {
 
   Future<void> signOut() async {
     try {
+      await PushNotificationService.instance.unpairDeviceToken(uid: _auth.currentUser?.uid);
       // disconnect() clears the cached Google account token so the account
       // picker always shows on next sign-in — unlike signOut() which leaves
       // the session cached and causes the "auto-skip" glitch.
