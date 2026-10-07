@@ -540,7 +540,9 @@ class _UpdatesScreenState extends ConsumerState<UpdatesScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'v${release.versionName} (Build ${release.versionCode})',
+                        (release.versionCode >= 1000000 || release.versionCode <= 0)
+                            ? 'v${release.versionName}'
+                            : 'v${release.versionName} (Build ${release.versionCode})',
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: _isForceUpdate ? Colors.orangeAccent : colors.maroonPrimary),
                       ),
                     ],

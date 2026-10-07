@@ -166,9 +166,19 @@ class ReleaseManifest {
       final publishedAt =
           (releaseJson['published_at'] ?? releaseJson['created_at'] ?? '').toString();
 
+      int buildCode = 0;
+      final buildMatch = RegExp(r'(?:build|\+|b)\s*(\d+)', caseSensitive: false)
+          .firstMatch('${releaseJson['name']} ${releaseJson['tag_name']}');
+      if (buildMatch != null) {
+        buildCode = int.tryParse(buildMatch.group(1) ?? '') ?? 0;
+      }
+      if (buildCode == 0) {
+        buildCode = ApkUpdaterService.versionStringToCode(cleanVersion);
+      }
+
       return ReleaseManifest(
         versionName: cleanVersion,
-        versionCode: ApkUpdaterService.versionStringToCode(cleanVersion),
+        versionCode: buildCode,
         downloadUrl: downloadUrl,
         fileSizeBytes: sizeBytes,
         releaseNotes: notes,
